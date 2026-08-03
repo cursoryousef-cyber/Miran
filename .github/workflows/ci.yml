@@ -1,4 +1,4 @@
-name: Miran Platform CI / Runner Dynamic Xcode SDK Audit & App Store Export
+name: Miran Platform CI / Build Environment Audit
 
 on:
   push:
@@ -70,10 +70,38 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Audit Runner Applications, Detect Xcode & SDK
+      - name: Audit Build Environment
         run: |
-          chmod +x ci_scripts/*.sh 2>/dev/null || true
-          ./ci_scripts/ci_pre_xcodebuild.sh
+          echo "================ Xcode Version ================"
+          xcodebuild -version
+
+          echo "================ Active Developer ================"
+          xcode-select -p
+
+          echo "================ iPhoneOS SDK ================"
+          xcrun --sdk iphoneos --show-sdk-version
+
+          echo "================ Installed SDKs ================"
+          xcodebuild -showsdks
+
+          echo "================ Installed Xcode Apps ================"
+          ls -1 /Applications | grep Xcode || true
+
+          echo "================ DEVELOPER_DIR ================"
+          echo "${DEVELOPER_DIR:-Not Set}"
+
+          echo "================ Build Settings ================"
+          xcodebuild \
+            -project Miran.xcodeproj \
+            -scheme Miran \
+            -showBuildSettings | grep -E "SDKROOT|SDK_NAME|DEVELOPER_DIR|TOOLCHAINS|IPHONEOS_DEPLOYMENT_TARGET|SUPPORTED_PLATFORMS|EFFECTIVE_PLATFORM_NAME"
+
+          echo "================ xcrun Paths ================"
+          xcrun --find xcodebuild
+          xcrun --find altool
+
+          echo "================ Archive Toolchain ================"
+          xcrun xcodebuild -version
 
       - name: Build & Archive iOS Native App
         run: |
@@ -84,29 +112,3 @@ jobs:
             -archivePath build/Miran.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
             archive
-
-      - name: Prepare ExportOptions.plist
-        run: |
-          mkdir -p build/Export
-          cat << 'EOF' > build/ExportOptions.plist
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <string>app-store</string>
-              <key>teamID</key>
-              <string>B4S7M6N5U5</string>
-              <key>signingStyle</key>
-              <string>automatic</string>
-          </dict>
-          </plist>
-          EOF
-
-      - name: Export IPA Package
-        run: |
-          xcodebuild -exportArchive \
-            -archivePath build/Miran.xcarchive \
-            -exportOptionsPlist build/ExportOptions.plist \
-            -exportPath build/Export \
-            CODE_SIGNING_ALLOWED=NO || echo "IPA Export configuration ready."
