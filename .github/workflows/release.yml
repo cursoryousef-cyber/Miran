@@ -47,12 +47,15 @@ jobs:
           echo "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode > "$KEY_PATH"
           chmod 600 "$KEY_PATH"
 
+          echo "API Key File Size: $(wc -c < "$KEY_PATH") bytes"
+          echo "API Key SHA256 Checksum: $(shasum -a 256 "$KEY_PATH" | awk '{print $1}')"
+
           if [ ! -s "$KEY_PATH" ]; then
             echo "Error: Decoded API key file is empty."
             exit 1
           fi
 
-          if ! grep -q "^-----BEGIN PRIVATE KEY-----" "$KEY_PATH" || ! grep -q "^-----END PRIVATE KEY-----" "$KEY_PATH"; then
+          if ! head -n 1 "$KEY_PATH" | grep -q "^-----BEGIN PRIVATE KEY-----" || ! tail -n 2 "$KEY_PATH" | grep -q "^-----END PRIVATE KEY-----"; then
             echo "Error: API key file format is invalid (missing BEGIN/END PRIVATE KEY headers)."
             exit 1
           fi
