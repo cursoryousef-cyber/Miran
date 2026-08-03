@@ -20,8 +20,10 @@ jobs:
       - name: Show Xcode Version
         run: xcodebuild -version
 
-      - name: Download iOS Simulator Runtime
-        run: sudo xcodebuild -downloadPlatform iOS || true
+      - name: Start Simulator Service & Setup iOS Runtime
+        run: |
+          sudo xcrun simctl list || true
+          sudo xcodebuild -downloadPlatform iOS || true
 
       - name: Install Apple Certificate & Provisioning Profile
         env:
