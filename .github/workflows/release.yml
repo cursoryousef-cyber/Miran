@@ -72,6 +72,7 @@ jobs:
           xcodebuild -archivePath build/Miran.xcarchive \
                      -project Miran.xcodeproj \
                      -scheme Miran \
+                     -destination 'generic/platform=iOS' \
                      -configuration Release \
                      archive \
                      -allowProvisioningUpdates \
