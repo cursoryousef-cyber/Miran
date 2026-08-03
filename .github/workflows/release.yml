@@ -90,6 +90,7 @@ jobs:
           xcodebuild -archivePath build/Miran.xcarchive \
                      -project Miran.xcodeproj \
                      -scheme Miran \
+                     -sdk iphoneos \
                      -destination 'generic/platform=iOS' \
                      -configuration Release \
                      ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_FRAMEWORKS=NO \
