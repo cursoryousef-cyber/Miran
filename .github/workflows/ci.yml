@@ -26,7 +26,7 @@ jobs:
           xcodebuild -project Miran.xcodeproj \
                      -scheme Miran \
                      -sdk iphonesimulator \
-                     -destination 'platform=iOS Simulator,name=iPhone 15' \
+                     -destination 'platform=iOS Simulator,name=iPhone 14' \
                      COMPILER_INDEX_STORE_ENABLE=NO \
                      clean build
 
