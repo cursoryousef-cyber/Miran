@@ -1,0 +1,64 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+
+import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { PersonsModule } from './modules/persons/persons.module';
+import { UserAccountsModule } from './modules/user-accounts/user-accounts.module';
+import { OrganizationsModule } from './modules/organizations/organizations.module';
+import { PoliciesModule } from './modules/policies/policies.module';
+import { WorkflowsModule } from './modules/workflows/workflows.module';
+import { StorageModule } from './modules/storage/storage.module';
+import { AcademicIntakesModule } from './modules/academic-intakes/academic-intakes.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { FeatureFlagsModule } from './modules/feature-flags/feature-flags.module';
+import { LicensesModule } from './modules/licenses/licenses.module';
+import { SettingsModule } from './modules/settings/settings.module';
+import { HealthModule } from './modules/health/health.module';
+
+@Module({
+  imports: [
+    // Configuration
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
+
+    // Rate Limiting (100 requests / 60 seconds)
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 100,
+      },
+    ]),
+
+    // Core Infrastructure
+    PrismaModule,
+    HealthModule,
+
+    // Domain Modules
+    AuthModule,
+    PersonsModule,
+    UserAccountsModule,
+    OrganizationsModule,
+    PoliciesModule,
+    WorkflowsModule,
+    StorageModule,
+    AcademicIntakesModule,
+    IntegrationsModule,
+    ReportsModule,
+    FeatureFlagsModule,
+    LicensesModule,
+    SettingsModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
+})
+export class AppModule {}

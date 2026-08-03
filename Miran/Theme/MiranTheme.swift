@@ -8,17 +8,19 @@
 import SwiftUI
 
 enum MiranTheme {
-
-    // MARK: - الألوان الأساسية
-
-    static let accent      = Color(red: 0.12, green: 0.31, blue: 0.37)   // #1F4E5F
-    static let accentLight = Color(red: 0.18, green: 0.49, blue: 0.54)   // #2E7D8A
-    static let surface     = Color(red: 0.92, green: 0.95, blue: 0.96)   // #EAF2F4
+    // MARK: - الألوان الأساسية والمؤسسية
+    static let accent      = Color(red: 0.02, green: 0.59, blue: 0.41)   // #059669 Emerald
+    static let accentLight = Color(red: 0.05, green: 0.72, blue: 0.53)   // #10b981
+    static let emerald     = Color(red: 0.02, green: 0.59, blue: 0.41)   // #059669 Emerald
+    static let teal        = Color(red: 0.05, green: 0.58, blue: 0.53)   // #0d9488 Teal
+    static let navy        = Color(red: 0.06, green: 0.09, blue: 0.16)   // #0f172a Navy
+    static let background  = Color(red: 0.04, green: 0.06, blue: 0.11)   // #0a0f1d Dark
+    static let surface     = Color(red: 0.92, green: 0.95, blue: 0.96)
+    static let subtext     = Color(red: 0.58, green: 0.64, blue: 0.72)   // #94a3b8
     static let green       = Color(red: 0.13, green: 0.55, blue: 0.35)
     static let urgent      = Color(red: 0.83, green: 0.22, blue: 0.18)
 
     // MARK: - ألوان شرائط البطاقة حسب الفئة
-
     static let stripeIntern   = Color(red: 0.16, green: 0.42, blue: 0.72)
     static let stripeResident = Color(red: 0.13, green: 0.55, blue: 0.35)
     static let stripeStudent  = Color(red: 0.45, green: 0.47, blue: 0.50)
@@ -26,13 +28,40 @@ enum MiranTheme {
     static let stripeAllied   = Color(red: 0.48, green: 0.29, blue: 0.64)
 
     // MARK: - قياسات
-
     static let corner: CGFloat = 14
     static let padding: CGFloat = 16
 }
 
-// MARK: - نمط البطاقة
+extension Color {
+    static let amber = Color(red: 0.96, green: 0.62, blue: 0.04)
 
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 3: // RGB (12-bit)
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6: // RGB (24-bit)
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8: // ARGB (32-bit)
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (1, 1, 1, 1)
+        }
+
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue:  Double(b) / 255,
+            opacity: Double(a) / 255
+        )
+    }
+}
+
+// MARK: - نمط البطاقة
 struct MiranCard: ViewModifier {
     var tint: Color = .clear
 
@@ -58,7 +87,6 @@ extension View {
 }
 
 // MARK: - شارة صغيرة
-
 struct MiranBadge: View {
     var text: String
     var color: Color
@@ -85,7 +113,6 @@ struct MiranBadge: View {
 }
 
 // MARK: - عنوان قسم
-
 struct SectionTitle: View {
     var text: String
     var systemImage: String?
@@ -107,9 +134,7 @@ struct SectionTitle: View {
 }
 
 // MARK: - أدوات التنسيق
-
 enum Fmt {
-
     static func time(_ date: Date) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "ar_SA")
@@ -138,7 +163,6 @@ enum Fmt {
         return f.string(from: date)
     }
 
-    /// تحويل الثواني إلى صيغة مقروءة
     static func duration(_ seconds: Int) -> String {
         if seconds < 60 { return "\(seconds) ث" }
         let m = seconds / 60

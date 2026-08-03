@@ -36,6 +36,15 @@
 		A1B2C3D410000027 /* ReportsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000027 /* ReportsView.swift */; };
 		A1B2C3D410000028 /* RiskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000028 /* RiskView.swift */; };
 		A1B2C3D410000029 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000029 /* Assets.xcassets */; };
+		A1B2C3D410000030 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000030 /* KeychainService.swift */; };
+		A1B2C3D410000031 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000031 /* APIClient.swift */; };
+		A1B2C3D410000032 /* APIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000032 /* APIModels.swift */; };
+		A1B2C3D410000033 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000033 /* AuthViewModel.swift */; };
+		A1B2C3D410000034 /* TraineeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000034 /* TraineeViewModel.swift */; };
+		A1B2C3D410000035 /* TrainerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000035 /* TrainerViewModel.swift */; };
+		A1B2C3D410000036 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000036 /* LoginView.swift */; };
+		A1B2C3D410000037 /* OrgSwitcherSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000037 /* OrgSwitcherSheet.swift */; };
+		A1B2C3D410000038 /* DigitalIDCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000038 /* DigitalIDCardView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -69,17 +78,16 @@
 		A1B2C3D420000027 /* ReportsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportsView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000028 /* RiskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiskView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000029 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A1B2C3D420000030 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		A1B2C3D420000031 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		A1B2C3D420000032 /* APIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModels.swift; sourceTree = "<group>"; };
+		A1B2C3D420000033 /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
+		A1B2C3D420000034 /* TraineeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraineeViewModel.swift; sourceTree = "<group>"; };
+		A1B2C3D420000035 /* TrainerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainerViewModel.swift; sourceTree = "<group>"; };
+		A1B2C3D420000036 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000037 /* OrgSwitcherSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgSwitcherSheet.swift; sourceTree = "<group>"; };
+		A1B2C3D420000038 /* DigitalIDCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalIDCardView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFrameworksBuildPhase section */
-		A1B2C3D400000003 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A1B2C3D400000003 /* Frameworks */ = {
@@ -117,6 +125,8 @@
 				A1B2C3D430000003 /* Theme */,
 				A1B2C3D430000004 /* Components */,
 				A1B2C3D430000005 /* Views */,
+				A1B2C3D430000009 /* Services */,
+				A1B2C3D430000010 /* ViewModels */,
 				A1B2C3D420000029 /* Assets.xcassets */,
 			);
 			path = Miran;
@@ -127,6 +137,7 @@
 			children = (
 				A1B2C3D420000002 /* Models.swift */,
 				A1B2C3D420000003 /* TrainerCall.swift */,
+				A1B2C3D420000032 /* APIModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -161,11 +172,21 @@
 			children = (
 				A1B2C3D420000008 /* RoleSelectionView.swift */,
 				A1B2C3D420000009 /* RegistrationView.swift */,
+				A1B2C3D430000011 /* Auth */,
 				A1B2C3D430000006 /* Trainee */,
 				A1B2C3D430000007 /* Trainer */,
 				A1B2C3D430000008 /* Academic */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		A1B2C3D430000011 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D420000036 /* LoginView.swift */,
+				A1B2C3D420000037 /* OrgSwitcherSheet.swift */,
+			);
+			path = Auth;
 			sourceTree = "<group>";
 		};
 		A1B2C3D430000006 /* Trainee */ = {
@@ -178,6 +199,7 @@
 				A1B2C3D420000014 /* DocumentsView.swift */,
 				A1B2C3D420000015 /* IncomingCallView.swift */,
 				A1B2C3D420000016 /* TraineeProfileView.swift */,
+				A1B2C3D420000038 /* DigitalIDCardView.swift */,
 			);
 			path = Trainee;
 			sourceTree = "<group>";
@@ -206,6 +228,25 @@
 				A1B2C3D420000028 /* RiskView.swift */,
 			);
 			path = Academic;
+			sourceTree = "<group>";
+		};
+		A1B2C3D430000009 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D420000030 /* KeychainService.swift */,
+				A1B2C3D420000031 /* APIClient.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		A1B2C3D430000010 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D420000033 /* AuthViewModel.swift */,
+				A1B2C3D420000034 /* TraineeViewModel.swift */,
+				A1B2C3D420000035 /* TrainerViewModel.swift */,
+			);
+			path = ViewModels;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -307,6 +348,15 @@
 				A1B2C3D410000026 /* AssignmentView.swift in Sources */,
 				A1B2C3D410000027 /* ReportsView.swift in Sources */,
 				A1B2C3D410000028 /* RiskView.swift in Sources */,
+				A1B2C3D410000030 /* KeychainService.swift in Sources */,
+				A1B2C3D410000031 /* APIClient.swift in Sources */,
+				A1B2C3D410000032 /* APIModels.swift in Sources */,
+				A1B2C3D410000033 /* AuthViewModel.swift in Sources */,
+				A1B2C3D410000034 /* TraineeViewModel.swift in Sources */,
+				A1B2C3D410000035 /* TrainerViewModel.swift in Sources */,
+				A1B2C3D410000036 /* LoginView.swift in Sources */,
+				A1B2C3D410000037 /* OrgSwitcherSheet.swift in Sources */,
+				A1B2C3D410000038 /* DigitalIDCardView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1,4 +1,4 @@
-# Xcode
+# Xcode & iOS
 build/
 build_clean/
 DerivedData/
@@ -15,11 +15,22 @@ xcuserdata/
 *.moved-aside
 *.xcuserstate
 *.xcworkspace/xcuserdata/
+*.ipa
+Payload/
+Miran_Recording.mp4
+
+# Environment Variables & Secrets
+.env
+*.env
+!.env.example
+
+# Node / Dependencies / Builds
+node_modules/
+dist/
+uploads/
+.build/
 
 # OS / IDE
 .DS_Store
 *.swp
 *~
-*.ipa
-Payload/
-Miran_Recording.mp4

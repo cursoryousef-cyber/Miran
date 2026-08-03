@@ -1,19 +1,21 @@
 //
 //  MiranApp.swift
-//  مِران — نظام إدارة رحلة المتدرب وقياس الاستجابة
+//  مِران — المنصة الوطنية لإدارة التدريب الصحي
 //
-//  نقطة الدخول. التطبيق كامل الواجهة بالعربية ومن اليمين لليسار.
+//  نقطة الدخول الرئيسية بتطبيق iOS.
 //
 
 import SwiftUI
 
 @main
 struct MiranApp: App {
+    @StateObject private var authViewModel = AuthViewModel()
     @StateObject private var store = AppStore()
 
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environmentObject(authViewModel)
                 .environmentObject(store)
                 .environment(\.layoutDirection, .rightToLeft)
                 .environment(\.locale, Locale(identifier: "ar"))
@@ -23,24 +25,44 @@ struct MiranApp: App {
 }
 
 struct RootView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var store: AppStore
 
-    @ViewBuilder
     var body: some View {
         Group {
-            if let role = store.role {
-                switch role {
-                case .trainee:
-                    TraineeTabView()
-                case .trainer:
-                    TrainerTabView()
-                case .academic:
-                    AcademicTabView()
-                }
+            if authViewModel.isAuthenticated {
+                MainTabView()
             } else {
-                RoleSelectionView()
+                LoginView()
             }
         }
-        .animation(.easeInOut, value: store.role)
+        .animation(.easeInOut, value: authViewModel.isAuthenticated)
+    }
+}
+
+struct MainTabView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @State private var selectedTab = 0
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            TraineeTabView()
+                .tabItem {
+                  Label("المتدرب", systemImage: "person.text.rectangle")
+                }
+                .tag(0)
+
+            TrainerTabView()
+                .tabItem {
+                    Label("المدرب", systemImage: "bolt.heart")
+                }
+                .tag(1)
+
+            AcademicTabView()
+                .tabItem {
+                    Label("الأكاديمية", systemImage: "chart.bar.doc.horizontal")
+                }
+                .tag(2)
+        }
     }
 }
