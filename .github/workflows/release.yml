@@ -92,6 +92,8 @@ jobs:
                      -scheme Miran \
                      -destination 'generic/platform=iOS' \
                      -configuration Release \
+                     ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_FRAMEWORKS=NO \
+                     ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO \
                      archive \
                      -allowProvisioningUpdates \
                      -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
