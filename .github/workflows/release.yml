@@ -93,6 +93,7 @@ jobs:
                      -sdk iphoneos \
                      -destination 'generic/platform=iOS' \
                      -configuration Release \
+                     SDKROOT=iphoneos \
                      ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_FRAMEWORKS=NO \
                      ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO \
                      archive \
@@ -109,16 +110,11 @@ jobs:
           <plist version="1.0">
           <dict>
               <key>method</key>
-              <string>development</string>
+              <string>app-store</string>
               <key>teamID</key>
               <string>B4S7M6N5U5</string>
               <key>signingStyle</key>
-              <string>manual</string>
-              <key>provisioningProfiles</key>
-              <dict>
-                  <key>sa.miran.app</key>
-                  <string>iOS Team Provisioning Profile: sa.miran.app</string>
-              </dict>
+              <string>automatic</string>
           </dict>
           </plist>
           EOF
