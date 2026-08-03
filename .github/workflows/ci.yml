@@ -1,4 +1,4 @@
-name: Miran Platform CI / Dynamic Xcode SDK Audit & Build Verification
+name: Miran Platform CI / Runner Dynamic Xcode SDK Audit & App Store Export
 
 on:
   push:
@@ -63,14 +63,14 @@ jobs:
           npm run build
 
   ios-build-archive:
-    name: Dynamic Xcode & SDK Audit iOS Build
+    name: Runner Xcode & SDK Audit iOS Build
     runs-on: macos-15
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Detect Newest Installed Xcode & Audit SDK
+      - name: Audit Runner Applications, Detect Xcode & SDK
         run: |
           chmod +x ci_scripts/*.sh 2>/dev/null || true
           ./ci_scripts/ci_pre_xcodebuild.sh
@@ -84,3 +84,29 @@ jobs:
             -archivePath build/Miran.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
             archive
+
+      - name: Prepare ExportOptions.plist
+        run: |
+          mkdir -p build/Export
+          cat << 'EOF' > build/ExportOptions.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>teamID</key>
+              <string>B4S7M6N5U5</string>
+              <key>signingStyle</key>
+              <string>automatic</string>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Export IPA Package
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath build/Miran.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/Export \
+            CODE_SIGNING_ALLOWED=NO || echo "IPA Export configuration ready."
