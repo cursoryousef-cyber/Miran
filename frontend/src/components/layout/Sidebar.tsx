@@ -12,6 +12,7 @@ import {
   Settings,
   Wand2,
   FolderGit2,
+  FileSignature,
 } from 'lucide-react';
 
 const navigationItems = [
@@ -21,6 +22,7 @@ const navigationItems = [
   { name: 'اتفاقيات الشراكة والتدريب', path: '/affiliations', icon: FolderGit2 },
   { name: 'الدفعات الأكاديمية (Intakes)', path: '/intakes', icon: GraduationCap },
   { name: 'إدارة الأشخاص والحسابات', path: '/users', icon: Users },
+  { name: 'الإقرارات والتعهدات الوطنية', path: '/declarations', icon: FileSignature },
   { name: 'محرك سير العمل (Workflows)', path: '/workflows', icon: GitMerge },
   { name: 'سياسات الوصول (Policy Engine)', path: '/policies', icon: ShieldCheck },
   { name: 'مركز الربط والـ Webhooks', path: '/integrations', icon: Zap },

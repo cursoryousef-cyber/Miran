@@ -45,6 +45,7 @@
 		A1B2C3D410000036 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000036 /* LoginView.swift */; };
 		A1B2C3D410000037 /* OrgSwitcherSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000037 /* OrgSwitcherSheet.swift */; };
 		A1B2C3D410000038 /* DigitalIDCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000038 /* DigitalIDCardView.swift */; };
+		A1B2C3D410000039 /* JoiningDeclarationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000039 /* JoiningDeclarationSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -87,6 +88,7 @@
 		A1B2C3D420000036 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000037 /* OrgSwitcherSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgSwitcherSheet.swift; sourceTree = "<group>"; };
 		A1B2C3D420000038 /* DigitalIDCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalIDCardView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000039 /* JoiningDeclarationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoiningDeclarationSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -185,6 +187,7 @@
 			children = (
 				A1B2C3D420000036 /* LoginView.swift */,
 				A1B2C3D420000037 /* OrgSwitcherSheet.swift */,
+				A1B2C3D420000039 /* JoiningDeclarationSheet.swift */,
 			);
 			path = Auth;
 			sourceTree = "<group>";
@@ -357,6 +360,7 @@
 				A1B2C3D410000036 /* LoginView.swift in Sources */,
 				A1B2C3D410000037 /* OrgSwitcherSheet.swift in Sources */,
 				A1B2C3D410000038 /* DigitalIDCardView.swift in Sources */,
+				A1B2C3D410000039 /* JoiningDeclarationSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

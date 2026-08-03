@@ -127,6 +127,8 @@ model Organization {
   reportDefinitions  ReportDefinition[]
   generatedReports   GeneratedReport[]
   sponsoredTrainees  TraineeProfile[] @relation("SponsorOrg")
+  declarations       Declaration[]
+  declarationAcceptances DeclarationAcceptance[]
 
   @@index([parentId])
   @@index([organizationTypeId])
@@ -306,6 +308,7 @@ model UserAccount {
   improvementCreated    ImprovementPlan[] @relation("PlanCreator")
   objectivesVerified    ObjectiveProgress[] @relation("ObjectiveVerifier")
   attendanceApproved    Attendance[]       @relation("AttendanceApprover")
+  declarationAcceptances DeclarationAcceptance[]
   traineePhotoApproved  TraineeProfile[]   @relation("PhotoApprover")
   traineeCardIssued     TraineeProfile[]   @relation("CardIssuer")
   trainingPlansCreated  TrainingPlan[]
@@ -1330,4 +1333,49 @@ model Incident {
   resolvedBy   UserAccount? @relation("IncidentResolver", fields: [resolvedById], references: [id])
 
   @@map("incidents")
+}
+
+// ============================================================================
+// 19. MANDATORY DECLARATIONS & ACCEPTANCES
+// ============================================================================
+
+/// الإقرارات والتعهدات الوطنية (إقرار الانضمام وإقرار الشؤون الأكاديمية)
+model Declaration {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  type           String   @db.VarChar(50) // 'joining', 'academic_affairs', 'ethics'
+  titleAr        String   @map("title_ar") @db.VarChar(300)
+  titleEn        String?  @map("title_en") @db.VarChar(300)
+  contentAr      String   @map("content_ar") @db.Text
+  contentEn      String?  @map("content_en") @db.Text
+  version        Int      @default(1)
+  isActive       Boolean  @default(true) @map("is_active")
+  isMandatory    Boolean  @default(true) @map("is_mandatory")
+  createdById    String?  @map("created_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization            @relation(fields: [organizationId], references: [id])
+  acceptances  DeclarationAcceptance[]
+
+  @@map("declarations")
+}
+
+/// سجلات الموافقة والتوقيع الرقمي للإقرارات
+model DeclarationAcceptance {
+  id             String   @id @default(uuid()) @db.Uuid
+  declarationId String   @map("declaration_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  version        Int
+  acceptedAt     DateTime @default(now()) @map("accepted_at") @db.Timestamptz
+  ipAddress      String?  @map("ip_address") @db.VarChar(50)
+  deviceInfo     String?  @map("device_info") @db.VarChar(300)
+
+  declaration  Declaration  @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+  user         UserAccount  @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([declarationId, userId, version])
+  @@map("declaration_acceptances")
 }

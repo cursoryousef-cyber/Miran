@@ -18,6 +18,7 @@ import { FeatureFlagsModule } from './modules/feature-flags/feature-flags.module
 import { LicensesModule } from './modules/licenses/licenses.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { HealthModule } from './modules/health/health.module';
+import { DeclarationsModule } from './modules/declarations/declarations.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { HealthModule } from './modules/health/health.module';
     FeatureFlagsModule,
     LicensesModule,
     SettingsModule,
+    DeclarationsModule,
   ],
   providers: [
     {

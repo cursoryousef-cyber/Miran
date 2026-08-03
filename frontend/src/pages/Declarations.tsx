@@ -1,0 +1,163 @@
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../api/client';
+import { FileSignature, Plus, CheckCircle2, ShieldCheck, FileText } from 'lucide-react';
+import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Alert } from '@mui/material';
+
+export const Declarations: React.FC = () => {
+  const queryClient = useQueryClient();
+  const [openDialog, setOpenDialog] = useState(false);
+  const [type, setType] = useState('academic_affairs');
+  const [titleAr, setTitleAr] = useState('');
+  const [contentAr, setContentAr] = useState('');
+
+  const { data: declarations } = useQuery({
+    queryKey: ['declarations'],
+    queryFn: async () => {
+      const res = await apiClient.get('/declarations');
+      return res.data;
+    },
+  });
+
+  const { data: statistics } = useQuery({
+    queryKey: ['declarations-statistics'],
+    queryFn: async () => {
+      const res = await apiClient.get('/declarations/statistics');
+      return res.data;
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      await apiClient.post('/declarations', {
+        type,
+        titleAr,
+        contentAr,
+        isMandatory: true,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['declarations'] });
+      queryClient.invalidateQueries({ queryKey: ['declarations-statistics'] });
+      setOpenDialog(false);
+      setTitleAr('');
+      setContentAr('');
+    },
+  });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+            إدارة الإقرارات والتعهدات الوطنية (Declarations & Compliance)
+          </h1>
+          <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
+            إدارة إقرارات الانضمام وتعهدات الشؤون الأكاديمية والتوقيعات الرقمية للمتدربين
+          </p>
+        </div>
+
+        <Button
+          variant="contained"
+          startIcon={<Plus size={18} />}
+          onClick={() => setOpenDialog(true)}
+          style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', fontWeight: 700 }}
+        >
+          إنشاء إقرار وتعهد جديد
+        </Button>
+      </div>
+
+      {/* Compliance Stats Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+        <div className="glass-card" style={{ padding: '20px' }}>
+          <div style={{ fontSize: '12px', color: '#94a3b8' }}>إجمالي الإقرارات النشطة</div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: '#10b981', marginTop: '4px' }}>
+            {declarations?.length || 0}
+          </div>
+        </div>
+
+        <div className="glass-card" style={{ padding: '20px' }}>
+          <div style={{ fontSize: '12px', color: '#94a3b8' }}>إجمالي التوقيعات والموافقات الرقمية</div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: '#06b6d4', marginTop: '4px' }}>
+            {statistics?.totalAcceptances || 0}
+          </div>
+        </div>
+      </div>
+
+      {/* Declarations List */}
+      <div>
+        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc', marginBottom: '16px' }}>قائمة الإقرارات والتعهدات الحالية</h3>
+        <TableContainer component={Paper} className="glass-card">
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>عنوان الإقرار</TableCell>
+                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>النوع</TableCell>
+                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الإصدار (Version)</TableCell>
+                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>عدد التوقيعات</TableCell>
+                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {declarations?.map((dec: any) => (
+                <TableRow key={dec.id}>
+                  <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>{dec.titleAr}</TableCell>
+                  <TableCell>
+                    <Chip label={dec.type === 'joining' ? 'إقرار انضمام' : 'إقرار الشؤون الأكاديمية'} size="small" variant="outlined" />
+                  </TableCell>
+                  <TableCell style={{ fontWeight: 700, color: '#06b6d4' }}>v{dec.version}</TableCell>
+                  <TableCell style={{ fontWeight: 700, color: '#34d399' }}>{dec._count?.acceptances || 0} موافقة</TableCell>
+                  <TableCell><Chip label="مفعّل وممتثل" color="success" size="small" /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </div>
+
+      {/* Create Dialog */}
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>إنشاء إقرار وتعهد للشؤون الأكاديمية</DialogTitle>
+        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '16px' }}>
+          <TextField
+            select
+            label="نوع الإقرار"
+            fullWidth
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+          >
+            <MenuItem value="joining">إقرار الانضمام والمباشرة للأطباء المتدربين</MenuItem>
+            <MenuItem value="academic_affairs">إقرار وتعهد الشؤون الأكاديمية والامتثال المهني</MenuItem>
+            <MenuItem value="ethics">تعهد السرية وأخلاقيات الممارسة السريرية</MenuItem>
+          </TextField>
+
+          <TextField
+            label="عنوان الإقرار (بالعربية)"
+            fullWidth
+            value={titleAr}
+            onChange={(e) => setTitleAr(e.target.value)}
+          />
+
+          <TextField
+            label="محتوى ونص الإقرار والتعهد"
+            fullWidth
+            multiline
+            rows={4}
+            value={contentAr}
+            onChange={(e) => setContentAr(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDialog(false)}>إلغاء</Button>
+          <Button
+            variant="contained"
+            onClick={() => createMutation.mutate()}
+            style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)' }}
+          >
+            حفظ وتفعيل الإقرار
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </div>
+  );
+};

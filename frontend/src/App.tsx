@@ -16,6 +16,7 @@ import { OrganizationWizard } from './pages/OrganizationWizard';
 import { Affiliations } from './pages/Affiliations';
 import { AcademicIntakes } from './pages/AcademicIntakes';
 import { UsersPage } from './pages/Users';
+import { Declarations } from './pages/Declarations';
 import { Workflows } from './pages/Workflows';
 import { Policies } from './pages/Policies';
 import { Integrations } from './pages/Integrations';
@@ -61,6 +62,7 @@ export const App: React.FC = () => {
                   <Route path="affiliations" element={<Affiliations />} />
                   <Route path="intakes" element={<AcademicIntakes />} />
                   <Route path="users" element={<UsersPage />} />
+                  <Route path="declarations" element={<Declarations />} />
                   <Route path="workflows" element={<Workflows />} />
                   <Route path="policies" element={<Policies />} />
                   <Route path="integrations" element={<Integrations />} />
