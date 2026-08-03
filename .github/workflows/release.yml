@@ -59,15 +59,30 @@ jobs:
             echo "No signing secrets provided in GitHub Secrets. Proceeding with automatic profile updates if available."
           fi
 
+      - name: Setup App Store Connect API Key for xcodebuild
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo -n "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
+
       - name: Archive App
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           mkdir -p build
+          KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
           xcodebuild -archivePath build/Miran.xcarchive \
                      -project Miran.xcodeproj \
                      -scheme Miran \
                      -configuration Release \
                      archive \
-                     -allowProvisioningUpdates || exit 1
+                     -allowProvisioningUpdates \
+                     -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+                     -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+                     -authenticationKeyPath "$KEY_PATH" || exit 1
 
       - name: Create ExportOptions.plist
         run: |
@@ -87,12 +102,19 @@ jobs:
           EOF
 
       - name: Export IPA
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
+          KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
           xcodebuild -exportArchive \
                      -archivePath build/Miran.xcarchive \
                      -exportPath build/Export \
                      -exportOptionsPlist build/ExportOptions.plist \
-                     -allowProvisioningUpdates
+                     -allowProvisioningUpdates \
+                     -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+                     -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+                     -authenticationKeyPath "$KEY_PATH"
 
       - name: Validate IPA & Upload to App Store Connect
         env:
