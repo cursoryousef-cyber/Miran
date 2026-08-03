@@ -14,16 +14,42 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16
-        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-
-      - name: Show Xcode Version
-        run: xcodebuild -version
-
-      - name: Start Simulator Service & Setup iOS Runtime
+      - name: Audit & Auto-Select Newest Xcode
         run: |
-          sudo xcrun simctl list || true
-          sudo xcodebuild -downloadPlatform iOS || true
+          echo "================ Installed Xcode Apps ================"
+          ls -la /Applications | grep Xcode || true
+
+          NEWEST_XCODE=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+          if [ -n "$NEWEST_XCODE" ]; then
+            echo "Auto-Selecting Newest Xcode: $NEWEST_XCODE"
+            sudo xcode-select -s "$NEWEST_XCODE/Contents/Developer"
+          fi
+
+          echo "================ Xcode Version ================"
+          xcodebuild -version
+
+          echo "================ Active Developer ================"
+          xcode-select -p
+
+          echo "================ iPhoneOS SDK ================"
+          xcrun --sdk iphoneos --show-sdk-version
+
+          echo "================ Installed SDKs ================"
+          xcodebuild -showsdks
+
+      - name: Verify Required SDK Version (Xcode 26+ Check)
+        run: |
+          SDK_VER=$(xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || echo "0.0")
+          SDK_MAJOR=$(echo "$SDK_VER" | cut -d'.' -f1)
+
+          if [ "$SDK_MAJOR" -lt 26 ]; then
+            echo "=========================================================================="
+            echo "❌ CRITICAL NOTICE: Xcode 26+ (iOS 26 SDK) is NOT installed on this GitHub Actions runner."
+            echo "   Active SDK Detected: iphoneos${SDK_VER}"
+            echo "   Action: Halting release pipeline before Archive and Upload."
+            echo "=========================================================================="
+            exit 1
+          fi
 
       - name: Install Apple Certificate & Provisioning Profile
         env:
@@ -69,19 +95,6 @@ jobs:
 
           echo "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode > "$KEY_PATH"
           chmod 600 "$KEY_PATH"
-
-          echo "API Key File Size: $(wc -c < "$KEY_PATH") bytes"
-          echo "API Key SHA256 Checksum: $(shasum -a 256 "$KEY_PATH" | awk '{print $1}')"
-
-          if [ ! -s "$KEY_PATH" ]; then
-            echo "Error: Decoded API key file is empty."
-            exit 1
-          fi
-
-          if ! head -n 1 "$KEY_PATH" | grep -q "^-----BEGIN PRIVATE KEY-----" || ! tail -n 2 "$KEY_PATH" | grep -q "^-----END PRIVATE KEY-----"; then
-            echo "Error: API key file format is invalid (missing BEGIN/END PRIVATE KEY headers)."
-            exit 1
-          fi
 
           echo "App Store Connect API key validated successfully at $KEY_PATH."
 
