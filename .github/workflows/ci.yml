@@ -1,4 +1,4 @@
-name: Miran Platform CI / Web & Backend Verification
+name: Miran Platform CI / Dynamic Xcode SDK Audit & Build Verification
 
 on:
   push:
@@ -61,3 +61,26 @@ jobs:
         run: |
           cd frontend
           npm run build
+
+  ios-build-archive:
+    name: Dynamic Xcode & SDK Audit iOS Build
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Detect Newest Installed Xcode & Audit SDK
+        run: |
+          chmod +x ci_scripts/*.sh 2>/dev/null || true
+          ./ci_scripts/ci_pre_xcodebuild.sh
+
+      - name: Build & Archive iOS Native App
+        run: |
+          xcodebuild -project Miran.xcodeproj \
+            -scheme Miran \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath build/Miran.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
