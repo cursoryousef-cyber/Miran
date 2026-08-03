@@ -35,11 +35,7 @@ final class APIClient {
     static let shared = APIClient()
     private init() {}
 
-    #if targetEnvironment(simulator)
-    var baseURL = "http://localhost:3000/api/v1"
-    #else
-    var baseURL = "http://localhost:3000/api/v1"
-    #endif
+    var baseURL = "https://fawaz-backend-abx3.onrender.com/api/v1"
 
     private let session = URLSession.shared
 
@@ -50,7 +46,8 @@ final class APIClient {
         body: (any Encodable)? = nil,
         requiresAuth: Bool = true
     ) async throws -> T {
-        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+        let cleanEndpoint = endpoint.hasPrefix("/") ? endpoint : "/\(endpoint)"
+        guard let url = URL(string: "\(baseURL)\(cleanEndpoint)") else {
             throw APIError.invalidURL
         }
 
