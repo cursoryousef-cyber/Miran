@@ -20,6 +20,9 @@ jobs:
       - name: Show Xcode Version
         run: xcodebuild -version
 
+      - name: Download iOS Simulator Runtime
+        run: sudo xcodebuild -downloadPlatform iOS || true
+
       - name: Install Apple Certificate & Provisioning Profile
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
