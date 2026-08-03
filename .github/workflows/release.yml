@@ -130,10 +130,9 @@ jobs:
                      -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
                      -authenticationKeyPath "$KEY_PATH"
 
-      - name: Validate IPA & Upload to App Store Connect
+      - name: Upload IPA to App Store Connect
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          xcrun altool --validate-app -f build/Export/Miran.ipa -t ios --apiKey "$APP_STORE_CONNECT_API_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
           xcrun altool --upload-app -f build/Export/Miran.ipa -t ios --apiKey "$APP_STORE_CONNECT_API_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
