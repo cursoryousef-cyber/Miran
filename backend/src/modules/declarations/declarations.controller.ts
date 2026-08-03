@@ -19,7 +19,8 @@ export class DeclarationsController {
     @Body() dto: CreateDeclarationDto,
     @Req() req: any,
   ) {
-    return this.service.createDeclaration(orgId, dto, req.user?.sub);
+    const userId = req.user?.accountId || req.user?.sub || req.user?.id;
+    return this.service.createDeclaration(orgId, dto, userId);
   }
 
   @Get()
@@ -34,7 +35,8 @@ export class DeclarationsController {
     @Headers('x-organization-id') orgId: string,
     @Req() req: any,
   ) {
-    return this.service.getPendingDeclarationsForUser(req.user?.sub, orgId);
+    const userId = req.user?.accountId || req.user?.sub || req.user?.id;
+    return this.service.getPendingDeclarationsForUser(userId, orgId);
   }
 
   @Post('accept')
@@ -44,8 +46,9 @@ export class DeclarationsController {
     @Body() dto: AcceptDeclarationDto,
     @Req() req: any,
   ) {
-    const ip = req.ip || req.headers['x-forwarded-for'];
-    return this.service.acceptDeclaration(req.user?.sub, orgId, dto, ip);
+    const userId = req.user?.accountId || req.user?.sub || req.user?.id;
+    const ip = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
+    return this.service.acceptDeclaration(userId, orgId, dto, ip);
   }
 
   @Get('statistics')
