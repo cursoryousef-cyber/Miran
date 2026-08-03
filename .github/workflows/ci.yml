@@ -1,4 +1,4 @@
-name: Miran Platform CI / Build & App Store Archive Verification
+name: Miran Platform CI / App Store SDK & Build Verification
 
 on:
   push:
@@ -63,19 +63,25 @@ jobs:
           npm run build
 
   ios-build-archive:
-    name: Build & Archive Native iOS App (Latest Xcode / iOS SDK)
+    name: Build & Archive Native iOS App (Xcode / iOS SDK Audit)
     runs-on: macos-14
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Select Xcode Version
+      - name: Select Latest Xcode Version & Print SDK Info
         run: |
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          echo "=== Xcode & SDK Audit Information ==="
           xcodebuild -version
+          xcode-select -p
+          echo "iOS SDK Version:"
+          xcrun --sdk iphoneos --show-sdk-version
+          echo "iOS SDK Path:"
+          xcrun --sdk iphoneos --show-sdk-path
 
-      - name: Build & Archive iOS App
+      - name: Build & Archive iOS App (Release Mode)
         run: |
           xcodebuild -project Miran.xcodeproj \
             -scheme Miran \
