@@ -1,0 +1,489 @@
+//
+//  AppStore.swift
+//  مِران
+//
+//  مخزن الحالة المركزي: البيانات، المنطق، والعمليات.
+//  البيانات هنا تجريبية داخل الذاكرة. عند الربط بخادم حقيقي
+//  تُستبدل الدوال بطلبات شبكة مع بقاء التواقيع كما هي.
+//
+
+import Foundation
+import Combine
+import SwiftUI
+
+@MainActor
+final class AppStore: ObservableObject {
+
+    // MARK: - الجلسة
+
+    @Published var role: UserRole?
+    @Published var currentTraineeID: UUID?
+    @Published var currentTrainerID: UUID?
+
+    // MARK: - البيانات
+
+    @Published var trainees: [Trainee] = []
+    @Published var trainers: [Trainer] = []
+    @Published var departments: [Department] = []
+    @Published var rotations: [Rotation] = []
+    @Published var shifts: [Shift] = []
+    @Published var attendance: [AttendanceRecord] = []
+    @Published var calls: [TrainerCall] = []
+    @Published var evaluations: [Evaluation] = []
+    @Published var departmentFeedback: [DepartmentFeedback] = []
+    @Published var improvementPlans: [ImprovementPlan] = []
+
+    // MARK: - الإعدادات
+
+    /// السقف الأسبوعي للنداءات لكل متدرب — ضابط منع الإرهاق
+    @Published var weeklyCallCap: Int = 4
+
+    /// ساعة حية تُحدَّث كل ثانية لتشغيل العدّادات
+    @Published var now: Date = Date()
+
+    private var ticker: AnyCancellable?
+
+    // MARK: - التهيئة
+
+    init() {
+        seed()
+        ticker = Timer.publish(every: 1, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] date in
+                self?.now = date
+            }
+    }
+
+    // MARK: - وصول سريع
+
+    var currentTrainee: Trainee? {
+        guard let currentTraineeID else { return nil }
+        return trainees.first { $0.id == currentTraineeID }
+    }
+
+    var currentTrainer: Trainer? {
+        guard let currentTrainerID else { return nil }
+        return trainers.first { $0.id == currentTrainerID }
+    }
+
+    func trainee(_ id: UUID) -> Trainee? {
+        trainees.first { $0.id == id }
+    }
+
+    func trainer(_ id: UUID?) -> Trainer? {
+        guard let id else { return nil }
+        return trainers.first { $0.id == id }
+    }
+
+    func department(_ id: UUID?) -> Department? {
+        guard let id else { return nil }
+        return departments.first { $0.id == id }
+    }
+
+    func traineeRotations(for traineeID: UUID) -> [Rotation] {
+        rotations.filter { $0.traineeID == traineeID }.sorted { $0.startDate < $1.startDate }
+    }
+
+    func currentRotation(for traineeID: UUID) -> Rotation? {
+        traineeRotations(for: traineeID).first { $0.isCurrent }
+    }
+
+    func nextRotation(for traineeID: UUID) -> Rotation? {
+        traineeRotations(for: traineeID).first { $0.startDate > Date() }
+    }
+
+    func traineeShifts(for traineeID: UUID) -> [Shift] {
+        shifts.filter { $0.traineeID == traineeID }.sorted { $0.date < $1.date }
+    }
+
+    func todayShift(for traineeID: UUID) -> Shift? {
+        traineeShifts(for: traineeID).first { Calendar.current.isDateInToday($0.date) }
+    }
+
+    func traineesOf(trainer trainerID: UUID) -> [Trainee] {
+        trainees.filter { $0.trainerID == trainerID && $0.applicationStatus == .approved }
+    }
+
+    // MARK: - التسجيل والاعتماد
+
+    /// اعتماد ملف المتدرب وإصدار الصلاحية والبطاقة
+    func approveApplication(_ traineeID: UUID, months: Int = 12) {
+        guard let idx = trainees.firstIndex(where: { $0.id == traineeID }) else { return }
+        trainees[idx].applicationStatus = .approved
+        trainees[idx].cardStatus = .active
+        trainees[idx].accessExpiry = Calendar.current.date(byAdding: .month, value: months, to: Date()) ?? Date()
+        for i in trainees[idx].documents.indices where trainees[idx].documents[i].status == .pending {
+            trainees[idx].documents[i].status = .approved
+        }
+    }
+
+    func requestCompletion(_ traineeID: UUID, note: String) {
+        guard let idx = trainees.firstIndex(where: { $0.id == traineeID }) else { return }
+        trainees[idx].applicationStatus = .incomplete
+        if let d = trainees[idx].documents.firstIndex(where: { $0.status == .pending }) {
+            trainees[idx].documents[d].reviewerNote = note
+        }
+    }
+
+    func rejectApplication(_ traineeID: UUID, note: String) {
+        guard let idx = trainees.firstIndex(where: { $0.id == traineeID }) else { return }
+        trainees[idx].applicationStatus = .rejected
+        trainees[idx].cardStatus = .notIssued
+        _ = note
+    }
+
+    func suspendCard(_ traineeID: UUID) {
+        guard let idx = trainees.firstIndex(where: { $0.id == traineeID }) else { return }
+        trainees[idx].cardStatus = .suspended
+    }
+
+    func revokeCard(_ traineeID: UUID) {
+        guard let idx = trainees.firstIndex(where: { $0.id == traineeID }) else { return }
+        trainees[idx].cardStatus = .revoked
+    }
+
+    func reactivateCard(_ traineeID: UUID) {
+        guard let idx = trainees.firstIndex(where: { $0.id == traineeID }) else { return }
+        trainees[idx].cardStatus = .active
+    }
+
+    func updatePhoto(_ traineeID: UUID, data: Data?) {
+        guard let idx = trainees.firstIndex(where: { $0.id == traineeID }) else { return }
+        trainees[idx].photoData = data
+    }
+
+    func updateTrainee(_ trainee: Trainee) {
+        guard let idx = trainees.firstIndex(where: { $0.id == trainee.id }) else { return }
+        trainees[idx] = trainee
+    }
+
+    // MARK: - الإسناد
+
+    func assign(trainee traineeID: UUID, to trainerID: UUID) {
+        guard let idx = trainees.firstIndex(where: { $0.id == traineeID }) else { return }
+        trainees[idx].trainerID = trainerID
+    }
+
+    /// عدد المتدربين لكل مدرب — لكشف اختلال التوزيع
+    func load(of trainerID: UUID) -> Int {
+        trainees.filter { $0.trainerID == trainerID }.count
+    }
+
+    var isLoadImbalanced: Bool {
+        let loads = trainers.map { load(of: $0.id) }
+        guard let mx = loads.max(), let mn = loads.min() else { return false }
+        return mx - mn >= 3
+    }
+
+    func markMidpointMeetingDone(_ rotationID: UUID) {
+        guard let idx = rotations.firstIndex(where: { $0.id == rotationID }) else { return }
+        rotations[idx].midpointMeetingDone = true
+    }
+
+    func toggleObjective(_ rotationID: UUID, index: Int) {
+        guard let idx = rotations.firstIndex(where: { $0.id == rotationID }) else { return }
+        if rotations[idx].completedObjectives.contains(index) {
+            rotations[idx].completedObjectives.remove(index)
+        } else {
+            rotations[idx].completedObjectives.insert(index)
+        }
+    }
+
+    // MARK: - النداءات
+
+    /// عدد نداءات المتدرب خلال الأسبوع الأخير — للتحقق من السقف
+    func callsThisWeek(for traineeID: UUID) -> Int {
+        let weekAgo = Date().addingTimeInterval(-7 * 24 * 3600)
+        return calls.filter { call in
+            call.launchedAt >= weekAgo && call.participants.contains { $0.traineeID == traineeID }
+        }.count
+    }
+
+    /// هل يمكن إرسال نداء لهذا المتدرب الآن؟
+    /// يمنع النظام الإرسال إذا كان في إجازة أو تجاوز السقف الأسبوعي.
+    func canNotify(_ traineeID: UUID) -> (allowed: Bool, reason: String?) {
+        if let shift = todayShift(for: traineeID), !shift.type.isReachable {
+            return (false, "في إجازة اليوم")
+        }
+        if callsThisWeek(for: traineeID) >= weeklyCallCap {
+            return (false, "تجاوز السقف الأسبوعي (\(weeklyCallCap))")
+        }
+        return (true, nil)
+    }
+
+    /// إطلاق نداء جديد
+    @discardableResult
+    func launchCall(type: CallType,
+                    customTitle: String = "",
+                    note: String = "",
+                    location: String,
+                    expectedMinutes: Int,
+                    trainerID: UUID,
+                    departmentID: UUID,
+                    targets: [UUID]) -> TrainerCall {
+
+        let allowed = targets.filter { canNotify($0).allowed }
+        let stamp = Date()
+
+        let participants = allowed.map { id in
+            CallParticipant(traineeID: id, notifiedAt: stamp)
+        }
+
+        let call = TrainerCall(type: type,
+                               customTitle: customTitle,
+                               note: note,
+                               location: location,
+                               expectedMinutes: expectedMinutes,
+                               trainerID: trainerID,
+                               departmentID: departmentID,
+                               launchedAt: stamp,
+                               endedAt: nil,
+                               participants: participants)
+        calls.insert(call, at: 0)
+        return call
+    }
+
+    /// الخطوة ٣ — المتدرب يضغط «قادم»
+    func acknowledge(callID: UUID, traineeID: UUID) {
+        mutate(callID: callID, traineeID: traineeID) { p in
+            guard p.ackAt == nil else { return }
+            p.ackAt = Date()
+            p.state = .acknowledged
+        }
+    }
+
+    /// المتدرب يضغط «لا أستطيع» — لا يُحتسب غياباً
+    func decline(callID: UUID, traineeID: UUID, reason: String) {
+        mutate(callID: callID, traineeID: traineeID) { p in
+            p.state = .declined
+            p.declineReason = reason
+        }
+    }
+
+    /// الخطوة ٥ — المتدرب يضغط «وصلت»
+    func markSelfArrived(callID: UUID, traineeID: UUID) {
+        mutate(callID: callID, traineeID: traineeID) { p in
+            guard p.selfArrivedAt == nil else { return }
+            p.selfArrivedAt = Date()
+            if p.ackAt == nil { p.ackAt = Date() }
+            if p.state != .confirmed { p.state = .selfArrived }
+        }
+    }
+
+    /// الخطوة ٦ — المدرب يضغط على الاسم لتأكيد الحضور فعلياً
+    func confirmArrival(callID: UUID, traineeID: UUID) {
+        mutate(callID: callID, traineeID: traineeID) { p in
+            guard p.confirmedAt == nil else { return }
+            p.confirmedAt = Date()
+            if p.ackAt == nil { p.ackAt = Date() }
+            p.state = .confirmed
+        }
+    }
+
+    func endCall(_ callID: UUID) {
+        guard let idx = calls.firstIndex(where: { $0.id == callID }) else { return }
+        calls[idx].endedAt = Date()
+    }
+
+    private func mutate(callID: UUID, traineeID: UUID, _ change: (inout CallParticipant) -> Void) {
+        guard let ci = calls.firstIndex(where: { $0.id == callID }),
+              let pi = calls[ci].participants.firstIndex(where: { $0.traineeID == traineeID })
+        else { return }
+        change(&calls[ci].participants[pi])
+    }
+
+    /// النداءات النشطة التي يشارك فيها هذا المتدرب ولم يحسم موقفه أو لم يصل بعد
+    func activeCalls(for traineeID: UUID) -> [TrainerCall] {
+        calls.filter { call in
+            guard call.isActive else { return false }
+            guard let p = call.participants.first(where: { $0.traineeID == traineeID }) else { return false }
+            return p.state != .declined && p.state != .confirmed
+        }
+    }
+
+    func trainerCalls(by trainerID: UUID) -> [TrainerCall] {
+        calls.filter { $0.trainerID == trainerID }
+    }
+
+    func traineeCalls(involving traineeID: UUID) -> [TrainerCall] {
+        calls.filter { call in call.participants.contains { $0.traineeID == traineeID } }
+    }
+
+    // MARK: - مؤشر الحرص
+
+    func diligence(for traineeID: UUID) -> DiligenceScore {
+        let mine = traineeCalls(involving: traineeID)
+        let parts = mine.compactMap { c in c.participants.first { $0.traineeID == traineeID } }
+        guard !parts.isEmpty else {
+            return DiligenceScore(responseRate: 0, averageAckSeconds: nil,
+                                  averageArrivalSeconds: nil, attendanceRate: 0, totalCalls: 0)
+        }
+
+        // الاعتذار المبرر لا يُحتسب ضمن مقام النسبة
+        let counted = parts.filter { $0.state != .declined }
+        let denominator = max(1, counted.count)
+
+        let acked = counted.filter { $0.ackAt != nil }.count
+        let arrived = counted.filter { $0.hasArrived }.count
+
+        let ackValues = counted.compactMap(\.ackSeconds)
+        let arrivalValues = counted.compactMap { $0.confirmedArrivalSeconds ?? $0.selfArrivalSeconds }
+
+        return DiligenceScore(
+            responseRate: Double(acked) / Double(denominator),
+            averageAckSeconds: ackValues.isEmpty ? nil : ackValues.reduce(0, +) / ackValues.count,
+            averageArrivalSeconds: arrivalValues.isEmpty ? nil : arrivalValues.reduce(0, +) / arrivalValues.count,
+            attendanceRate: Double(arrived) / Double(denominator),
+            totalCalls: parts.count
+        )
+    }
+
+    // MARK: - التقييم
+
+    func traineeEvaluations(for traineeID: UUID) -> [Evaluation] {
+        evaluations.filter { $0.traineeID == traineeID }.sorted { $0.submittedAt > $1.submittedAt }
+    }
+
+    func submitEvaluation(_ evaluation: Evaluation) {
+        evaluations.append(evaluation)
+    }
+
+    func submitFeedback(_ feedback: DepartmentFeedback) {
+        departmentFeedback.append(feedback)
+    }
+
+    /// هل أغلق المتدرب تقييمه للقسم؟ — القفل المتبادل
+    func hasFeedback(rotationID: UUID) -> Bool {
+        departmentFeedback.contains { $0.rotationID == rotationID }
+    }
+
+    /// متوسط تقييم القسم من المتدربين — تصنيف الأقسام التدريبية
+    func departmentRating(_ departmentID: UUID) -> Double? {
+        let items = departmentFeedback.filter { $0.departmentID == departmentID }
+        guard !items.isEmpty else { return nil }
+        return items.map(\.average).reduce(0, +) / Double(items.count)
+    }
+
+    /// عدد التقييمات المشبوهة لكل مُقيِّم — كاشف التقييم الآلي
+    func suspiciousEvaluationCount(evaluatorID: UUID) -> Int {
+        evaluations.filter { $0.evaluatorID == evaluatorID && $0.isSuspicious }.count
+    }
+
+    // MARK: - الإنذار المبكر للتعثّر
+
+    struct RiskFlag: Identifiable {
+        let id = UUID()
+        var traineeID: UUID
+        var reasons: [String]
+    }
+
+    /// يجمع: تقييمات منخفضة + مؤشر حرص ضعيف + أهداف غير مكتملة
+    var riskFlags: [RiskFlag] {
+        var result: [RiskFlag] = []
+        for t in trainees where t.applicationStatus == .approved {
+            var reasons: [String] = []
+
+            let evals = traineeEvaluations(for: t.id)
+            if let last = evals.first, last.average < 3.0 {
+                reasons.append("آخر تقييم أقل من ٣ من ٥")
+            }
+
+            let d = diligence(for: t.id)
+            if d.totalCalls >= 2 && d.value < 55 {
+                reasons.append("مؤشر حرص منخفض (\(d.value))")
+            }
+
+            if let rot = currentRotation(for: t.id),
+               let dept = department(rot.departmentID),
+               rot.progress > 0.5,
+               rot.completedObjectives.count < dept.objectives.count / 2 {
+                reasons.append("أقل من نصف الأهداف مكتملة بعد منتصف الدورة")
+            }
+
+            if let rot = currentRotation(for: t.id), rot.progress > 0.6, !rot.midpointMeetingDone {
+                reasons.append("لم يُنفَّذ اجتماع منتصف الدورة")
+            }
+
+            if !reasons.isEmpty {
+                result.append(RiskFlag(traineeID: t.id, reasons: reasons))
+            }
+        }
+        return result
+    }
+
+    /// خطة تحسين مقترحة تلقائياً بناءً على أسباب الإنذار
+    func suggestedPlan(for flag: RiskFlag) -> ImprovementPlan {
+        var goals: [String] = []
+        for r in flag.reasons {
+            if r.contains("تقييم") {
+                goals.append("جلسة مراجعة أسبوعية مع المدرب الأساس لمدة ٤ أسابيع")
+                goals.append("إعادة تقييم مصغّر بعد أسبوعين")
+            }
+            if r.contains("حرص") {
+                goals.append("الالتزام بالرد على النداءات خلال ٦٠ ثانية")
+                goals.append("رفع نسبة الحضور المؤكَّد إلى ٨٠٪ خلال شهر")
+            }
+            if r.contains("الأهداف") {
+                goals.append("إنجاز الأهداف المتبقية بجدول أسبوعي معتمد")
+            }
+            if r.contains("منتصف الدورة") {
+                goals.append("عقد اجتماع منتصف الدورة خلال ٧ أيام")
+            }
+        }
+        if goals.isEmpty { goals = ["متابعة عامة لمدة شهر"] }
+
+        return ImprovementPlan(
+            traineeID: flag.traineeID,
+            reason: flag.reasons.joined(separator: " • "),
+            goals: Array(Set(goals)).sorted(),
+            startDate: Date(),
+            endDate: Calendar.current.date(byAdding: .day, value: 30, to: Date()) ?? Date(),
+            progress: 0
+        )
+    }
+
+    func adopt(_ plan: ImprovementPlan) {
+        improvementPlans.append(plan)
+    }
+
+    // MARK: - الحضور
+
+    func checkIn(_ traineeID: UUID, method: String) {
+        let today = Date()
+        if let idx = attendance.firstIndex(where: {
+            $0.traineeID == traineeID && Calendar.current.isDateInToday($0.date)
+        }) {
+            if attendance[idx].checkIn == nil { attendance[idx].checkIn = today }
+        } else {
+            let hour = Calendar.current.component(.hour, from: today)
+            attendance.append(AttendanceRecord(traineeID: traineeID,
+                                               date: today,
+                                               checkIn: today,
+                                               checkOut: nil,
+                                               method: method,
+                                               isLate: hour >= 8))
+        }
+    }
+
+    func checkOut(_ traineeID: UUID) {
+        guard let idx = attendance.firstIndex(where: {
+            $0.traineeID == traineeID && Calendar.current.isDateInToday($0.date)
+        }) else { return }
+        attendance[idx].checkOut = Date()
+    }
+
+    func attendanceLog(for traineeID: UUID) -> [AttendanceRecord] {
+        attendance.filter { $0.traineeID == traineeID }.sorted { $0.date > $1.date }
+    }
+
+    func todayAttendance(for traineeID: UUID) -> AttendanceRecord? {
+        attendance.first { $0.traineeID == traineeID && Calendar.current.isDateInToday($0.date) }
+    }
+
+    func attendanceRate(for traineeID: UUID) -> Double {
+        let records = attendanceLog(for: traineeID)
+        guard !records.isEmpty else { return 0 }
+        let present = records.filter { $0.checkIn != nil }.count
+        return Double(present) / Double(records.count)
+    }
+}
