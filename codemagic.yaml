@@ -26,6 +26,15 @@ workflows:
           echo "Setting Project Build Number to: $BUILD_NUMBER"
           agvtool new-version -all $BUILD_NUMBER || true
 
+      - name: Fetch and Install iOS Signing Files
+        script: |
+          echo "================ Fetching App Store Signing Files ================"
+          keychain initialize || true
+          app-store-connect fetch-signing-files "sa.miran.app" \
+            --type IOS_APP_STORE \
+            --create || true
+          keychain add-certificates || true
+
       - name: Audit Installed Profiles & Build Settings
         script: |
           echo "=== Installed Profiles ==="
