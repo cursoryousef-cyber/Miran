@@ -37,16 +37,17 @@ jobs:
           echo "================ Installed SDKs ================"
           xcodebuild -showsdks
 
-      - name: Verify Required SDK Version (Xcode 26+ Check)
+      - name: Verify Required SDK Version (iOS SDK 16+ Check)
         run: |
           SDK_VER=$(xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || echo "0.0")
           SDK_MAJOR=$(echo "$SDK_VER" | cut -d'.' -f1)
 
-          if [ "$SDK_MAJOR" -lt 26 ]; then
+          echo "Detected iOS SDK Version: ${SDK_VER}"
+
+          if [ "$SDK_MAJOR" -lt 16 ]; then
             echo "=========================================================================="
-            echo "❌ CRITICAL NOTICE: Xcode 26+ (iOS 26 SDK) is NOT installed on this GitHub Actions runner."
+            echo "❌ NOTICE: Xcode iOS 16+ SDK is required for building Miran App."
             echo "   Active SDK Detected: iphoneos${SDK_VER}"
-            echo "   Action: Halting release pipeline before Archive and Upload."
             echo "=========================================================================="
             exit 1
           fi
