@@ -235,6 +235,46 @@ struct NotificationModel: Codable, Identifiable {
     let createdAt: String
 }
 
+// MARK: - Clinical Logbook & Procedures & Competencies
+struct ProcedureCatalogModel: Codable, Identifiable {
+    let id: String
+    let code: String
+    let titleAr: String
+    let titleEn: String
+    let category: String
+    let minRequired: Int
+}
+
+struct ClinicalCaseLogModel: Codable, Identifiable {
+    let id: String
+    let diagnosis: String
+    let patientAge: Int?
+    let patientGender: String?
+    let specialtyAr: String?
+    let complexity: String
+    let participationLevel: String
+    let status: String
+    let notes: String?
+    let performedAt: String
+    let procedure: ProcedureCatalogModel?
+    let department: DepartmentModel?
+}
+
+struct CompetencyProgressModel: Codable, Identifiable {
+    let id: String
+    let requiredCount: Int
+    let completedCount: Int
+    let status: String
+    let procedure: ProcedureCatalogModel?
+}
+
+struct CompetencyPortfolioResponse: Codable {
+    let overallPercentage: Int
+    let totalRequired: Int
+    let totalCompleted: Int
+    let data: [CompetencyProgressModel]
+}
+
 // MARK: - API Response Wrapper
 struct APIListResponse<T: Codable>: Codable {
     let data: [T]

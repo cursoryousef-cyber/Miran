@@ -28,6 +28,7 @@ import { OrgMembersModule } from './modules/org-members/org-members.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { GlobalSearchModule } from './modules/global-search/global-search.module';
 import { RolesPermissionsModule } from './modules/roles-permissions/roles-permissions.module';
+import { LogbookModule } from './modules/logbook/logbook.module';
 
 @Module({
   imports: [
@@ -73,10 +74,11 @@ import { RolesPermissionsModule } from './modules/roles-permissions/roles-permis
     NotificationsModule,
     OrgMembersModule,
 
-    // Observability, Audit, Global Search & Dynamic RBAC
+    // Observability, Audit, Global Search & Dynamic RBAC & Logbook
     AuditLogsModule,
     GlobalSearchModule,
     RolesPermissionsModule,
+    LogbookModule,
   ],
   providers: [
     {

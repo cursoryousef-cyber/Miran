@@ -26,6 +26,7 @@ import { OrgMembersPage } from './pages/OrgMembers';
 import { HealthMonitor } from './pages/HealthMonitor';
 import { AuditLogs } from './pages/AuditLogs';
 import { RolesManagement } from './pages/RolesManagement';
+import { LogbookPage } from './pages/Logbook';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -76,6 +77,7 @@ export const App: React.FC = () => {
                   <Route path="health-monitor" element={<HealthMonitor />} />
                   <Route path="audit-logs" element={<AuditLogs />} />
                   <Route path="roles-management" element={<RolesManagement />} />
+                  <Route path="logbook" element={<LogbookPage />} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />

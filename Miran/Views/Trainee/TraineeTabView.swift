@@ -156,10 +156,25 @@ struct TraineeTabView: View {
 
                         // My Active Rotations Section
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("الروتيشنات والدورات الحالية")
-                                .font(.headline.weight(.bold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal)
+                            HStack {
+                                Text("الروتيشنات والدورات الحالية")
+                                    .font(.headline.weight(.bold))
+                                    .foregroundColor(.white)
+                                Spacer()
+                                NavigationLink(destination: ClinicalLogbookView()) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "book.closed.fill")
+                                        Text("السجل السريري Logbook")
+                                    }
+                                    .font(.caption.weight(.bold))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(MiranTheme.emerald)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
+                                }
+                            }
+                            .padding(.horizontal)
 
                             if viewModel.rotations.isEmpty {
                                 Text("لا توجد روتيشنات مسجلة حالياً")

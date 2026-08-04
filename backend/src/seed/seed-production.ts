@@ -380,7 +380,108 @@ async function main() {
     }
   }
 
-  // 6. Final Report & Counts
+  // 6. Seeding Clinical Procedures Catalog & Initial Case Logs
+  console.log('6️⃣ Seeding Procedures Catalog & Clinical Case Logs...');
+  const proceduresList = [
+    { code: 'PROC-IV', titleAr: 'تركيب المحلول الوريدي (IV Cannulation)', titleEn: 'IV Cannulation', category: 'الطوارئ والعناية', minRequired: 10 },
+    { code: 'PROC-ABG', titleAr: 'سحب غازات الدم الشرياني (ABG Sampling)', titleEn: 'Arterial Blood Gas Sampling', category: 'الباطنية والعناية', minRequired: 5 },
+    { code: 'PROC-ECG', titleAr: 'تخطيط القلب الكهربائي (ECG Recording & Analysis)', titleEn: 'ECG Recording & Analysis', category: 'الباطنية والطوارئ', minRequired: 10 },
+    { code: 'PROC-SUTURE', titleAr: 'خياطة الجروح السطحية والمعقدة (Suturing)', titleEn: 'Suturing', category: 'الجراحة العامة والطوارئ', minRequired: 8 },
+    { code: 'PROC-INTUB', titleAr: 'أنبوبة القصبة الهوائية (Endotracheal Intubation)', titleEn: 'Endotracheal Intubation', category: 'العناية المركزة والتخدير', minRequired: 3 },
+    { code: 'PROC-CPR', titleAr: 'الإنعاش القلبي الرئوي المتقدم (Advanced CPR)', titleEn: 'Advanced CPR', category: 'الطوارئ والعناية', minRequired: 5 },
+    { code: 'PROC-CATH', titleAr: 'قسطرة البول (Urinary Catheterization)', titleEn: 'Urinary Catheterization', category: 'الجراحة والباطنية', minRequired: 5 },
+    { code: 'PROC-LP', titleAr: 'البزل القطني (Lumbar Puncture)', titleEn: 'Lumbar Puncture', category: 'الباطنية والمخ والأعصاب', minRequired: 3 },
+  ];
+
+  const createdProcs: Record<string, any> = {};
+  for (const proc of proceduresList) {
+    const p = await prisma.procedureCatalog.upsert({
+      where: { code: proc.code },
+      create: {
+        code: proc.code,
+        titleAr: proc.titleAr,
+        titleEn: proc.titleEn,
+        category: proc.category,
+        minRequired: proc.minRequired,
+      },
+      update: { titleAr: proc.titleAr },
+    });
+    createdProcs[proc.code] = p;
+  }
+
+  // Create initial case logs for trainees
+  const firstTrainee = await prisma.traineeProfile.findFirst({
+    include: { person: true, rotations: true },
+  });
+
+  if (firstTrainee && salemProfile && createdDepts['INTERNAL_MED']) {
+    const sampleCases = [
+      {
+        diagnosis: 'حالة التهاب رئوي حاد مع نقص أكسجين',
+        procCode: 'PROC-ABG',
+        participationLevel: 'performed_independently',
+        complexity: 'medium',
+        status: 'completed',
+      },
+      {
+        diagnosis: 'أزمة قلبية حادة وجلطة بالقلب (STEMI)',
+        procCode: 'PROC-ECG',
+        participationLevel: 'performed',
+        complexity: 'high',
+        status: 'trainer_approved',
+      },
+      {
+        diagnosis: 'جرح عميق باليد الإبرية يحتاج خياطة طبقات',
+        procCode: 'PROC-SUTURE',
+        participationLevel: 'performed',
+        complexity: 'medium',
+        status: 'submitted',
+      },
+    ];
+
+    for (const c of sampleCases) {
+      const log = await prisma.clinicalCaseLog.create({
+        data: {
+          organizationId: northTowerHosp.id,
+          traineeProfileId: firstTrainee.id,
+          trainerProfileId: salemProfile.id,
+          departmentId: createdDepts['INTERNAL_MED'].id,
+          rotationId: firstTrainee.rotations[0]?.id,
+          procedureId: createdProcs[c.procCode]?.id,
+          diagnosis: c.diagnosis,
+          patientAge: 48,
+          patientGender: 'ذكر',
+          specialtyAr: 'باطنية وطوارئ',
+          complexity: c.complexity,
+          participationLevel: c.participationLevel,
+          status: c.status,
+          notes: 'تمت العملية السريرية بنجاح واحترافية وفق البروتوكول المعتمد',
+        },
+      });
+
+      // Add competency
+      if (createdProcs[c.procCode]) {
+        await prisma.competencyProgress.upsert({
+          where: {
+            traineeProfileId_procedureId: {
+              traineeProfileId: firstTrainee.id,
+              procedureId: createdProcs[c.procCode].id,
+            },
+          },
+          create: {
+            traineeProfileId: firstTrainee.id,
+            procedureId: createdProcs[c.procCode].id,
+            requiredCount: createdProcs[c.procCode].minRequired,
+            completedCount: 3,
+            status: 'in_progress',
+          },
+          update: { completedCount: 3 },
+        });
+      }
+    }
+  }
+
+  // 7. Final Report & Counts
   console.log('\n📊 Production Database Build & Seed Summary:');
   console.log(`  Organizations: ${await prisma.organization.count()}`);
   console.log(`  Departments: ${await prisma.department.count()}`);
@@ -388,6 +489,8 @@ async function main() {
   console.log(`  Trainee Profiles: ${await prisma.traineeProfile.count()}`);
   console.log(`  Trainer Profiles: ${await prisma.trainerProfile.count()}`);
   console.log(`  Rotations: ${await prisma.rotation.count()}`);
+  console.log(`  Procedures Catalog: ${await prisma.procedureCatalog.count()}`);
+  console.log(`  Clinical Case Logs: ${await prisma.clinicalCaseLog.count()}`);
   console.log(`  Roles: ${await prisma.role.count()}`);
   console.log(`  Permissions: ${await prisma.permission.count()}`);
 

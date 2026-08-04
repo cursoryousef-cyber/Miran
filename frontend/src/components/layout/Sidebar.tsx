@@ -17,10 +17,12 @@ import {
   Activity,
   Shield,
   Key,
+  BookOpen,
 } from 'lucide-react';
 
 const navigationItems = [
   { name: 'لوحة التحكم الرئيسيّة', path: '/', icon: LayoutDashboard },
+  { name: 'السجل السريري (Clinical Logbook)', path: '/logbook', icon: BookOpen },
   { name: 'مراقبة سلامة الخدمات (Health)', path: '/health-monitor', icon: Activity },
   { name: 'الجهات والتجمعات الصحية', path: '/organizations', icon: Building2 },
   { name: 'معالج إنشاء الجهات آلياً', path: '/organizations/wizard', icon: Wand2 },

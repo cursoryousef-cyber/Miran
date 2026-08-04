@@ -23,6 +23,7 @@
 		A1B2C3D410000014 /* DocumentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000014 /* DocumentsView.swift */; };
 		A1B2C3D410000015 /* IncomingCallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000015 /* IncomingCallView.swift */; };
 		A1B2C3D410000016 /* TraineeProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000016 /* TraineeProfileView.swift */; };
+		A1B2C3D410000099 /* ClinicalLogbookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000099 /* ClinicalLogbookView.swift */; };
 		A1B2C3D410000017 /* TrainerTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000017 /* TrainerTabView.swift */; };
 		A1B2C3D410000018 /* TrainerHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000018 /* TrainerHomeView.swift */; };
 		A1B2C3D410000019 /* CallLauncherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000019 /* CallLauncherView.swift */; };
@@ -67,6 +68,7 @@
 		A1B2C3D420000014 /* DocumentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentsView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000015 /* IncomingCallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingCallView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000016 /* TraineeProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraineeProfileView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000099 /* ClinicalLogbookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicalLogbookView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000017 /* TrainerTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainerTabView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000018 /* TrainerHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainerHomeView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000019 /* CallLauncherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallLauncherView.swift; sourceTree = "<group>"; };
@@ -205,6 +207,7 @@
 				A1B2C3D420000014 /* DocumentsView.swift */,
 				A1B2C3D420000015 /* IncomingCallView.swift */,
 				A1B2C3D420000016 /* TraineeProfileView.swift */,
+				A1B2C3D420000099 /* ClinicalLogbookView.swift */,
 				A1B2C3D420000038 /* DigitalIDCardView.swift */,
 			);
 			path = Trainee;
@@ -342,6 +345,7 @@
 				A1B2C3D410000014 /* DocumentsView.swift in Sources */,
 				A1B2C3D410000015 /* IncomingCallView.swift in Sources */,
 				A1B2C3D410000016 /* TraineeProfileView.swift in Sources */,
+				A1B2C3D410000099 /* ClinicalLogbookView.swift in Sources */,
 				A1B2C3D410000017 /* TrainerTabView.swift in Sources */,
 				A1B2C3D410000018 /* TrainerHomeView.swift in Sources */,
 				A1B2C3D410000019 /* CallLauncherView.swift in Sources */,
