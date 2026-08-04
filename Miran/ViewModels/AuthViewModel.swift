@@ -111,6 +111,8 @@ final class AuthViewModel: ObservableObject {
                     nameAr: user.nameAr,
                     nameEn: user.nameEn,
                     email: user.email,
+                    roles: response.roles ?? user.roles,
+                    permissions: response.permissions ?? user.permissions,
                     activeOrganization: response.activeOrganization,
                     availableOrganizations: user.availableOrganizations
                 )
@@ -144,5 +146,7 @@ final class AuthViewModel: ObservableObject {
 
 private struct SwitchOrgResponse: Codable {
     let activeOrganization: UserOrgResponse
+    let roles: [String]?
+    let permissions: [String]?
     let tokens: TokenPair
 }
