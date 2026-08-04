@@ -26,13 +26,19 @@ workflows:
           echo "Setting Project Build Number to: $BUILD_NUMBER"
           agvtool new-version -all $BUILD_NUMBER || true
 
-      - name: Audit Provisioning Profiles & Identities
+      - name: Audit Installed Profiles & Build Settings
         script: |
-          echo "=== Provisioning Profiles ==="
+          echo "=== Installed Profiles ==="
           find ~/Library/MobileDevice/Provisioning\ Profiles -type f -print || true
 
-          echo "=== Code Signing Identities ==="
+          echo "=== Installed Certificates ==="
           security find-identity -v -p codesigning || true
+
+          echo "=== Build Settings ==="
+          xcodebuild \
+            -showBuildSettings \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" | egrep "CODE_SIGN|PROVISION|DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER" || true
 
       - name: Build & Archive iOS App
         script: |
@@ -53,7 +59,6 @@ workflows:
             -archivePath "$CM_BUILD_DIR/build/Miran.xcarchive" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=B4S7M6N5U5 \
-            -allowProvisioningUpdates \
             archive
 
       - name: Package Official Signed IPA & Verify embedded.mobileprovision
