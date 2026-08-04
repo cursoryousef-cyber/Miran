@@ -1,9 +1,14 @@
 workflows:
   ios-release:
-    name: Miran iOS Release Pipeline
+    name: Miran iOS Release Pipeline (App Store Signed)
     max_build_duration: 60
     instance_type: mac_mini_m1
+    integrations:
+      app_store_connect: Codemagic API Key
     environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: sa.miran.app
       vars:
         XCODE_PROJECT: "Miran.xcodeproj"
         XCODE_SCHEME: "Miran"
@@ -22,9 +27,14 @@ workflows:
           echo "Setting Project Build Number to: $BUILD_NUMBER"
           agvtool new-version -all $BUILD_NUMBER || true
 
-      - name: Build & Archive iOS App
+      - name: Automatic Code Signing & Fetch Profiles from Apple
         script: |
-          echo "================ Building Release Archive ================"
+          echo "================ Fetching Distribution Certificates & Profiles ================"
+          xcode-project use-profiles --profile-type=app_store
+
+      - name: Build & Archive iOS App (App Store Automatic Signing)
+        script: |
+          echo "================ Building App Store Release Archive ================"
           mkdir -p $CM_BUILD_DIR/build
 
           xcodebuild \
@@ -33,36 +43,48 @@ workflows:
             -destination "generic/platform=iOS" \
             -configuration Release \
             -archivePath "$CM_BUILD_DIR/build/Miran.xcarchive" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGN_ENTITLEMENTS="" \
-            build archive
+            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGNING_ALLOWED=YES \
+            archive
 
-      - name: Export & Package IPA & Artifacts
+      - name: Export App Store Signed IPA & Verify embedded.mobileprovision
         script: |
-          echo "================ Packaging Release Artifacts ================"
+          echo "================ Exporting App Store Signed Release IPA ================"
           mkdir -p $CM_BUILD_DIR/build/ipa
           mkdir -p $CM_BUILD_DIR/build/dsyms
 
-          if [ -d "$CM_BUILD_DIR/build/Miran.xcarchive/Products/Applications/Miran.app" ]; then
-            echo "Packaging release IPA payload..."
-            cd $CM_BUILD_DIR/build
-            mkdir -p Payload
-            cp -R Miran.xcarchive/Products/Applications/Miran.app Payload/
-            zip -r ipa/Miran-Release.ipa Payload
-            rm -rf Payload
+          # Export signed App Store IPA using Codemagic CLI
+          xcode-project package-release \
+            --archive "$CM_BUILD_DIR/build/Miran.xcarchive" \
+            --output "$CM_BUILD_DIR/build/ipa"
+
+          # Verify embedded.mobileprovision exists in IPA
+          echo "================ Verifying App Store IPA Signing ================"
+          IPA_PATH=$(find $CM_BUILD_DIR/build/ipa -name "*.ipa" | head -n 1)
+
+          if [ -n "$IPA_PATH" ]; then
+            echo "Inspecting IPA Package at: $IPA_PATH"
+            unzip -q "$IPA_PATH" -d /tmp/ipa_inspect
+            
+            if [ -f "/tmp/ipa_inspect/Payload/Miran.app/embedded.mobileprovision" ]; then
+              echo "✅ SUCCESS: embedded.mobileprovision is present and valid in App Store IPA!"
+            else
+              echo "❌ ERROR: embedded.mobileprovision is missing in IPA bundle!"
+              exit 1
+            fi
+            
+            rm -rf /tmp/ipa_inspect
+          else
+            echo "❌ ERROR: No IPA package exported!"
+            exit 1
           fi
 
-          # Archive dSYMs
+          # Archive dSYMs for App Store symbolication
           if [ -d "$CM_BUILD_DIR/build/Miran.xcarchive/dSYMs" ]; then
             echo "Archiving dSYMs..."
             cd "$CM_BUILD_DIR/build/Miran.xcarchive/dSYMs"
             zip -r "$CM_BUILD_DIR/build/dsyms/Miran-dSYMs.zip" . || true
           fi
-
-          echo "================ Build Artifacts Completed ================"
-          ls -la $CM_BUILD_DIR/build/ipa/
 
     artifacts:
       - build/ipa/*.ipa
@@ -76,3 +98,6 @@ workflows:
         notify:
           failure: true
           success: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
