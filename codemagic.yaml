@@ -28,11 +28,6 @@ workflows:
           echo "Setting Project Build Number to: $BUILD_NUMBER"
           agvtool new-version -all $BUILD_NUMBER || true
 
-      - name: Set up code signing settings on Xcode project
-        script: |
-          echo "================ Configuring Codemagic Automatic Code Signing ================"
-          xcode-project use-profiles --profile-type=app_store
-
       - name: Build & Archive iOS App
         script: |
           echo "================ Building Release Archive ================"
@@ -52,8 +47,6 @@ workflows:
             -archivePath "$CM_BUILD_DIR/build/Miran.xcarchive" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=B4S7M6N5U5 \
-            CODE_SIGNING_ALLOWED=YES \
-            CODE_SIGNING_REQUIRED=YES \
             archive
 
       - name: Package Official Signed IPA & Verify embedded.mobileprovision
