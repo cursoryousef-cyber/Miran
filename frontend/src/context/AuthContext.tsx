@@ -15,6 +15,8 @@ export interface UserProfile {
   nameAr: string;
   nameEn?: string;
   email: string;
+  roles?: string[];
+  permissions?: string[];
   activeOrganization: UserOrg;
   availableOrganizations: UserOrg[];
 }

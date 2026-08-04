@@ -12,10 +12,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class CallsController {
   constructor(private prisma: PrismaService) {}
 
-  // ─── للمدربين ومديري الجهات فقط ───────────────────────────────────────────
+  // ─── للمدربين ومديري الجهات ومدير المنصة ──────────────────────────────────
   @Get('active')
-  @RequireRoles('trainer', 'org_manager')
-  @ApiOperation({ summary: 'عرض النداءات النشطة — للمدرب ومدير الجهة فقط' })
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
+  @ApiOperation({ summary: 'عرض النداءات النشطة — للمدرب ومدير الجهة ومدير المنصة' })
   async getActiveCalls(@CurrentUser() user: IAuthenticatedUser) {
     const calls = await this.prisma.trainerCall.findMany({
       where: { organizationId: user.organizationId, status: 'active' },
@@ -30,8 +30,8 @@ export class CallsController {
   }
 
   @Post('launch')
-  @RequireRoles('trainer', 'org_manager')
-  @ApiOperation({ summary: 'إطلاق نداء جديد — للمدرب ومدير الجهة فقط' })
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
+  @ApiOperation({ summary: 'إطلاق نداء جديد — للمدرب ومدير الجهة ومدير المنصة' })
   async launchCall(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
     const trainerProfile = await this.prisma.trainerProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },

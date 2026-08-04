@@ -52,8 +52,16 @@ async function main() {
   }
   console.log(`  ✅ ${allPermissions.length} permissions seeded\n`);
 
-  // ── 2. الأدوار الأربعة وصلاحياتها ─────────────────────────────────────────
+  // ── 2. الأدوار وصلاحياتها ─────────────────────────────────────────
   const rolesDefinition = [
+    {
+      code: 'platform_owner',
+      nameAr: 'مدير المنصة الوطنية',
+      nameEn: 'Platform Owner',
+      descriptionAr: 'إدارة جميع الجهات، المستخدمين، الأدوار، الصلاحيات، التقارير والإعدادات',
+      hierarchyLevel: 100,
+      permissions: allPermissions.map((p) => p.code),
+    },
     {
       code: 'org_manager',
       nameAr: 'مدير الجهة',
@@ -80,7 +88,6 @@ async function main() {
         'approve_declarations', 'track_attendance',
         'send_notifications', 'receive_notifications',
         'view_evaluations', 'view_reports',
-        // لا يملك: launch_calls, manage_accounts, manage_trainers
       ],
     },
     {
@@ -94,7 +101,6 @@ async function main() {
         'submit_evaluations', 'view_evaluations',
         'send_notifications', 'receive_notifications',
         'launch_calls', 'view_active_calls', 'track_call_responses',
-        // لا يملك: manage_accounts, manage_trainees, approve_rotations
       ],
     },
     {
@@ -106,7 +112,6 @@ async function main() {
       permissions: [
         'view_own_data', 'view_rotations', 'view_evaluations',
         'receive_notifications', 'respond_to_calls',
-        // لا يملك: launch_calls, view_active_calls (لوحة إطلاق النداءات)
       ],
     },
   ];
@@ -145,21 +150,56 @@ async function main() {
   }
   console.log();
 
-  // ── 3. ربط الحسابات الموجودة بأدوارها الصحيحة ────────────────────────────
+  // ── 3. ربط الحسابات وتوفير حساب platform@miran.health ──────────────────────
   console.log('🔗 Assigning Roles to Existing Accounts...');
 
   const hosp1 = await prisma.organization.findUnique({ where: { code: 'HOSP-PABMH' } });
   if (!hosp1) { console.error('❌ Hospital not found!'); return; }
 
+  const platformOwnerRole = await prisma.role.findUnique({ where: { code: 'platform_owner' } });
   const orgManagerRole = await prisma.role.findUnique({ where: { code: 'org_manager' } });
   const academicRole   = await prisma.role.findUnique({ where: { code: 'academic_supervisor' } });
   const trainerRole    = await prisma.role.findUnique({ where: { code: 'trainer' } });
   const traineeRole    = await prisma.role.findUnique({ where: { code: 'trainee' } });
 
-  if (!orgManagerRole || !academicRole || !trainerRole || !traineeRole) {
+  if (!platformOwnerRole || !orgManagerRole || !academicRole || !trainerRole || !traineeRole) {
     console.error('❌ Roles not found after upsert!');
     return;
   }
+
+  // 1) Create / Upsert Platform Owner: platform@miran.health
+  let platformAccount = await prisma.userAccount.findUnique({ where: { email: 'platform@miran.health' } });
+  if (!platformAccount) {
+    const platformPerson = await prisma.person.upsert({
+      where: { nationalId: '1099999999' },
+      create: { nationalId: '1099999999', nameAr: 'مدير المنصة', nameEn: 'Platform Owner', email: 'platform@miran.health', phone: '+966500999888' },
+      update: {},
+    });
+    platformAccount = await prisma.userAccount.create({
+      data: {
+        personId: platformPerson.id,
+        email: 'platform@miran.health',
+        username: 'platform_owner',
+        passwordHash,
+        isEmailVerified: true,
+        isActive: true,
+      },
+    });
+    console.log('  ✅ platform@miran.health → created');
+  }
+
+  await prisma.userOrganization.upsert({
+    where: { userAccountId_organizationId: { userAccountId: platformAccount.id, organizationId: hosp1.id } },
+    create: { userAccountId: platformAccount.id, organizationId: hosp1.id, isPrimary: true },
+    update: {},
+  });
+
+  await prisma.userRole.upsert({
+    where: { userAccountId_roleId_organizationId: { userAccountId: platformAccount.id, roleId: platformOwnerRole.id, organizationId: hosp1.id } },
+    create: { userAccountId: platformAccount.id, roleId: platformOwnerRole.id, organizationId: hosp1.id },
+    update: {},
+  });
+  console.log('  ✅ platform@miran.health → platform_owner');
 
   // Admin → org_manager
   const adminAccount = await prisma.userAccount.findUnique({ where: { email: 'admin@miran.health' } });
@@ -169,7 +209,6 @@ async function main() {
       create: { userAccountId: adminAccount.id, roleId: orgManagerRole.id, organizationId: hosp1.id },
       update: {},
     });
-    // ربط بالجهة أيضاً
     await prisma.userOrganization.upsert({
       where: { userAccountId_organizationId: { userAccountId: adminAccount.id, organizationId: hosp1.id } },
       create: { userAccountId: adminAccount.id, organizationId: hosp1.id, isPrimary: false },
@@ -181,13 +220,12 @@ async function main() {
   // Salem (trainer account)
   const salemAccount = await prisma.userAccount.findUnique({ where: { email: 'salem@miran.health' } });
   if (salemAccount) {
-    // أزل الأدوار القديمة وعيّن دور trainer
     await prisma.userRole.deleteMany({ where: { userAccountId: salemAccount.id, organizationId: hosp1.id } });
     await prisma.userRole.create({ data: { userAccountId: salemAccount.id, roleId: trainerRole.id, organizationId: hosp1.id } });
     console.log('  ✅ salem@miran.health → trainer');
   }
 
-  // المشرف الأكاديمي — إنشاؤه إن لم يوجد
+  // Academic Supervisor
   let academicAccount = await prisma.userAccount.findUnique({ where: { email: 'academic@miran.health' } });
   if (!academicAccount) {
     const academicPerson = await prisma.person.upsert({
@@ -211,7 +249,7 @@ async function main() {
   });
   console.log('  ✅ academic@miran.health → academic_supervisor');
 
-  // المتدربون — عيّن لهم دور trainee
+  // Trainees
   const traineeAccounts = [
     'abdullah@miran.health', 'fatima@miran.health', 'khalid@miran.health',
     'sara@miran.health', 'faisal@miran.health',
@@ -228,7 +266,7 @@ async function main() {
   console.log('\n📊 Final RBAC Summary:');
   const roleSummary = await prisma.role.findMany({
     include: { _count: { select: { userRoles: true, rolePermissions: true } } },
-    where: { code: { in: ['org_manager', 'academic_supervisor', 'trainer', 'trainee'] } },
+    where: { code: { in: ['platform_owner', 'org_manager', 'academic_supervisor', 'trainer', 'trainee'] } },
   });
   for (const r of roleSummary) {
     console.log(`  ${r.nameAr}: ${r._count.userRoles} users, ${r._count.rolePermissions} permissions`);
@@ -236,6 +274,7 @@ async function main() {
 
   console.log('\n✅ RBAC Seed Completed!\n');
   console.log('Test Accounts:');
+  console.log('  platform@miran.health / Miran@Admin2024!  → platform_owner');
   console.log('  admin@miran.health    / Miran@Admin2024!  → org_manager');
   console.log('  academic@miran.health / Miran@Admin2024!  → academic_supervisor');
   console.log('  salem@miran.health    / Miran@Admin2024!  → trainer');

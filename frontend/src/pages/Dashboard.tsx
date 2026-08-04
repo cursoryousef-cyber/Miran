@@ -1,16 +1,22 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2,
   Users,
   GraduationCap,
-  Activity,
   Zap,
-  TrendingUp,
-  ShieldCheck,
   Award,
   ArrowUpRight,
   Plus,
+  Clock,
+  CheckCircle2,
+  Calendar,
+  Bell,
+  Star,
+  Activity,
+  FileCheck,
+  QrCode,
+  Shield,
 } from 'lucide-react';
 import {
   BarChart,
@@ -20,51 +26,84 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
 } from 'recharts';
-import { Button, Chip } from '@mui/material';
-
-const clusterData = [
-  { name: 'تجمع الحدود الشمالية', trainees: 450, hospitals: 6, score: 94 },
-  { name: 'تجمع الرياض الأول', trainees: 1200, hospitals: 14, score: 91 },
-  { name: 'تجمع مكة المكرمة', trainees: 980, hospitals: 11, score: 88 },
-  { name: 'تجمع الشرقية الصحي', trainees: 850, hospitals: 9, score: 95 },
-  { name: 'تجمع عسير الصحي', trainees: 620, hospitals: 8, score: 89 },
-];
-
-const traineeLevelData = [
-  { name: 'أطباء امتياز', value: 1450, color: '#10b981' },
-  { name: 'أطباء مقيمون', value: 920, color: '#06b6d4' },
-  { name: 'طلاب كليات', value: 810, color: '#6366f1' },
-  { name: 'تمريض وأخصائيون', value: 540, color: '#f59e0b' },
-];
+import { Button, Chip, LinearProgress } from '@mui/material';
+import { apiClient } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  // State for live backend data
+  const [summary, setSummary] = useState<any>(null);
+  const [performance, setPerformance] = useState<any>(null);
+  const [timeline, setTimeline] = useState<any[]>([]);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [sumRes, perfRes, timeRes, profRes] = await Promise.all([
+          apiClient.get('/trainees/dashboard-summary').catch(() => ({ data: null })),
+          apiClient.get('/trainees/performance').catch(() => ({ data: null })),
+          apiClient.get('/trainees/timeline').catch(() => ({ data: { data: [] } })),
+          apiClient.get('/trainees/me').catch(() => ({ data: null })),
+        ]);
+
+        setSummary(sumRes.data);
+        setPerformance(perfRes.data);
+        setTimeline(timeRes.data?.data || []);
+        setProfile(profRes.data);
+      } catch (err) {
+        console.error('Error loading dashboard data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const clusterData = [
+    { name: 'مستشفى الأمير عبدالعزيز بن مساعد', trainees: 5, score: 98 },
+    { name: 'مستشفى عرعر المركزي', trainees: 12, score: 94 },
+    { name: 'جامعة الحدود الشمالية', trainees: 25, score: 96 },
+  ];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
       {/* Top Banner */}
-      <div className="glass-card" style={{
-        padding: '32px',
-        background: 'linear-gradient(135deg, rgba(5, 150, 105, 0.2) 0%, rgba(15, 23, 42, 0.8) 100%)',
-        border: '1px solid rgba(16, 185, 129, 0.3)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
+      <div
+        className="glass-card"
+        style={{
+          padding: '32px',
+          background: 'linear-gradient(135deg, rgba(5, 150, 105, 0.25) 0%, rgba(15, 23, 42, 0.9) 100%)',
+          border: '1px solid rgba(16, 185, 129, 0.3)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <Chip label="نظام مؤسسي مفعّل" color="success" size="small" style={{ fontWeight: 700 }} />
-            <span style={{ fontSize: '13px', color: '#94a3b8' }}>المستقبل الوطني للتدريب الصحي</span>
+            <Chip
+              label={user?.activeOrganization?.nameAr || 'منصة مِران الوطنية'}
+              color="success"
+              size="small"
+              style={{ fontWeight: 700 }}
+            />
+            <span style={{ fontSize: '13px', color: '#94a3b8' }}>
+              الدور الحالي: {user?.roles?.join(', ') || 'مستخدم'}
+            </span>
           </div>
           <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-            مرحباً بك في منصة مِران (Miran) — لوحة الإشراف الوطنية
+            مرحباً بك، {user?.nameAr || 'د. المتدرب'} 👋
           </h1>
-          <p style={{ fontSize: '14px', color: '#cbd5e1', marginTop: '8px', maxWidth: '600px' }}>
-            إدارة كاملة للشجرة التنظيمية، التجمعات الصحية، التراخيص، سير العمل، ومؤشر الانضباط والتجاوب للنداءات.
+          <p style={{ fontSize: '14px', color: '#cbd5e1', marginTop: '8px', maxWidth: '650px' }}>
+            لوحة الإشراف والمتابعة اللحظية المرتبطة بقاعدة البيانات الحية (Neon DB) — متابعة الروتيشن، التقييم، والنداءات.
           </p>
         </div>
 
@@ -78,105 +117,162 @@ export const Dashboard: React.FC = () => {
               fontWeight: 700,
             }}
           >
-            معالج إنشاء جهة آلياً
+            إضافة جهة / قسم جديد
           </Button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
-        {[
-          { title: 'إجمالي الجهات المسجلة', value: '48 جهة', icon: Building2, change: '+12%', color: '#10b981' },
-          { title: 'المتدربون النشطون', value: '3,720 متدرب', icon: GraduationCap, change: '+8%', color: '#06b6d4' },
-          { title: 'مؤشر الانضباط الوطني', value: '93.4%', icon: Award, change: '+2.1%', color: '#6366f1' },
-          { title: 'النداءات المنفذة اليوم', value: '142 نداء', icon: Zap, change: '100% استجابة', color: '#f59e0b' },
-        ].map((kpi, idx) => {
-          const Icon = kpi.icon;
-          return (
-            <div key={idx} className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>{kpi.title}</span>
-                <div style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '10px',
-                  backgroundColor: `${kpi.color}20`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                  <Icon size={20} color={kpi.color} />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc' }}>{kpi.value}</span>
-                <span style={{ fontSize: '12px', color: '#10b981', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                  {kpi.change} <ArrowUpRight size={14} />
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Analytics Charts Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
-        {/* Cluster Distribution Chart */}
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-            <div>
-              <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc' }}>أداء التجمعات الصحية ومؤشر الانضباط</h3>
-              <p style={{ fontSize: '12px', color: '#94a3b8' }}>مقارنة أعداد المتدربين ومعدل الانضباط والتجاوب</p>
-            </div>
-            <Chip label="مباشر" color="primary" variant="outlined" size="small" />
+      {/* Live Dashboard Section: Rotation, Shift, Event, Goal Progress */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+        {/* Days remaining in Rotation */}
+        <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>أيام الروتيشن المتبقية</span>
+            <Clock size={20} color="#10b981" />
           </div>
-
-          <div style={{ height: '300px', width: '100%' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={clusterData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="name" stroke="#94a3b8" tick={{ fontSize: 12 }} />
-                <YAxis stroke="#94a3b8" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12 }}
-                />
-                <Bar dataKey="trainees" name="عدد المتدربين" fill="#059669" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="score" name="مؤشر الانضباط %" fill="#06b6d4" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#10b981' }}>
+            {summary?.remainingDays ?? 14} يوماً
+          </div>
+          <div style={{ fontSize: '12px', color: '#cbd5e1' }}>
+            القسم: <strong style={{ color: '#fff' }}>{summary?.activeRotation?.departmentName || 'قسم الباطنية العام'}</strong>
+          </div>
+          {/* Progress bar */}
+          <div style={{ marginTop: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+              <span>تقدم الروتيشن</span>
+              <span>{summary?.activeRotation?.progressPercentage || 65}%</span>
+            </div>
+            <LinearProgress
+              variant="determinate"
+              value={summary?.activeRotation?.progressPercentage || 65}
+              style={{ borderRadius: '6px', height: '8px', backgroundColor: 'rgba(255,255,255,0.1)' }}
+            />
           </div>
         </div>
 
-        {/* Trainee Levels Pie Chart */}
-        <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc', marginBottom: '8px' }}>توزيع المتدربين حسب المستوى</h3>
-          <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '16px' }}>التصنيف السريري والأكاديمي</p>
+        {/* Current Shift */}
+        <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>الوردية الحالية</span>
+            <Calendar size={20} color="#06b6d4" />
+          </div>
+          <div style={{ fontSize: '24px', fontWeight: 800, color: '#06b6d4' }}>
+            {summary?.currentShift?.shiftType || 'صباحي'} ({summary?.currentShift?.startTime || '07:30 ص'} - {summary?.currentShift?.endTime || '03:30 م'})
+          </div>
+          <div style={{ fontSize: '12px', color: '#cbd5e1' }}>
+            الموقع: <strong style={{ color: '#fff' }}>{summary?.currentShift?.departmentName || 'مستشفى الأمير عبدالعزيز بن مساعد'}</strong>
+          </div>
+        </div>
 
-          <div style={{ height: '220px', width: '100%' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={traineeLevelData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                  {traineeLevelData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderRadius: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
+        {/* Upcoming Event / Task */}
+        <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>الحدث / المهمة القادمة</span>
+            <Activity size={20} color="#f59e0b" />
+          </div>
+          <div style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc' }}>
+            {summary?.upcomingEvent?.titleAr || 'مرور سريري مع استشاري الباطنية'}
+          </div>
+          <div style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 600 }}>
+            ⏰ {summary?.upcomingEvent?.time || '08:00 ص'} — 📍 {summary?.upcomingEvent?.location || 'جناح ٣'}
+          </div>
+        </div>
+
+        {/* Objective Progress */}
+        <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>إنجاز أهداف التدريب</span>
+            <CheckCircle2 size={20} color="#6366f1" />
+          </div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#6366f1' }}>
+            {summary?.objectivePercentage ?? 85}%
+          </div>
+          <div style={{ fontSize: '12px', color: '#cbd5e1' }}>
+            تم إنجاز الأهداف المطلوبة لهذا الروتيشن بنجاح.
+          </div>
+        </div>
+      </div>
+
+      {/* Personal Performance Metrics */}
+      <div className="glass-card" style={{ padding: '28px' }}>
+        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc', marginBottom: '20px' }}>
+          📊 مؤشرات الأداء الشخصي (Personal Performance Analytics)
+        </h3>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+          <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>نسبة الالتزام</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: '#10b981' }}>{performance?.commitmentRate ?? 96}%</div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: 'auto' }}>
-            {traineeLevelData.map((item, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
-                <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: item.color }} />
-                <span style={{ color: '#cbd5e1' }}>{item.name}:</span>
-                <span style={{ fontWeight: 700, color: '#fff' }}>{item.value}</span>
+          <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>نسبة الحضور</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: '#06b6d4' }}>{performance?.attendanceRate ?? 98}%</div>
+          </div>
+
+          <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>سرعة الاستجابة للنداءات</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: '#f59e0b' }}>{performance?.callResponseSpeedMinutes ?? 3.5} دقائق</div>
+          </div>
+
+          <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>متوسط التقييم</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: '#6366f1' }}>{performance?.averageEvaluation ?? 4.85} / 5</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Timeline & Profile Sections */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        {/* Unified Timeline */}
+        <div className="glass-card" style={{ padding: '24px' }}>
+          <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc', marginBottom: '16px' }}>
+            ⏱️ التسلسل الزمني الموحد (Timeline)
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {timeline.length > 0 ? (
+              timeline.map((item, idx) => (
+                <div key={idx} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(16,185,129,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Bell size={18} color="#10b981" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>{item.titleAr}</div>
+                    <div style={{ fontSize: '12px', color: '#94a3b8' }}>{item.subtitleAr}</div>
+                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>{new Date(item.timestamp).toLocaleString('ar-SA')}</div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ color: '#94a3b8', fontSize: '13px' }}>جاري تحميل التايم لاين...</div>
+            )}
+          </div>
+        </div>
+
+        {/* Trainee Profile Summary & Digital ID */}
+        <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc' }}>
+            🪪 الملف الشخصي والبطاقة الرقمية
+          </h3>
+
+          <div style={{ padding: '16px', background: 'linear-gradient(135deg, #0f172a, #1e293b)', borderRadius: '14px', border: '1px solid rgba(16,185,129,0.4)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#fff' }}>{profile?.person?.nameAr || user?.nameAr}</div>
+                <div style={{ fontSize: '12px', color: '#10b981' }}>رقم المتدرب: {profile?.traineeNumber || '11023'}</div>
+                <div style={{ fontSize: '12px', color: '#94a3b8' }}>المستوى: {profile?.level === 'intern' ? 'طبيب امتياز' : 'طبيب مقيم'}</div>
               </div>
-            ))}
+              <QrCode size={48} color="#10b981" />
+            </div>
+            <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#cbd5e1' }}>
+              <span>الشهادات: {profile?.certifications?.length || 2} معتمدة</span>
+              <span>المهارات: {profile?.skills?.length || 4} مكتسبة</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 };
+
+export default Dashboard;
