@@ -8,7 +8,7 @@ on:
 jobs:
   release:
     name: Build, Archive & Upload to App Store Connect
-    runs-on: macos-15
+    runs-on: macos-latest
 
     steps:
       - name: Checkout repository
