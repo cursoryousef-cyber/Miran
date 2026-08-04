@@ -103,10 +103,10 @@ export const AuditLogs: React.FC = () => {
           <TableHead>
             <TableRow>
               <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>نوع العملية (Action)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight 700 }}>المستخدم (Actor)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight 700 }}>الكيان (Entity)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight 700 }}>عنوان IP والجهاز</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight 700 }}>التاريخ والوقت</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المستخدم (Actor)</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الكيان (Entity)</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>عنوان IP والجهاز</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>التاريخ والوقت</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>

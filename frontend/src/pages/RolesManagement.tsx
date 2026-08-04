@@ -98,10 +98,10 @@ export const RolesManagement: React.FC = () => {
           <TableHead>
             <TableRow>
               <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>اسم الدور (Role Name)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight 700 }}>الرمز التمييزي (Code)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight 700 }}>المستوى الهيكلي</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight 700 }}>الصلاحيات المرتبطة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight 700 }}>عدد المستخدمين</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الرمز التمييزي (Code)</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المستوى الهيكلي</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الصلاحيات المرتبطة</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>عدد المستخدمين</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
