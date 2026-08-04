@@ -218,7 +218,7 @@ export class AuthService {
       include: {
         person: true,
         organizations: {
-          include: { organization: true },
+          include: { organization: { include: { organizationType: true } } },
         },
       },
     });
@@ -238,7 +238,7 @@ export class AuthService {
       code: uo.organization.code,
       nameAr: uo.organization.nameAr,
       nameEn: uo.organization.nameEn,
-      type: uo.organization.type,
+      type: uo.organization.organizationType?.code || 'hospital',
       logoUrl: uo.organization.logoUrl,
     }));
 
@@ -257,7 +257,7 @@ export class AuthService {
           code: activeUserOrg.organization.code,
           nameAr: activeUserOrg.organization.nameAr,
           nameEn: activeUserOrg.organization.nameEn,
-          type: activeUserOrg.organization.type,
+          type: activeUserOrg.organization.organizationType?.code || 'hospital',
           logoUrl: activeUserOrg.organization.logoUrl,
         } : null,
         availableOrganizations,
