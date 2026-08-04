@@ -15,6 +15,13 @@ workflows:
           echo "================ Resolving Dependencies ================"
           xcodebuild -resolvePackageDependencies -project "$XCODE_PROJECT"
 
+      - name: Increment Build Number
+        script: |
+          echo "================ Incrementing Build Number ================"
+          BUILD_NUMBER=$((${BUILD_NUMBER:-10} + 10))
+          echo "Setting Project Build Number to: $BUILD_NUMBER"
+          agvtool new-version -all $BUILD_NUMBER || true
+
       - name: Build & Archive iOS App
         script: |
           echo "================ Building Release Archive ================"
