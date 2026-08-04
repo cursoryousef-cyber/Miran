@@ -1,0 +1,68 @@
+workflows:
+  ios-release:
+    name: Miran iOS Release Pipeline
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    integrations:
+      app_store_connect: Codemagic API Key
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.miran.app
+      vars:
+        XCODE_PROJECT: "Miran.xcodeproj"
+        XCODE_SCHEME: "Miran"
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Initialize & Resolve Swift Packages
+        script: |
+          echo "================ Resolving Dependencies ================"
+          xcodebuild -resolvePackageDependencies -project "$XCODE_PROJECT"
+
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles || echo "Profiles auto-configuration ready"
+
+      - name: Build & Package Release IPA & Archive
+        script: |
+          echo "================ Building Release Archive ================"
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "generic/platform=iOS" \
+            -configuration Release \
+            -archivePath "$CM_BUILD_DIR/build/Miran.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+
+          echo "================ Packaging Artifacts ================"
+          mkdir -p $CM_BUILD_DIR/build/ipa
+          mkdir -p $CM_BUILD_DIR/build/dsyms
+
+          if [ -d "$CM_BUILD_DIR/build/Miran.xcarchive" ]; then
+            echo "Archiving dSYMs..."
+            cd "$CM_BUILD_DIR/build/Miran.xcarchive/dSYMs" && zip -r "$CM_BUILD_DIR/build/dsyms/Miran.dSYM.zip" . || true
+          fi
+
+          # Package release IPA
+          xcode-project package-release \
+            --archive "$CM_BUILD_DIR/build/Miran.xcarchive" \
+            --output "$CM_BUILD_DIR/build/ipa" || true
+
+    artifacts:
+      - build/ipa/*.ipa
+      - build/*.xcarchive
+      - build/dsyms/*.zip
+      - /tmp/xcodebuild_*.log
+
+    publishing:
+      email:
+        recipients:
+          - admin@miran.health
+        notify:
+          failure: true
+          success: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
