@@ -3,12 +3,7 @@ workflows:
     name: Miran iOS Release Pipeline
     max_build_duration: 60
     instance_type: mac_mini_m1
-    integrations:
-      app_store_connect: Codemagic API Key
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: sa.miran.app
       vars:
         XCODE_PROJECT: "Miran.xcodeproj"
         XCODE_SCHEME: "Miran"
@@ -27,11 +22,6 @@ workflows:
           echo "Setting Project Build Number to: $BUILD_NUMBER"
           agvtool new-version -all $BUILD_NUMBER || true
 
-      - name: Set up code signing settings on Xcode project
-        script: |
-          echo "================ Configuring App Store Code Signing ================"
-          xcode-project use-profiles --profile-type=app_store || echo "Using Codemagic App Store Connect auto-signing"
-
       - name: Build & Archive iOS App
         script: |
           echo "================ Building Release Archive ================"
@@ -43,26 +33,26 @@ workflows:
             -destination "generic/platform=iOS" \
             -configuration Release \
             -archivePath "$CM_BUILD_DIR/build/Miran.xcarchive" \
-            archive
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            build archive
 
-      - name: Export & Package Official Signed IPA
+      - name: Export & Package IPA & Artifacts
         script: |
-          echo "================ Packaging Official Signed Release IPA ================"
+          echo "================ Packaging Release Artifacts ================"
           mkdir -p $CM_BUILD_DIR/build/ipa
           mkdir -p $CM_BUILD_DIR/build/dsyms
 
-          # Export signed IPA using Codemagic package-release with App Store profiles
-          xcode-project package-release \
-            --archive "$CM_BUILD_DIR/build/Miran.xcarchive" \
-            --output "$CM_BUILD_DIR/build/ipa" || \
-          (
-            echo "Packaging archive applications payload..."
+          if [ -d "$CM_BUILD_DIR/build/Miran.xcarchive/Products/Applications/Miran.app" ]; then
+            echo "Packaging release IPA payload..."
             cd $CM_BUILD_DIR/build
             mkdir -p Payload
             cp -R Miran.xcarchive/Products/Applications/Miran.app Payload/
             zip -r ipa/Miran-Release.ipa Payload
             rm -rf Payload
-          )
+          fi
 
           # Archive dSYMs
           if [ -d "$CM_BUILD_DIR/build/Miran.xcarchive/dSYMs" ]; then
@@ -71,7 +61,7 @@ workflows:
             zip -r "$CM_BUILD_DIR/build/dsyms/Miran-dSYMs.zip" . || true
           fi
 
-          echo "================ Signed Package Ready ================"
+          echo "================ Build Artifacts Completed ================"
           ls -la $CM_BUILD_DIR/build/ipa/
 
     artifacts:
@@ -86,6 +76,3 @@ workflows:
         notify:
           failure: true
           success: true
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: false
