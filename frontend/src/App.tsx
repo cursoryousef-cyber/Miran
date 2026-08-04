@@ -22,6 +22,7 @@ import { Policies } from './pages/Policies';
 import { Integrations } from './pages/Integrations';
 import { Reports } from './pages/Reports';
 import { SettingsPage } from './pages/Settings';
+import { OrgMembersPage } from './pages/OrgMembers';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -62,6 +63,7 @@ export const App: React.FC = () => {
                   <Route path="affiliations" element={<Affiliations />} />
                   <Route path="intakes" element={<AcademicIntakes />} />
                   <Route path="users" element={<UsersPage />} />
+                  <Route path="org-members" element={<OrgMembersPage />} />
                   <Route path="declarations" element={<Declarations />} />
                   <Route path="workflows" element={<Workflows />} />
                   <Route path="policies" element={<Policies />} />

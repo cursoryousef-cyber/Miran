@@ -16,6 +16,9 @@ final class AuthViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
 
+    /// Reference to AppStore for triggering data fetch after login
+    weak var appStore: AppStore?
+
     init() {
         checkSavedSession()
     }
@@ -27,7 +30,10 @@ final class AuthViewModel: ObservableObject {
             if let profileData = KeychainService.shared.get(forKey: "user_profile")?.data(using: .utf8),
                let profile = try? JSONDecoder().decode(UserProfileResponse.self, from: profileData) {
                 self.currentUser = profile
+                print("✅ [Auth] Restored session for: \(profile.nameAr) | Org: \(profile.activeOrganization.nameAr)")
             }
+            // Fetch production data in background on session restore
+            Task { await appStore?.fetchAllProductionData() }
         } else {
             self.isAuthenticated = false
             self.currentUser = nil
@@ -40,6 +46,8 @@ final class AuthViewModel: ObservableObject {
 
         do {
             let req = LoginRequest(email: email.lowercased(), password: password, mfaCode: mfaCode)
+
+            print("🔐 [Auth] Logging in as: \(email)")
 
             let response: LoginResponse = try await APIClient.shared.request(
                 endpoint: "/auth/login",
@@ -60,8 +68,19 @@ final class AuthViewModel: ObservableObject {
 
             self.currentUser = response.user
             self.isAuthenticated = true
+
+            print("✅ [Auth] Login success: \(response.user.nameAr) | Role context: \(response.user.activeOrganization.nameAr)")
+            print("📋 [Auth] User ID: \(response.user.id)")
+            print("📋 [Auth] Person ID: \(response.user.personId)")
+            print("📋 [Auth] Active Org: \(response.user.activeOrganization.code)")
+            print("📋 [Auth] Available Orgs: \(response.user.availableOrganizations.count)")
+
+            // Trigger full production data fetch after successful login
+            await appStore?.fetchAllProductionData()
+
         } catch {
             self.errorMessage = error.localizedDescription
+            print("❌ [Auth] Login failed: \(error.localizedDescription)")
         }
 
         isLoading = false
@@ -102,8 +121,14 @@ final class AuthViewModel: ObservableObject {
                     KeychainService.shared.save(profileStr, forKey: "user_profile")
                 }
             }
+
+            print("✅ [Auth] Switched org to: \(response.activeOrganization.nameAr)")
+
+            // Refresh production data for new org context
+            await appStore?.fetchAllProductionData()
         } catch {
             self.errorMessage = error.localizedDescription
+            print("❌ [Auth] Switch org failed: \(error.localizedDescription)")
         }
 
         isLoading = false
@@ -113,6 +138,7 @@ final class AuthViewModel: ObservableObject {
         KeychainService.shared.clearAll()
         self.currentUser = nil
         self.isAuthenticated = false
+        print("🚪 [Auth] Logged out — session cleared")
     }
 }
 

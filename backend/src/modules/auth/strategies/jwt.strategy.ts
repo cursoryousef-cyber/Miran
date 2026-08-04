@@ -6,10 +6,12 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { IAuthenticatedUser } from '../../../common/interfaces';
 
 export interface JwtPayload {
-  sub: string; // userAccountId
+  sub: string;       // userAccountId
   personId: string;
-  orgId: string; // active organizationId
+  orgId: string;     // active organizationId
   email: string;
+  roles: string[];         // كودات الأدوار (مضمنة في JWT)
+  permissions: string[];   // كودات الصلاحيات (مضمنة في JWT)
 }
 
 @Injectable()
@@ -26,54 +28,36 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<IAuthenticatedUser> {
+    // تحقق سريع من نشاط الحساب (بدون جلب كامل البيانات)
     const userAccount = await this.prisma.userAccount.findUnique({
       where: { id: payload.sub },
-      include: {
-        person: true,
-        userRoles: {
-          where: { organizationId: payload.orgId },
-          include: {
-            role: {
-              include: {
-                rolePermissions: {
-                  include: {
-                    permission: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-        userPermissions: {
-          where: { organizationId: payload.orgId },
-          include: { permission: true },
-        },
-      },
+      select: { id: true, isActive: true, personId: true, email: true, person: { select: { nameAr: true, nameEn: true } } },
     });
 
     if (!userAccount || !userAccount.isActive) {
       throw new UnauthorizedException('الحساب غير موجود أو معطل');
     }
 
-    // Resolve roles & permissions for active org
-    const roleCodes = userAccount.userRoles.map((ur) => ur.role.code);
-    const permissionSet = new Set<string>();
+    // ─── الأدوار والصلاحيات مُضمَّنة في JWT — لا DB query إضافية ───
+    // fallback: إذا كان الـ JWT قديماً (قبل إضافة roles)، يُجلب من DB
+    let roles: string[] = payload.roles || [];
+    let permissions: string[] = payload.permissions || [];
 
-    // Add permissions from roles
-    userAccount.userRoles.forEach((ur) => {
-      ur.role.rolePermissions.forEach((rp) => {
-        permissionSet.add(rp.permission.code);
+    if (roles.length === 0) {
+      // JWT قديم — جلب من DB مرة واحدة (Fallback للتوافق)
+      const userRoles = await this.prisma.userRole.findMany({
+        where: { userAccountId: payload.sub, organizationId: payload.orgId },
+        include: {
+          role: { include: { rolePermissions: { include: { permission: true } } } },
+        },
       });
-    });
-
-    // Add / remove direct user permissions
-    userAccount.userPermissions.forEach((up) => {
-      if (up.granted) {
-        permissionSet.add(up.permission.code);
-      } else {
-        permissionSet.delete(up.permission.code);
-      }
-    });
+      roles = userRoles.map((ur) => ur.role.code);
+      const permSet = new Set<string>();
+      userRoles.forEach((ur) =>
+        ur.role.rolePermissions.forEach((rp) => permSet.add(rp.permission.code)),
+      );
+      permissions = Array.from(permSet);
+    }
 
     return {
       accountId: userAccount.id,
@@ -82,8 +66,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       email: userAccount.email,
       nameAr: userAccount.person.nameAr,
       nameEn: userAccount.person.nameEn || undefined,
-      roles: roleCodes,
-      permissions: Array.from(permissionSet),
+      roles,
+      permissions,
     };
   }
 }

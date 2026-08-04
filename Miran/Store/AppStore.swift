@@ -3,8 +3,8 @@
 //  مِران
 //
 //  مخزن الحالة المركزي: البيانات، المنطق، والعمليات.
-//  البيانات هنا تجريبية داخل الذاكرة. عند الربط بخادم حقيقي
-//  تُستبدل الدوال بطلبات شبكة مع بقاء التواقيع كما هي.
+//  البيانات تُجلب من Backend API (Production).
+//  جميع البيانات التجريبية (SeedData) تمت إزالتها.
 //
 
 import Foundation
@@ -33,6 +33,14 @@ final class AppStore: ObservableObject {
     @Published var departmentFeedback: [DepartmentFeedback] = []
     @Published var improvementPlans: [ImprovementPlan] = []
 
+    // MARK: - بيانات API (Production)
+
+    @Published var apiNotifications: [NotificationModel] = []
+    @Published var apiRotations: [RotationModel] = []
+    @Published var apiCalls: [TrainerCallModel] = []
+    @Published var apiTraineeProfile: TraineeProfileModel?
+    @Published var apiTrainerProfile: TrainerProfileModel?
+
     // MARK: - الإعدادات
 
     /// السقف الأسبوعي للنداءات لكل متدرب — ضابط منع الإرهاق
@@ -46,12 +54,64 @@ final class AppStore: ObservableObject {
     // MARK: - التهيئة
 
     init() {
-        seed()
+        // Production: لا يتم استدعاء seed() — جميع البيانات من Backend API
         ticker = Timer.publish(every: 1, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] date in
                 self?.now = date
             }
+    }
+
+    // MARK: - جلب البيانات من Backend API
+
+    /// تُستدعى بعد تسجيل الدخول لجلب جميع البيانات الحقيقية
+    func fetchAllProductionData() async {
+        print("🔄 [AppStore] Fetching all production data from API...")
+
+        // Fetch Notifications
+        do {
+            let result: APIListResponse<NotificationModel> = try await APIClient.shared.request(endpoint: "/notifications")
+            self.apiNotifications = result.data
+            print("✅ [AppStore] Notifications: \(result.data.count)")
+        } catch {
+            print("❌ [AppStore] Failed to fetch notifications: \(error.localizedDescription)")
+        }
+
+        // Fetch Rotations
+        do {
+            let result: APIListResponse<RotationModel> = try await APIClient.shared.request(endpoint: "/rotations/my")
+            self.apiRotations = result.data
+            print("✅ [AppStore] Rotations: \(result.data.count)")
+        } catch {
+            print("❌ [AppStore] Failed to fetch rotations: \(error.localizedDescription)")
+        }
+
+        // Fetch Active Calls
+        do {
+            let result: APIListResponse<TrainerCallModel> = try await APIClient.shared.request(endpoint: "/calls/active")
+            self.apiCalls = result.data
+            print("✅ [AppStore] Active Calls: \(result.data.count)")
+        } catch {
+            print("❌ [AppStore] Failed to fetch calls: \(error.localizedDescription)")
+        }
+
+        // Fetch Trainee Profile
+        do {
+            let profile: TraineeProfileModel = try await APIClient.shared.request(endpoint: "/trainees/me")
+            self.apiTraineeProfile = profile
+            print("✅ [AppStore] Trainee Profile: \(profile.traineeNumber)")
+        } catch {
+            print("⚠️ [AppStore] No trainee profile (user may not be a trainee): \(error.localizedDescription)")
+        }
+
+        // Fetch Trainer Profile
+        do {
+            let profile: TrainerProfileModel = try await APIClient.shared.request(endpoint: "/trainers/me")
+            self.apiTrainerProfile = profile
+            print("✅ [AppStore] Trainer Profile loaded")
+        } catch {
+            print("⚠️ [AppStore] No trainer profile (user may not be a trainer): \(error.localizedDescription)")
+        }
     }
 
     // MARK: - وصول سريع

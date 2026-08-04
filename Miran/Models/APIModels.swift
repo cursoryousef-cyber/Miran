@@ -43,8 +43,34 @@ struct UserProfileResponse: Codable, Identifiable {
     let nameAr: String
     let nameEn: String?
     let email: String
+    // ─── RBAC — الأدوار والصلاحيات القادمة من Backend ───────────
+    let roles: [String]
+    let permissions: [String]
+    // ─────────────────────────────────────────────────────────────
     let activeOrganization: UserOrgResponse
     let availableOrganizations: [UserOrgResponse]
+
+    // ── وصول سريع للأدوار ──────────────────────────────────────
+    var isTrainee:           Bool { roles.contains("trainee") }
+    var isTrainer:           Bool { roles.contains("trainer") }
+    var isAcademicSupervisor: Bool { roles.contains("academic_supervisor") }
+    var isOrgManager:        Bool { roles.contains("org_manager") }
+    var isPlatformOwner:     Bool { roles.contains("platform_owner") }
+
+    var canLaunchCalls:      Bool { roles.contains("trainer") || roles.contains("org_manager") }
+    var canManageAccounts:   Bool { roles.contains("org_manager") || roles.contains("platform_owner") }
+    var canViewActiveCalls:  Bool { roles.contains("trainer") || roles.contains("org_manager") }
+    var canRespondToCalls:   Bool { roles.contains("trainee") }
+
+    /// أعلى دور للمستخدم (لتحديد التبويبة الرئيسية)
+    var primaryRole: String {
+        if isPlatformOwner  { return "platform_owner" }
+        if isOrgManager     { return "org_manager" }
+        if isAcademicSupervisor { return "academic_supervisor" }
+        if isTrainer        { return "trainer" }
+        if isTrainee        { return "trainee" }
+        return "unknown"
+    }
 }
 
 struct UserOrgResponse: Codable, Identifiable, Hashable {

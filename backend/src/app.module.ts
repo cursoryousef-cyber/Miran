@@ -19,6 +19,12 @@ import { LicensesModule } from './modules/licenses/licenses.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { HealthModule } from './modules/health/health.module';
 import { DeclarationsModule } from './modules/declarations/declarations.module';
+import { TraineesModule } from './modules/trainees/trainees.module';
+import { TrainersModule } from './modules/trainers/trainers.module';
+import { RotationsModule } from './modules/rotations/rotations.module';
+import { CallsModule } from './modules/calls/calls.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { OrgMembersModule } from './modules/org-members/org-members.module';
 
 @Module({
   imports: [
@@ -55,6 +61,14 @@ import { DeclarationsModule } from './modules/declarations/declarations.module';
     LicensesModule,
     SettingsModule,
     DeclarationsModule,
+
+    // Training Domain (NEW — Production)
+    TraineesModule,
+    TrainersModule,
+    RotationsModule,
+    CallsModule,
+    NotificationsModule,
+    OrgMembersModule,
   ],
   providers: [
     {
@@ -64,3 +78,4 @@ import { DeclarationsModule } from './modules/declarations/declarations.module';
   ],
 })
 export class AppModule {}
+

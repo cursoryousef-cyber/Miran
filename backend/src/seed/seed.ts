@@ -339,34 +339,292 @@ async function main() {
     update: {},
   });
 
-  // Create Training Agreement (Affiliation) between NBU and Cluster
-  await prisma.organizationAffiliation.upsert({
-    where: {
-      sourceOrgId_targetOrgId_affiliationType: {
-        sourceOrgId: uniOrg.id,
-        targetOrgId: clusterOrg.id,
-        affiliationType: 'training_agreement',
-      },
-    },
+  // --------------------------------------------------------------------------
+  // 6. DEPARTMENTS & TRAINERS
+  // --------------------------------------------------------------------------
+  console.log('🩺 Seeding Departments & Trainers...');
+
+  const dept1 = await prisma.department.upsert({
+    where: { id: 'd1111111-1111-1111-1111-111111111111' },
     create: {
-      sourceOrgId: uniOrg.id,
-      targetOrgId: clusterOrg.id,
-      affiliationType: 'training_agreement',
-      nameAr: 'اتفاقية تدريب طلاب الكليات الصحية بجميع مستشفيات التجمع',
-      agreementRef: 'MOU-NBU-NBHC-2024',
-      startDate: new Date('2024-01-01'),
-      endDate: new Date('2028-12-31'),
+      id: 'd1111111-1111-1111-1111-111111111111',
+      organizationId: hosp1.id,
+      nameAr: 'قسم الباطنية العام',
+      nameEn: 'Internal Medicine Department',
+      code: 'INT-MED',
+      capacity: 15,
+      roundLocation: 'الدور الثالث — جناح باطنية رجال',
+      roundTime: '08:00',
+      meetingRoom: 'غرفة الاجتماعات ٣ب',
+    },
+    update: {},
+  });
+
+  const dept2 = await prisma.department.upsert({
+    where: { id: 'd2222222-2222-2222-2222-222222222222' },
+    create: {
+      id: 'd2222222-2222-2222-2222-222222222222',
+      organizationId: hosp1.id,
+      nameAr: 'قسم الجراحة العامة',
+      nameEn: 'General Surgery Department',
+      code: 'SURGERY',
+      capacity: 12,
+      roundLocation: 'الدور الرابع — جناح الجراحة',
+      roundTime: '06:30',
+      meetingRoom: 'قاعة الجراحة التعليمية',
+    },
+    update: {},
+  });
+
+  const dept3 = await prisma.department.upsert({
+    where: { id: 'd3333333-3333-3333-3333-333333333333' },
+    create: {
+      id: 'd3333333-3333-3333-3333-333333333333',
+      organizationId: hosp1.id,
+      nameAr: 'قسم الطوارئ والحوادث',
+      nameEn: 'Emergency Department',
+      code: 'ER',
+      capacity: 20,
+      roundLocation: 'منطقة الفرز — المدخل الرئيسي',
+      roundTime: '07:00',
+      meetingRoom: 'غرفة التسليم بجوار الفرز',
+    },
+    update: {},
+  });
+
+  // Create Trainer Person & User Account
+  const trainerPerson = await prisma.person.upsert({
+    where: { nationalId: '1011111111' },
+    create: {
+      nationalId: '1011111111',
+      nameAr: 'د. سالم العتيبي',
+      nameEn: 'Dr. Salem Al-Otaibi',
+      email: 'salem@miran.health',
+      phone: '+966511111111',
+    },
+    update: {},
+  });
+
+  const trainerAccount = await prisma.userAccount.upsert({
+    where: { email: 'salem@miran.health' },
+    create: {
+      personId: trainerPerson.id,
+      email: 'salem@miran.health',
+      username: 'drsalem',
+      passwordHash: rootPasswordHash,
+      isEmailVerified: true,
+      isActive: true,
+    },
+    update: {},
+  });
+
+  await prisma.userOrganization.upsert({
+    where: { userAccountId_organizationId: { userAccountId: trainerAccount.id, organizationId: hosp1.id } },
+    create: { userAccountId: trainerAccount.id, organizationId: hosp1.id, isPrimary: true },
+    update: {},
+  });
+
+  await prisma.userRole.upsert({
+    where: { userAccountId_roleId_organizationId: { userAccountId: trainerAccount.id, roleId: createdRoles['trainer'], organizationId: hosp1.id } },
+    create: { userAccountId: trainerAccount.id, roleId: createdRoles['trainer'], organizationId: hosp1.id },
+    update: {},
+  });
+
+  const trainerProfile = await prisma.trainerProfile.upsert({
+    where: { personId: trainerPerson.id },
+    create: {
+      personId: trainerPerson.id,
+      organizationId: hosp1.id,
+      departmentId: dept1.id,
+      titleAr: 'استشاري باطنية',
+      titleEn: 'Consultant Internal Medicine',
+      extensionNumber: '4122',
+      maxTrainees: 5,
+      specialization: 'Internal Medicine',
+    },
+    update: {},
+  });
+
+  // --------------------------------------------------------------------------
+  // 7. TRAINEES & USER ACCOUNTS
+  // --------------------------------------------------------------------------
+  console.log('🎓 Seeding Trainees...');
+
+  const traineeData = [
+    { natId: '1022222222', nameAr: 'عبدالله ناصر المطيري', nameEn: 'Abdullah N. Almutairi', email: 'abdullah@miran.health', num: '11023', level: 'intern', spec: 'طب بشري' },
+    { natId: '1033333333', nameAr: 'ريم فهد الدوسري', nameEn: 'Reem F. Aldosari', email: 'reem@miran.health', num: '11024', level: 'intern', spec: 'طب بشري' },
+    { natId: '1044444444', nameAr: 'خالد سعود العنزي', nameEn: 'Khalid S. Alanazi', email: 'khalid@miran.health', num: '11025', level: 'intern', spec: 'طب بشري' },
+    { natId: '1055555555', nameAr: 'سارة محمد الرشيد', nameEn: 'Sara M. Alrashid', email: 'sara@miran.health', num: '11026', level: 'intern', spec: 'طب بشري' },
+    { natId: '1066666666', nameAr: 'فيصل عبدالرحمن الحميد', nameEn: 'Faisal A. Alhumaid', email: 'faisal@miran.health', num: '11027', level: 'resident', spec: 'باطنية — سنة ٢' },
+  ];
+
+  const createdTraineeProfiles: any[] = [];
+
+  for (const t of traineeData) {
+    const p = await prisma.person.upsert({
+      where: { nationalId: t.natId },
+      create: {
+        nationalId: t.natId,
+        nameAr: t.nameAr,
+        nameEn: t.nameEn,
+        email: t.email,
+        phone: `+9665${t.num}00`,
+      },
+      update: {},
+    });
+
+    const acc = await prisma.userAccount.upsert({
+      where: { email: t.email },
+      create: {
+        personId: p.id,
+        email: t.email,
+        username: t.email.split('@')[0],
+        passwordHash: rootPasswordHash,
+        isEmailVerified: true,
+        isActive: true,
+      },
+      update: {},
+    });
+
+    await prisma.userOrganization.upsert({
+      where: { userAccountId_organizationId: { userAccountId: acc.id, organizationId: hosp1.id } },
+      create: { userAccountId: acc.id, organizationId: hosp1.id, isPrimary: true },
+      update: {},
+    });
+
+    await prisma.userRole.upsert({
+      where: { userAccountId_roleId_organizationId: { userAccountId: acc.id, roleId: createdRoles['trainee'], organizationId: hosp1.id } },
+      create: { userAccountId: acc.id, roleId: createdRoles['trainee'], organizationId: hosp1.id },
+      update: {},
+    });
+
+    const tp = await prisma.traineeProfile.upsert({
+      where: { personId: p.id },
+      create: {
+        personId: p.id,
+        organizationId: hosp1.id,
+        traineeNumber: t.num,
+        level: t.level,
+        specialtyAr: t.spec,
+        specialtyEn: t.spec,
+        applicationStatus: 'approved',
+        cardStatus: 'active',
+        cardUuid: `CARD-${t.num}`,
+        photoApproved: true,
+      },
+      update: {},
+    });
+
+    createdTraineeProfiles.push(tp);
+  }
+
+  // --------------------------------------------------------------------------
+  // 8. ROTATIONS
+  // --------------------------------------------------------------------------
+  console.log('🔄 Seeding Rotations...');
+
+  const today = new Date();
+  const startDate = new Date(today.getTime() - 15 * 24 * 60 * 60 * 1000);
+  const endDate = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000);
+
+  for (const tp of createdTraineeProfiles) {
+    const existingRot = await prisma.rotation.findFirst({
+      where: { traineeProfileId: tp.id, departmentId: dept1.id },
+    });
+    if (!existingRot) {
+      await prisma.rotation.create({
+        data: {
+          organizationId: hosp1.id,
+          traineeProfileId: tp.id,
+          departmentId: dept1.id,
+          trainerProfileId: trainerProfile.id,
+          startDate: startDate,
+          endDate: endDate,
+          status: 'active',
+          midpointMeetingDone: true,
+        },
+      });
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // 9. TRAINER CALLS & PARTICIPANTS
+  // --------------------------------------------------------------------------
+  console.log('🚨 Seeding Emergency Calls...');
+
+  const call1 = await prisma.trainerCall.upsert({
+    where: { id: 'c1111111-1111-1111-1111-111111111111' },
+    create: {
+      id: 'c1111111-1111-1111-1111-111111111111',
+      organizationId: hosp1.id,
+      departmentId: dept1.id,
+      trainerProfileId: trainerProfile.id,
+      callType: 'urgent',
+      customTitle: 'استدعاء عاجل — حالة حرجة بالطوارئ',
+      note: 'يرجى التواجد فوراً بإنعاش باطنية',
+      location: 'الدور الثالث — غرفة الإنعاش ٣٠٢',
+      expectedMinutes: 20,
+      launchedAt: new Date(),
       status: 'active',
     },
     update: {},
   });
 
-  console.log('✅ Seed completed successfully!');
+  for (const tp of createdTraineeProfiles) {
+    const existingP = await prisma.callParticipant.findFirst({
+      where: { callId: call1.id, traineeProfileId: tp.id },
+    });
+    if (!existingP) {
+      await prisma.callParticipant.create({
+        data: {
+          callId: call1.id,
+          traineeProfileId: tp.id,
+          state: 'notified',
+          notifiedAt: new Date(),
+        },
+      });
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // 10. NOTIFICATIONS
+  // --------------------------------------------------------------------------
+  console.log('🔔 Seeding Notifications...');
+
+  for (const tp of createdTraineeProfiles) {
+    const acc = await prisma.userAccount.findFirst({ where: { personId: tp.personId } });
+    if (acc) {
+      const notifCount = await prisma.notification.count({ where: { userId: acc.id } });
+      if (notifCount === 0) {
+        await prisma.notification.create({
+          data: {
+            organizationId: hosp1.id,
+            userId: acc.id,
+            titleAr: 'تم إطلاق نداء عاجل جديدة',
+            bodyAr: 'استدعاء عاجل من د. سالم العتيبي في جناح الباطنية',
+            type: 'call_alert',
+            isRead: false,
+          },
+        });
+        await prisma.notification.create({
+          data: {
+            organizationId: hosp1.id,
+            userId: acc.id,
+            titleAr: 'مرحباً بك في منصة مِران',
+            bodyAr: 'تم اعتماد حسابك وإصدار بطاقة التدريب الذكية بنجاح',
+            type: 'general',
+            isRead: true,
+          },
+        });
+      }
+    }
+  }
+
+  console.log('✅ Seed completed successfully with ALL live records!');
   console.log('---------------------------------------------------------');
-  console.log('👑 Platform Owner Admin Credentials:');
-  console.log('   Email: admin@miran.health');
-  console.log('   Password: Miran@Admin2024!');
-  console.log('   Active Organization: شركة الصحة القابضة (HEALTH-HOLDING)');
+  console.log('👑 Admin: admin@miran.health | Password: Miran@Admin2024!');
+  console.log('👨‍🏫 Trainer: salem@miran.health | Password: Miran@Admin2024!');
+  console.log('👨‍🎓 Trainee: abdullah@miran.health | Password: Miran@Admin2024!');
   console.log('---------------------------------------------------------');
 }
 

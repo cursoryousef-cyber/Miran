@@ -48,6 +48,7 @@ final class APIClient {
     ) async throws -> T {
         let cleanEndpoint = endpoint.hasPrefix("/") ? endpoint : "/\(endpoint)"
         guard let url = URL(string: "\(baseURL)\(cleanEndpoint)") else {
+            print("❌ [API ERROR] Endpoint: \(cleanEndpoint) | Invalid URL: \(baseURL)\(cleanEndpoint)")
             throw APIError.invalidURL
         }
 
@@ -70,39 +71,54 @@ final class APIClient {
             request.httpBody = try JSONEncoder().encode(body)
         }
 
-        let (data, response) = try await session.data(for: request)
+        do {
+            let (data, response) = try await session.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse(statusCode: 0)
-        }
-
-        // Handle 401 Unauthorized (Attempt Refresh)
-        if httpResponse.statusCode == 401 && requiresAuth {
-            let refreshed = await attemptTokenRefresh()
-            if refreshed {
-                return try await self.request(endpoint: endpoint, method: method, body: body, requiresAuth: requiresAuth)
-            } else {
-                throw APIError.unauthorized
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("❌ [API ERROR] Endpoint: \(cleanEndpoint) | Invalid Response (Non-HTTP)")
+                throw APIError.invalidResponse(statusCode: 0)
             }
-        }
 
-        // Handle Success
-        if (200...299).contains(httpResponse.statusCode) {
-            let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .useDefaultKeys
-            do {
-                return try decoder.decode(T.self, from: data)
-            } catch {
-                throw APIError.decodingError(error)
+            // Handle 401 Unauthorized (Attempt Refresh)
+            if httpResponse.statusCode == 401 && requiresAuth {
+                print("⚠️ [API REFRESH] Endpoint: \(cleanEndpoint) | 401 Unauthorized -> Attempting Token Refresh")
+                let refreshed = await attemptTokenRefresh()
+                if refreshed {
+                    return try await self.request(endpoint: endpoint, method: method, body: body, requiresAuth: requiresAuth)
+                } else {
+                    print("❌ [API ERROR] Endpoint: \(cleanEndpoint) | Status Code: 401 | Refresh Token Expired/Failed")
+                    throw APIError.unauthorized
+                }
             }
-        }
 
-        // Handle Error JSON Response
-        if let errorObj = try? JSONDecoder().decode(ServerErrorResponse.self, from: data) {
-            throw APIError.serverError(message: errorObj.message ?? "حدث خطأ غير متوقع")
-        }
+            // Handle Success
+            if (200...299).contains(httpResponse.statusCode) {
+                let decoder = JSONDecoder()
+                decoder.keyDecodingStrategy = .useDefaultKeys
+                do {
+                    return try decoder.decode(T.self, from: data)
+                } catch {
+                    print("❌ [API ERROR] Endpoint: \(cleanEndpoint) | Status Code: \(httpResponse.statusCode) | Decoding Failed: \(error)")
+                    throw APIError.decodingError(error)
+                }
+            }
 
-        throw APIError.invalidResponse(statusCode: httpResponse.statusCode)
+            // Handle Error JSON Response
+            var serverMessage = "حدث خطأ غير متوقع"
+            if let errorObj = try? JSONDecoder().decode(ServerErrorResponse.self, from: data),
+               let msg = errorObj.message {
+                serverMessage = msg
+            }
+
+            print("❌ [API ERROR] Endpoint: \(cleanEndpoint) | Status Code: \(httpResponse.statusCode) | Server Message: \(serverMessage)")
+            throw APIError.serverError(message: serverMessage)
+
+        } catch {
+            if !(error is APIError) {
+                print("❌ [API ERROR] Endpoint: \(cleanEndpoint) | Network Failure: \(error.localizedDescription)")
+            }
+            throw error
+        }
     }
 
     // MARK: - Token Refresh

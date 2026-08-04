@@ -28,9 +28,14 @@ final class TraineeViewModel: ObservableObject {
             let rotList: APIListResponse<RotationModel> = try await APIClient.shared.request(endpoint: "/rotations/my")
             self.rotations = rotList.data
 
-            // Fetch Active Calls
-            let calls: APIListResponse<TrainerCallModel> = try await APIClient.shared.request(endpoint: "/calls/active")
-            self.activeCall = calls.data.first
+            // Fetch Incoming Calls for Trainee (RBAC: /calls/my-incoming)
+            let participants: APIListResponse<CallParticipantResponse> = try await APIClient.shared.request(endpoint: "/calls/my-incoming")
+            // عرض أول نداء غير مؤكد الوصول
+            if let first = participants.data.first(where: { $0.state != "confirmed_arrived" }) {
+                self.activeCall = first.call
+            } else {
+                self.activeCall = nil
+            }
         } catch {
             self.errorMessage = error.localizedDescription
         }
@@ -50,10 +55,10 @@ final class TraineeViewModel: ObservableObject {
         }
     }
 
-    func confirmArrival(callId: String) async {
+    func onWay(callId: String) async {
         do {
             let _: CallParticipantModel = try await APIClient.shared.request(
-                endpoint: "/calls/\(callId)/self-arrive",
+                endpoint: "/calls/\(callId)/on-way",
                 method: "POST"
             )
             await fetchDashboardData()
@@ -61,4 +66,29 @@ final class TraineeViewModel: ObservableObject {
             self.errorMessage = error.localizedDescription
         }
     }
+
+    func confirmArrival(callId: String) async {
+        do {
+            let _: CallParticipantModel = try await APIClient.shared.request(
+                endpoint: "/calls/\(callId)/arrived",
+                method: "POST"
+            )
+            await fetchDashboardData()
+        } catch {
+            self.errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - CallParticipant Response with nested call
+struct CallParticipantResponse: Codable, Identifiable {
+    let id: String
+    let callId: String
+    let traineeProfileId: String
+    let state: String
+    let notifiedAt: String
+    let ackAt: String?
+    let selfArrivedAt: String?
+    let confirmedAt: String?
+    let call: TrainerCallModel?
 }

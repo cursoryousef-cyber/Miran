@@ -59,61 +59,98 @@ struct TraineeTabView: View {
                         // Digital ID Card
                         DigitalIDCardView(profile: viewModel.traineeProfile)
 
-                        // Active Call Alert (If Any)
+                        // ─── نداء وارد (Incoming Call) — للمتدرب فقط ────────────
+                        // RBAC: المتدرب يرى هذا القسم فقط (استقبال النداء لا إطلاقه)
                         if let call = viewModel.activeCall {
-                            VStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 14) {
+                                // رأس النداء
                                 HStack {
-                                    Image(systemName: "bolt.heart.fill")
-                                        .font(.title2)
-                                        .foregroundColor(.amber)
-                                    Text("نداء استدعاء سريري جديد (Call Launch)")
-                                        .font(.headline.weight(.bold))
-                                        .foregroundColor(.white)
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.red.opacity(0.2))
+                                            .frame(width: 44, height: 44)
+                                        Image(systemName: "bell.and.waves.left.and.right.fill")
+                                            .font(.title3)
+                                            .foregroundColor(.red)
+                                    }
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("نداء سريري وارد")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundColor(Color.red)
+                                        Text(call.customTitle ?? "استدعاء عاجل")
+                                            .font(.headline.weight(.bold))
+                                            .foregroundColor(.white)
+                                    }
                                     Spacer()
+                                    // مؤشر وميض
+                                    Circle()
+                                        .fill(Color.red)
+                                        .frame(width: 10, height: 10)
                                 }
 
-                                Text(call.note ?? "مطلوب حضورك الفوري لغرفة العمليات")
-                                    .font(.subheadline)
-                                    .foregroundColor(MiranTheme.subtext)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                if let note = call.note, !note.isEmpty {
+                                    Text(note)
+                                        .font(.subheadline)
+                                        .foregroundColor(MiranTheme.subtext)
+                                }
 
-                                HStack(spacing: 12) {
+                                if let location = call.location, !location.isEmpty {
+                                    Label(location, systemImage: "mappin.circle.fill")
+                                        .font(.caption)
+                                        .foregroundColor(MiranTheme.emerald)
+                                }
+
+                                // ─── الأزرار الثلاثة للاستجابة ────────────────
+                                VStack(spacing: 10) {
+                                    // 1. تأكيد الاستلام
                                     Button {
-                                        Task {
-                                            await viewModel.acknowledgeCall(callId: call.id)
-                                        }
+                                        Task { await viewModel.acknowledgeCall(callId: call.id) }
                                     } label: {
-                                        Text("استلام وتأكيد (Ack)")
-                                            .font(.caption.weight(.bold))
+                                        Label("تأكيد الاستلام", systemImage: "checkmark.circle.fill")
+                                            .font(.callout.weight(.bold))
                                             .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 10)
+                                            .padding(.vertical, 12)
                                             .background(MiranTheme.emerald)
                                             .foregroundColor(.white)
-                                            .cornerRadius(10)
+                                            .cornerRadius(12)
                                     }
 
-                                    Button {
-                                        Task {
-                                            await viewModel.confirmArrival(callId: call.id)
+                                    HStack(spacing: 10) {
+                                        // 2. أنا في الطريق
+                                        Button {
+                                            Task { await viewModel.onWay(callId: call.id) }
+                                        } label: {
+                                            Label("أنا في الطريق", systemImage: "figure.walk")
+                                                .font(.caption.weight(.bold))
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 11)
+                                                .background(Color.orange.opacity(0.85))
+                                                .foregroundColor(.white)
+                                                .cornerRadius(12)
                                         }
-                                    } label: {
-                                        Text("وصلت للموقع (Self Arrive)")
-                                            .font(.caption.weight(.bold))
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 10)
-                                            .background(MiranTheme.accent)
-                                            .foregroundColor(.white)
-                                            .cornerRadius(10)
+
+                                        // 3. وصلت
+                                        Button {
+                                            Task { await viewModel.confirmArrival(callId: call.id) }
+                                        } label: {
+                                            Label("وصلت", systemImage: "location.fill")
+                                                .font(.caption.weight(.bold))
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 11)
+                                                .background(MiranTheme.accent)
+                                                .foregroundColor(.white)
+                                                .cornerRadius(12)
+                                        }
                                     }
                                 }
                             }
-                            .padding()
-                            .background(Color.amber.opacity(0.12))
-                            .cornerRadius(16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.amber.opacity(0.4), lineWidth: 1)
+                            .padding(16)
+                            .background(
+                                LinearGradient(colors: [Color.red.opacity(0.12), Color.red.opacity(0.05)],
+                                               startPoint: .topLeading, endPoint: .bottomTrailing)
                             )
+                            .cornerRadius(20)
+                            .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.red.opacity(0.4), lineWidth: 1.5))
                             .padding(.horizontal)
                         }
 
