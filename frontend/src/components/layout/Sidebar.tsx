@@ -14,16 +14,22 @@ import {
   Wand2,
   FolderGit2,
   FileSignature,
+  Activity,
+  Shield,
+  Key,
 } from 'lucide-react';
 
 const navigationItems = [
   { name: 'لوحة التحكم الرئيسيّة', path: '/', icon: LayoutDashboard },
+  { name: 'مراقبة سلامة الخدمات (Health)', path: '/health-monitor', icon: Activity },
   { name: 'الجهات والتجمعات الصحية', path: '/organizations', icon: Building2 },
   { name: 'معالج إنشاء الجهات آلياً', path: '/organizations/wizard', icon: Wand2 },
   { name: 'اتفاقيات الشراكة والتدريب', path: '/affiliations', icon: FolderGit2 },
   { name: 'الدفعات الأكاديمية (Intakes)', path: '/intakes', icon: GraduationCap },
   { name: 'إدارة الأشخاص والحسابات', path: '/users', icon: Users },
   { name: 'إدارة أعضاء الجهة (RBAC)', path: '/org-members', icon: UserCog },
+  { name: 'إدارة الأدوار والصلاحيات', path: '/roles-management', icon: Key },
+  { name: 'سجلات التدقيق والمراقبة', path: '/audit-logs', icon: Shield },
   { name: 'الإقرارات والتعهدات الوطنية', path: '/declarations', icon: FileSignature },
   { name: 'محرك سير العمل (Workflows)', path: '/workflows', icon: GitMerge },
   { name: 'سياسات الوصول (Policy Engine)', path: '/policies', icon: ShieldCheck },

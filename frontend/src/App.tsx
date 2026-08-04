@@ -23,6 +23,9 @@ import { Integrations } from './pages/Integrations';
 import { Reports } from './pages/Reports';
 import { SettingsPage } from './pages/Settings';
 import { OrgMembersPage } from './pages/OrgMembers';
+import { HealthMonitor } from './pages/HealthMonitor';
+import { AuditLogs } from './pages/AuditLogs';
+import { RolesManagement } from './pages/RolesManagement';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -70,6 +73,9 @@ export const App: React.FC = () => {
                   <Route path="integrations" element={<Integrations />} />
                   <Route path="reports" element={<Reports />} />
                   <Route path="settings" element={<SettingsPage />} />
+                  <Route path="health-monitor" element={<HealthMonitor />} />
+                  <Route path="audit-logs" element={<AuditLogs />} />
+                  <Route path="roles-management" element={<RolesManagement />} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />

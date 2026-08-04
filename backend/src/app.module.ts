@@ -25,6 +25,9 @@ import { RotationsModule } from './modules/rotations/rotations.module';
 import { CallsModule } from './modules/calls/calls.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrgMembersModule } from './modules/org-members/org-members.module';
+import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
+import { GlobalSearchModule } from './modules/global-search/global-search.module';
+import { RolesPermissionsModule } from './modules/roles-permissions/roles-permissions.module';
 
 @Module({
   imports: [
@@ -69,6 +72,11 @@ import { OrgMembersModule } from './modules/org-members/org-members.module';
     CallsModule,
     NotificationsModule,
     OrgMembersModule,
+
+    // Observability, Audit, Global Search & Dynamic RBAC
+    AuditLogsModule,
+    GlobalSearchModule,
+    RolesPermissionsModule,
   ],
   providers: [
     {
