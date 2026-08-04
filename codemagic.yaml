@@ -3,8 +3,6 @@ workflows:
     name: Miran iOS Release Pipeline
     max_build_duration: 60
     instance_type: mac_mini_m1
-    integrations:
-      app_store_connect: Miran API Key
     environment:
       ios_signing:
         distribution_type: app_store
@@ -28,6 +26,14 @@ workflows:
           echo "Setting Project Build Number to: $BUILD_NUMBER"
           agvtool new-version -all $BUILD_NUMBER || true
 
+      - name: Audit Provisioning Profiles & Identities
+        script: |
+          echo "=== Provisioning Profiles ==="
+          find ~/Library/MobileDevice/Provisioning\ Profiles -type f -print || true
+
+          echo "=== Code Signing Identities ==="
+          security find-identity -v -p codesigning || true
+
       - name: Build & Archive iOS App
         script: |
           echo "================ Building Release Archive ================"
@@ -47,6 +53,7 @@ workflows:
             -archivePath "$CM_BUILD_DIR/build/Miran.xcarchive" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=B4S7M6N5U5 \
+            -allowProvisioningUpdates \
             archive
 
       - name: Package Official Signed IPA & Verify embedded.mobileprovision

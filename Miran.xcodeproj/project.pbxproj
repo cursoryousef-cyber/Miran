@@ -292,6 +292,8 @@
 				TargetAttributes = {
 					A1B2C3D400000006 = {
 						CreatedOnToolsVersion = 16.0;
+						DevelopmentTeam = B4S7M6N5U5;
+						ProvisioningStyle = Automatic;
 					};
 				};
 			};
