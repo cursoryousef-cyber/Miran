@@ -217,7 +217,7 @@ export class AuthService {
       where: { id: user.accountId },
       include: {
         person: true,
-        userOrganizations: {
+        organizations: {
           include: { organization: true },
         },
       },
@@ -230,10 +230,10 @@ export class AuthService {
     const activeOrgId = user.organizationId;
     const { roles, permissions } = await this.getRolesAndPermissions(account.id, activeOrgId);
 
-    const activeUserOrg = account.userOrganizations.find((uo) => uo.organizationId === activeOrgId)
-      || account.userOrganizations[0];
+    const activeUserOrg = account.organizations.find((uo) => uo.organizationId === activeOrgId)
+      || account.organizations[0];
 
-    const availableOrganizations = account.userOrganizations.map((uo) => ({
+    const availableOrganizations = account.organizations.map((uo) => ({
       id: uo.organization.id,
       code: uo.organization.code,
       nameAr: uo.organization.nameAr,
