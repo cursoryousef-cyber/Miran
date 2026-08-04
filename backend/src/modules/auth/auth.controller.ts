@@ -23,6 +23,14 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
+  @Get('me')
+  @ApiOperation({ summary: 'جلب بيانات الملف الشخصي وسياق الجلسة الحالية' })
+  async getProfile(@CurrentUser() user: IAuthenticatedUser) {
+    return this.authService.getProfile(user);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
   @Post('switch-org')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'تبديل سياق الجهة للمستخدم الحالي (Multi-Tenant Context Switch)' })

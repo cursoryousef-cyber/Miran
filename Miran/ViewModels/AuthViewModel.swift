@@ -30,13 +30,44 @@ final class AuthViewModel: ObservableObject {
             if let profileData = KeychainService.shared.get(forKey: "user_profile")?.data(using: .utf8),
                let profile = try? JSONDecoder().decode(UserProfileResponse.self, from: profileData) {
                 self.currentUser = profile
-                print("✅ [Auth] Restored session for: \(profile.nameAr) | Org: \(profile.activeOrganization.nameAr)")
+                print("✅ [Auth] Restored cached session for: \(profile.nameAr)")
             }
-            // Fetch production data in background on session restore
-            Task { await appStore?.fetchAllProductionData() }
+            
+            // Refresh profile & production data asynchronously from server
+            Task {
+                await fetchProfile()
+                await appStore?.fetchAllProductionData()
+            }
         } else {
             self.isAuthenticated = false
             self.currentUser = nil
+        }
+    }
+
+    func fetchProfile() async {
+        do {
+            struct ProfileWrapper: Decodable {
+                let user: UserProfileResponse
+            }
+            let response: ProfileWrapper = try await APIClient.shared.request(
+                endpoint: "/auth/me",
+                method: "GET",
+                requiresAuth: true
+            )
+            self.currentUser = response.user
+            self.isAuthenticated = true
+
+            if let profileData = try? JSONEncoder().encode(response.user),
+               let profileStr = String(data: profileData, encoding: .utf8) {
+                KeychainService.shared.save(profileStr, forKey: "user_profile")
+            }
+            print("✅ [Auth] Fresh profile fetched: \(response.user.nameAr) | Role: \(response.user.primaryRole)")
+        } catch {
+            print("⚠️ [Auth] Could not fetch fresh profile: \(error.localizedDescription)")
+            if self.currentUser == nil {
+                // If profile could not be loaded and no cache exists, reset session safely
+                self.errorMessage = "تعذر الاتصال بخادم المنصة. يرجى إعادة المحاولة."
+            }
         }
     }
 

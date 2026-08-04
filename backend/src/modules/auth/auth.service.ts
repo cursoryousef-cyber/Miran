@@ -212,6 +212,59 @@ export class AuthService {
     }
   }
 
+  async getProfile(user: IAuthenticatedUser) {
+    const account = await this.prisma.userAccount.findUnique({
+      where: { id: user.accountId },
+      include: {
+        person: true,
+        userOrganizations: {
+          include: { organization: true },
+        },
+      },
+    });
+
+    if (!account) {
+      throw new UnauthorizedException('الحساب غير موجود');
+    }
+
+    const activeOrgId = user.organizationId;
+    const { roles, permissions } = await this.getRolesAndPermissions(account.id, activeOrgId);
+
+    const activeUserOrg = account.userOrganizations.find((uo) => uo.organizationId === activeOrgId)
+      || account.userOrganizations[0];
+
+    const availableOrganizations = account.userOrganizations.map((uo) => ({
+      id: uo.organization.id,
+      code: uo.organization.code,
+      nameAr: uo.organization.nameAr,
+      nameEn: uo.organization.nameEn,
+      type: uo.organization.type,
+      logoUrl: uo.organization.logoUrl,
+    }));
+
+    return {
+      user: {
+        id: account.id,
+        personId: account.personId,
+        email: account.email,
+        nameAr: account.person.nameAr,
+        nameEn: account.person.nameEn,
+        primaryRole: roles[0] || 'trainee',
+        roles,
+        permissions,
+        activeOrganization: activeUserOrg ? {
+          id: activeUserOrg.organization.id,
+          code: activeUserOrg.organization.code,
+          nameAr: activeUserOrg.organization.nameAr,
+          nameEn: activeUserOrg.organization.nameEn,
+          type: activeUserOrg.organization.type,
+          logoUrl: activeUserOrg.organization.logoUrl,
+        } : null,
+        availableOrganizations,
+      },
+    };
+  }
+
   async activateAccount(dto: ActivateAccountDto) {
     const account = await this.prisma.userAccount.findFirst({
       where: { activationToken: dto.token },

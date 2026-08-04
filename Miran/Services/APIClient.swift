@@ -37,7 +37,13 @@ final class APIClient {
 
     var baseURL = "https://fawaz-backend-abx3.onrender.com/api/v1"
 
-    private let session = URLSession.shared
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 20.0
+        config.timeoutIntervalForResource = 30.0
+        config.waitsForConnectivity = true
+        return URLSession(configuration: config)
+    }()
 
     // MARK: - Generic Request Method
     func request<T: Decodable>(

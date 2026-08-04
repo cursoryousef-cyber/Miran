@@ -67,9 +67,49 @@ struct RBACMainView: View {
                     UnknownRoleView(roleCode: user.primaryRole)
                 }
             } else {
-                // لم تُجلب بيانات المستخدم بعد
-                ProgressView("جاري تحميل البيانات...")
-                    .task { await store.fetchAllProductionData() }
+                // لم تُجلب بيانات المستخدم بعد أو جاري التحميل
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .scaleEffect(1.2)
+                    Text("جاري تحميل بيانات المنصة...")
+                        .font(.subheadline)
+                        .foregroundColor(MiranTheme.subtext)
+
+                    if let err = authViewModel.errorMessage {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+
+                    Button {
+                        Task {
+                            await authViewModel.fetchProfile()
+                            await store.fetchAllProductionData()
+                        }
+                    } label: {
+                        Label("إعادة المحاولة", systemImage: "arrow.clockwise")
+                            .font(.caption.weight(.bold))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(MiranTheme.emerald)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+
+                    Button("إلغاء وتسجيل الدخول ببيانات أخرى") {
+                        authViewModel.logout()
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 4)
+                }
+                .padding()
+                .task {
+                    await authViewModel.fetchProfile()
+                    await store.fetchAllProductionData()
+                }
             }
         }
     }
