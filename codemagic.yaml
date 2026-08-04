@@ -9,8 +9,6 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: sa.miran.app
-        provisioning_profiles:
-          - miran2026
       vars:
         XCODE_PROJECT: "Miran.xcodeproj"
         XCODE_SCHEME: "Miran"
@@ -40,14 +38,22 @@ workflows:
           echo "================ Building Release Archive ================"
           mkdir -p $CM_BUILD_DIR/build
 
+          if [ -d "Miran.xcworkspace" ]; then
+            BUILD_TARGET_FLAG="-workspace Miran.xcworkspace"
+          else
+            BUILD_TARGET_FLAG="-project $XCODE_PROJECT"
+          fi
+
           xcodebuild \
-            -project "$XCODE_PROJECT" \
+            $BUILD_TARGET_FLAG \
             -scheme "$XCODE_SCHEME" \
             -destination "generic/platform=iOS" \
             -configuration Release \
             -archivePath "$CM_BUILD_DIR/build/Miran.xcarchive" \
             CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+            DEVELOPMENT_TEAM=B4S7M6N5U5 \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGNING_REQUIRED=YES \
             archive
 
       - name: Package Official Signed IPA & Verify embedded.mobileprovision
