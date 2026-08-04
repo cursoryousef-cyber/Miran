@@ -1,6 +1,6 @@
 workflows:
   ios-release:
-    name: Miran iOS Release Pipeline (App Store Signed)
+    name: Miran iOS Release Pipeline
     max_build_duration: 60
     instance_type: mac_mini_m1
     integrations:
@@ -9,9 +9,12 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: sa.miran.app
+        provisioning_profiles:
+          - miran2026
       vars:
         XCODE_PROJECT: "Miran.xcodeproj"
         XCODE_SCHEME: "Miran"
+        DEVELOPMENT_TEAM: "B4S7M6N5U5"
       xcode: latest
       cocoapods: default
     scripts:
@@ -27,14 +30,14 @@ workflows:
           echo "Setting Project Build Number to: $BUILD_NUMBER"
           agvtool new-version -all $BUILD_NUMBER || true
 
-      - name: Automatic Code Signing & Fetch Profiles from Apple
+      - name: Set up code signing settings on Xcode project
         script: |
-          echo "================ Fetching Distribution Certificates & Profiles ================"
+          echo "================ Configuring Codemagic Automatic Code Signing ================"
           xcode-project use-profiles --profile-type=app_store
 
-      - name: Build & Archive iOS App (App Store Automatic Signing)
+      - name: Build & Archive iOS App
         script: |
-          echo "================ Building App Store Release Archive ================"
+          echo "================ Building Release Archive ================"
           mkdir -p $CM_BUILD_DIR/build
 
           xcodebuild \
@@ -44,42 +47,40 @@ workflows:
             -configuration Release \
             -archivePath "$CM_BUILD_DIR/build/Miran.xcarchive" \
             CODE_SIGN_STYLE=Automatic \
-            CODE_SIGNING_ALLOWED=YES \
+            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
             archive
 
-      - name: Export App Store Signed IPA & Verify embedded.mobileprovision
+      - name: Package Official Signed IPA & Verify embedded.mobileprovision
         script: |
-          echo "================ Exporting App Store Signed Release IPA ================"
+          echo "================ Packaging Signed Release IPA ================"
           mkdir -p $CM_BUILD_DIR/build/ipa
           mkdir -p $CM_BUILD_DIR/build/dsyms
 
-          # Export signed App Store IPA using Codemagic CLI
+          # Export App Store signed IPA via official Codemagic CLI
           xcode-project package-release \
             --archive "$CM_BUILD_DIR/build/Miran.xcarchive" \
             --output "$CM_BUILD_DIR/build/ipa"
 
-          # Verify embedded.mobileprovision exists in IPA
-          echo "================ Verifying App Store IPA Signing ================"
+          # Verify embedded.mobileprovision in IPA package
+          echo "================ Verifying embedded.mobileprovision ================"
           IPA_PATH=$(find $CM_BUILD_DIR/build/ipa -name "*.ipa" | head -n 1)
 
           if [ -n "$IPA_PATH" ]; then
-            echo "Inspecting IPA Package at: $IPA_PATH"
-            unzip -q "$IPA_PATH" -d /tmp/ipa_inspect
-            
-            if [ -f "/tmp/ipa_inspect/Payload/Miran.app/embedded.mobileprovision" ]; then
-              echo "✅ SUCCESS: embedded.mobileprovision is present and valid in App Store IPA!"
+            echo "Inspecting IPA package: $IPA_PATH"
+            unzip -q "$IPA_PATH" -d /tmp/ipa_check
+            if [ -f "/tmp/ipa_check/Payload/Miran.app/embedded.mobileprovision" ]; then
+              echo "✅ SUCCESS: embedded.mobileprovision is verified inside IPA!"
             else
-              echo "❌ ERROR: embedded.mobileprovision is missing in IPA bundle!"
+              echo "❌ ERROR: embedded.mobileprovision is missing!"
               exit 1
             fi
-            
-            rm -rf /tmp/ipa_inspect
+            rm -rf /tmp/ipa_check
           else
             echo "❌ ERROR: No IPA package exported!"
             exit 1
           fi
 
-          # Archive dSYMs for App Store symbolication
+          # Archive dSYMs
           if [ -d "$CM_BUILD_DIR/build/Miran.xcarchive/dSYMs" ]; then
             echo "Archiving dSYMs..."
             cd "$CM_BUILD_DIR/build/Miran.xcarchive/dSYMs"
