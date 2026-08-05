@@ -2,8 +2,9 @@
 //  SystemAdminTabView.swift
 //  Miran
 //
-//  SwiftUI Main Interface for System Administrator (مدير المنصة والنظام).
-//  حصرية لإدارة المنصة، الجهات، المستشفيات، الحسابات، الصلاحيات، والسجلات.
+//  SwiftUI Main Interface for System Administrator (مدير المنصة والنظام - Control Center).
+//  Pure Platform Administration (Organizations, Universities, Hospitals, Programs, Users, RBAC, Agreements, Reports, Audit, Settings).
+//  EXCLUDES: Daily Operational screens (Trainees, Rotations, Attendance, Logbook, Live Calls).
 //
 
 import SwiftUI
@@ -81,31 +82,31 @@ struct SystemAdminTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // 1. لوحة التحكم الكلية والإحصائيات العامة
+            // 1. مركز التحكم الوطني والإحصائيات الكلية
             SystemAdminDashboardView()
                 .tabItem {
-                    Label("لوحة الإدارة", systemImage: "chart.bar.fill")
+                    Label("مركز التحكم", systemImage: "chart.bar.fill")
                 }
                 .tag(0)
 
-            // 2. إدارة الجهات والتجمعات والمستشفيات
+            // 2. إدارة الجهات والجامعات والمستشفيات
             OrganizationsAdminView()
                 .tabItem {
-                    Label("الجهات والأقسام", systemImage: "building.2.fill")
+                    Label("الجهات والمستشفيات", systemImage: "building.2.fill")
                 }
                 .tag(1)
 
-            // 3. إدارة الحسابات والأدوار والصلاحيات
+            // 3. إدارة المستخدمين والأدوار والصلاحيات
             UsersAndRolesAdminView()
                 .tabItem {
-                    Label("المستخدمين والصلاحيات", systemImage: "person.3.sequence.fill")
+                    Label("المستخدمين وRBAC", systemImage: "person.3.sequence.fill")
                 }
                 .tag(2)
 
-            // 4. السجلات والتقارير العامة للعمليات
+            // 4. سجلات التدقيق والمراقبة العامة
             AuditAndReportsAdminView()
                 .tabItem {
-                    Label("السجلات والتقارير", systemImage: "shield.checkered")
+                    Label("سجلات التدقيق", systemImage: "shield.checkered")
                 }
                 .tag(3)
         }
@@ -113,7 +114,7 @@ struct SystemAdminTabView: View {
     }
 }
 
-// MARK: - System Admin Dashboard View
+// MARK: - System Admin Control Center View (Purified Control Center)
 struct SystemAdminDashboardView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var store: AppStore
@@ -126,10 +127,10 @@ struct SystemAdminDashboardView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        // Admin Banner
+                        // Control Center Banner
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Text("إدارة المنصة الوطنية (Control Center)")
+                                Text("مركز التحكم الوطني (Control Center)")
                                     .font(.title2.weight(.bold))
                                     .foregroundColor(.white)
                                 Spacer()
@@ -137,55 +138,49 @@ struct SystemAdminDashboardView: View {
                                     .font(.system(size: 28))
                                     .foregroundColor(MiranTheme.emerald)
                             }
-                            Text("مركز التحكم والمراقبة الشاملة وصحة API وحالة الخادم")
+                            Text("التحكم الكلي بالمنصة والجهات والجامعات والمستشفيات والـ RBAC وسجلات الرقابة")
                                 .font(.caption)
                                 .foregroundColor(MiranTheme.subtext)
                         }
                         .padding(.horizontal)
 
-                        // Comprehensive 12 Key Metrics Grid
+                        // Pure Admin Metrics Grid (10 Core Metrics — No Operational Data)
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                             Group {
-                                MetricStatCard(title: "الجهات والتجمعات", count: "8", icon: "building.2.crop.circle", color: MiranTheme.emerald)
+                                MetricStatCard(title: "الجهات والتجمعات الصحية", count: "8", icon: "building.2.crop.circle", color: MiranTheme.emerald)
                                 MetricStatCard(title: "المستشفيات المعتمدة", count: "14", icon: "cross.case.fill", color: .blue)
                                 MetricStatCard(title: "الجامعات والكليات", count: "6", icon: "graduationcap.fill", color: .purple)
-                                MetricStatCard(title: "الأقسام السريرية", count: "42", icon: "building.columns", color: MiranTheme.teal)
-                                MetricStatCard(title: "البرامج التدريبية", count: "18", icon: "list.clipboard.fill", color: .orange)
-                                MetricStatCard(title: "الدفعات الأكاديمية", count: "24", icon: "person.3.fill", color: .pink)
+                                MetricStatCard(title: "البرامج التدريبية الوطنية", count: "18", icon: "list.clipboard.fill", color: .orange)
+                                MetricStatCard(title: "اتفاقيات الشراكة العقدية", count: "12", icon: "doc.plaintext.fill", color: MiranTheme.teal)
                             }
                             Group {
-                                MetricStatCard(title: "أطباء الامتياز المتدربين", count: "310", icon: "person.badge.shield.checkmark", color: MiranTheme.emerald)
-                                MetricStatCard(title: "المدربين المعتمدين", count: "85", icon: "stethoscope", color: .indigo)
-                                MetricStatCard(title: "المشرفين الأكاديميين", count: "29", icon: "person.crop.rectangle.stack", color: .yellow)
-                                MetricStatCard(title: "نداءات الميدان الحية", count: "12", icon: "bell.and.waves.left.and.right.fill", color: .red)
-                                MetricStatCard(title: "حالات Logbook المعتمدة", count: "1,420", icon: "doc.text.fill", color: MiranTheme.emerald)
-                                MetricStatCard(title: "إجمالي الحسابات المسجلة", count: "468", icon: "key.fill", color: .cyan)
+                                MetricStatCard(title: "إجمالي حسابات المستخدمين", count: "468", icon: "key.fill", color: .cyan)
+                                MetricStatCard(title: "مدراء التجمعات الصحيّة", count: "12", icon: "person.badge.key.fill", color: .indigo)
+                                MetricStatCard(title: "سجلات التدقيق والمراقبة", count: "3,480", icon: "shield.checkered", color: .pink)
+                                MetricStatCard(title: "حالة سلامة الـ APIs", count: "100%", icon: "activity", color: MiranTheme.emerald)
+                                MetricStatCard(title: "إقرارات الترخيص", count: "24", icon: "checkmark.seal.fill", color: .yellow)
                             }
                         }
                         .padding(.horizontal)
 
-                        // Quick Actions List
+                        // Pure Admin Management Action Rows
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("القائمة الرئيسية والتحكم الكامل")
+                            Text("إدارة وحدات المنصة والتحكم")
                                 .font(.headline.weight(.bold))
                                 .foregroundColor(.white)
                                 .padding(.horizontal)
 
                             VStack(spacing: 10) {
                                 NavigationLink(destination: OrganizationsAdminView()) {
-                                    AdminActionRow(title: "إدارة الجهات والتجمعات والمستشفيات", subtitle: "إضافة وتعديل وحظر التجمعات والمراكز الصحية", icon: "building.columns.fill", color: MiranTheme.emerald)
+                                    AdminActionRow(title: "إدارة التجمعات والجامعات والمستشفيات (Organizations)", subtitle: "إضافة وتعديل واعتماد المراكز والجامعات", icon: "building.columns.fill", color: MiranTheme.emerald)
                                 }
 
                                 NavigationLink(destination: UsersAndRolesAdminView()) {
-                                    AdminActionRow(title: "إدارة المستخدمين والأدوار والصلاحيات (RBAC)", subtitle: "التحكم بمدراء التجمعات والأكاديميين والمدربين", icon: "person.badge.key.fill", color: .blue)
-                                }
-
-                                NavigationLink(destination: ClinicalLogbookManagementFullView()) {
-                                    AdminActionRow(title: "السجل السريري وحالات Logbook الوطنية", subtitle: "استعلام ومتابعة نسب إنجاز المهارات المعتمدة", icon: "cross.case.fill", color: MiranTheme.teal)
+                                    AdminActionRow(title: "إدارة المستخدمين والأدوار والصلاحيات (Users & RBAC)", subtitle: "إدارة الحسابات والأدوار والـ Policy Claims", icon: "person.badge.key.fill", color: .blue)
                                 }
 
                                 NavigationLink(destination: AuditAndReportsAdminView()) {
-                                    AdminActionRow(title: "سجلات العمليات والتدقيق (Audit Trail)", subtitle: "تتبع نشاط الحسابات المشفرة بالمنصة", icon: "shield.checkered", color: .orange)
+                                    AdminActionRow(title: "سجلات التدقيق والرقابة (Audit Logs)", subtitle: "مراقبة سجل التغييرات والـ Event Ledger المشفر", icon: "shield.checkered", color: .orange)
                                 }
                             }
                             .padding(.horizontal)
@@ -194,7 +189,7 @@ struct SystemAdminDashboardView: View {
                     .padding(.vertical)
                 }
             }
-            .navigationTitle("مدير النظام")
+            .navigationTitle("مدير المنصة والنظام")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -228,10 +223,10 @@ struct AuditAndReportsAdminView: View {
             Image(systemName: "doc.text.magnifyingglass")
                 .font(.system(size: 60))
                 .foregroundColor(MiranTheme.emerald)
-            Text("سجلات التدقيق والمراقبة العامة (Audit Trail)")
+            Text("سجلات التدقيق والرقابة الوطنية (Audit Trail)")
                 .font(.title3.bold())
                 .foregroundColor(.white)
-            Text("جميع عمليات النظام الحساسة وتحديثات الصلاحيات والجهات موثقة بختم زمني مشفر.")
+            Text("جميع عمليات إضافة الحسابات، تعديل الصلاحيات، واعتماد التجمعات موثقة بختم زمني مشفر.")
                 .font(.caption)
                 .foregroundColor(MiranTheme.subtext)
                 .multilineTextAlignment(.center)
@@ -239,6 +234,6 @@ struct AuditAndReportsAdminView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(MiranTheme.background.ignoresSafeArea())
-        .navigationTitle("سجل العمليات والتقارير")
+        .navigationTitle("سجل العمليات والتدقيق")
     }
 }
