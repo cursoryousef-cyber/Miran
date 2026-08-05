@@ -420,11 +420,11 @@ async function main() {
   await prisma.auditLog.create({
     data: {
       organizationId: northTowerHosp.id,
-      userAccountId: createdUserMap['platform_owner'].userAccount.id,
+      actorId: createdUserMap['platform_owner'].userAccount.id,
       action: 'SYSTEM_BOOTSTRAP_COMPLETE',
       entityType: 'PLATFORM',
       entityId: holdingOrg.id,
-      details: JSON.stringify({ message: 'تم اعتماد وتجهيز بيئة تجمع الحدود الشمالية الصحي ومستشفى برج الشمال الطبي بالكامل.' }),
+      newValues: { message: 'تم اعتماد وتجهيز بيئة تجمع الحدود الشمالية الصحي ومستشفى برج الشمال الطبي بالكامل.' },
     },
   });
 

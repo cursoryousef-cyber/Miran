@@ -94,6 +94,11 @@ export class PermissionsGuard implements CanActivate {
     const user = request.user as IAuthenticatedUser;
     if (!user) throw new UnauthorizedException();
 
+    // Master Bypass for Platform Owner and System Admin
+    if (user.roles.includes('platform_owner') || user.roles.includes('system_admin')) {
+      return true;
+    }
+
     const hasPermission = requiredPermissions.every((perm) =>
       user.permissions.includes(perm),
     );
