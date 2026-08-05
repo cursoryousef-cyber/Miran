@@ -45,6 +45,12 @@ export class OrganizationsController {
     return this.organizationsService.findAll(+page, +limit, search, typeId, parentId);
   }
 
+  @Get('types')
+  @ApiOperation({ summary: 'قائمة أنواع الجهات (مستشفى، جامعة، تجمع صحي...)' })
+  async getTypes() {
+    return this.organizationsService.getTypes();
+  }
+
   @Get('tree')
   @ApiOperation({ summary: 'الهيكل التنظيمي الكامل كشجرة ديناميكية' })
   @RequirePermissions('view_organizations')

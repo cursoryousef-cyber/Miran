@@ -165,4 +165,10 @@ export class OrganizationsService {
 
     return roots;
   }
+
+  async getTypes() {
+    return this.prisma.organizationType.findMany({
+      orderBy: { hierarchyLevel: 'desc' },
+    });
+  }
 }
