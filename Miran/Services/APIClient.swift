@@ -127,6 +127,49 @@ final class APIClient {
         }
     }
 
+    // MARK: - Void Request Method (for DELETE / PUT without JSON response)
+    func requestVoid(
+        endpoint: String,
+        method: String = "DELETE",
+        body: (any Encodable)? = nil,
+        requiresAuth: Bool = true
+    ) async throws {
+        let cleanEndpoint = endpoint.hasPrefix("/") ? endpoint : "/\(endpoint)"
+        guard let url = URL(string: "\(baseURL)\(cleanEndpoint)") else {
+            throw APIError.invalidURL
+        }
+
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        if requiresAuth, let token = KeychainService.shared.get(forKey: "access_token") {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        if let body = body {
+            req.httpBody = try? JSONEncoder().encode(body)
+        }
+
+        let (_, response) = try await session.data(for: req)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse(statusCode: 500)
+        }
+
+        if httpResponse.statusCode == 401 && requiresAuth {
+            let refreshed = await attemptTokenRefresh()
+            if refreshed {
+                return try await requestVoid(endpoint: endpoint, method: method, body: body, requiresAuth: requiresAuth)
+            } else {
+                throw APIError.unauthorized
+            }
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.invalidResponse(statusCode: httpResponse.statusCode)
+        }
+    }
+
     // MARK: - Token Refresh
     private func attemptTokenRefresh() async -> Bool {
         guard let refreshToken = KeychainService.shared.get(forKey: "refresh_token") else {

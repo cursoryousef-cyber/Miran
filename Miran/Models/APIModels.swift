@@ -275,7 +275,74 @@ struct CompetencyPortfolioResponse: Codable {
     let data: [CompetencyProgressModel]
 }
 
+// MARK: - Audit Log
+struct AuditLogModel: Codable, Identifiable {
+    let id: String
+    let action: String
+    let entityType: String
+    let entityId: String?
+    let userEmail: String?
+    let userRole: String?
+    let ipAddress: String?
+    let timestamp: String
+}
+
+// MARK: - Organization Create & Update DTOs
+struct CreateOrganizationRequest: Encodable {
+    let code: String
+    let nameAr: String
+    let nameEn: String?
+    let type: String
+    let cityAr: String?
+    let regionAr: String?
+    let contactEmail: String?
+    let contactPhone: String?
+}
+
+struct UpdateOrganizationRequest: Encodable {
+    let nameAr: String?
+    let nameEn: String?
+    let status: String?
+    let cityAr: String?
+    let regionAr: String?
+    let contactEmail: String?
+    let contactPhone: String?
+}
+
+// MARK: - Department Create DTO
+struct CreateDepartmentRequest: Encodable {
+    let nameAr: String
+    let nameEn: String?
+    let code: String?
+    let capacity: Int
+    let roundLocation: String?
+    let roundTime: String?
+    let meetingRoom: String?
+}
+
+// MARK: - User Account Create DTO
+struct CreateUserAccountRequest: Encodable {
+    let nationalId: String
+    let nameAr: String
+    let email: String
+    let phone: String
+    let roleCode: String
+    let organizationId: String
+}
+
+// MARK: - Clinical Case Create DTO
+struct CreateClinicalCaseRequest: Encodable {
+    let diagnosis: String
+    let specialtyAr: String?
+    let complexity: String
+    let participationLevel: String
+    let procedureId: String?
+    let departmentId: String?
+    let notes: String?
+}
+
 // MARK: - API Response Wrapper
 struct APIListResponse<T: Codable>: Codable {
     let data: [T]
 }
+

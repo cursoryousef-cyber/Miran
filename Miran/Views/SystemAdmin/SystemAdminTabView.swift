@@ -196,95 +196,14 @@ struct AdminActionRow: View {
 }
 
 struct OrganizationsAdminView: View {
-    @EnvironmentObject var store: AppStore
-
     var body: some View {
-        List {
-            Section(header: Text("الأقسام والمستشفيات المعتمدة").foregroundColor(MiranTheme.emerald)) {
-                ForEach(store.departments, id: \.id) { dept in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(dept.name)
-                            .font(.body.weight(.bold))
-                            .foregroundColor(.white)
-                        HStack {
-                            Text("السعة: \(dept.capacity) متدرب")
-                                .font(.caption.monospaced())
-                                .foregroundColor(MiranTheme.emerald)
-                            Spacer()
-                            Text(dept.roundLocation)
-                                .font(.caption2)
-                                .foregroundColor(MiranTheme.subtext)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                    .listRowBackground(Color.white.opacity(0.04))
-                }
-            }
-        }
-        .scrollContentBackground(.hidden)
-        .background(MiranTheme.background.ignoresSafeArea())
-        .navigationTitle("إدارة الأقسام والمستشفيات")
+        OrganizationsManagementFullView()
     }
 }
 
 struct UsersAndRolesAdminView: View {
-    @EnvironmentObject var store: AppStore
-
     var body: some View {
-        List {
-            Section(header: Text("قائمة المدربين المشرفين").foregroundColor(MiranTheme.teal)) {
-                ForEach(store.trainers, id: \.id) { trn in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(trn.nameAr)
-                                .font(.body.weight(.bold))
-                                .foregroundColor(.white)
-                            Text(trn.title)
-                                .font(.caption)
-                                .foregroundColor(MiranTheme.subtext)
-                        }
-                        Spacer()
-                        Text("مدرب")
-                            .font(.caption2.weight(.bold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(MiranTheme.emerald.opacity(0.2))
-                            .foregroundColor(MiranTheme.emerald)
-                            .cornerRadius(6)
-                    }
-                    .padding(.vertical, 4)
-                    .listRowBackground(Color.white.opacity(0.04))
-                }
-            }
-
-            Section(header: Text("قائمة المتدربين المسجلين").foregroundColor(MiranTheme.emerald)) {
-                ForEach(store.trainees, id: \.id) { trn in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(trn.nameAr)
-                                .font(.body.weight(.bold))
-                                .foregroundColor(.white)
-                            Text(trn.email)
-                                .font(.caption.monospaced())
-                                .foregroundColor(MiranTheme.subtext)
-                        }
-                        Spacer()
-                        Text(trn.level.title)
-                            .font(.caption2.weight(.bold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.blue.opacity(0.2))
-                            .foregroundColor(.blue)
-                            .cornerRadius(6)
-                    }
-                    .padding(.vertical, 4)
-                    .listRowBackground(Color.white.opacity(0.04))
-                }
-            }
-        }
-        .scrollContentBackground(.hidden)
-        .background(MiranTheme.background.ignoresSafeArea())
-        .navigationTitle("إدارة الحسابات والأدوار")
+        UsersAndRolesManagementFullView()
     }
 }
 
