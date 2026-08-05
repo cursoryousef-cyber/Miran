@@ -14,14 +14,6 @@ workflows:
       xcode: latest
       cocoapods: default
     scripts:
-      - name: Workflow & Environment Verification
-        script: |
-          echo "Workflow commit:"
-          git rev-parse HEAD
-
-          echo "Workflow file checksum:"
-          shasum codemagic.yaml
-
       - name: Initialize & Resolve Swift Packages
         script: |
           echo "================ Resolving Dependencies ================"

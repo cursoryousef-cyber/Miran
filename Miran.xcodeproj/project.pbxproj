@@ -48,6 +48,10 @@
 		A1B2C3D410000038 /* DigitalIDCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000038 /* DigitalIDCardView.swift */; };
 		A1B2C3D410000039 /* JoiningDeclarationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000039 /* JoiningDeclarationSheet.swift */; };
 		A1B2C3D410000040 /* OrgMembersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000040 /* OrgMembersView.swift */; };
+		A1B2C3D410000101 /* SystemAdminTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000101 /* SystemAdminTabView.swift */; };
+		A1B2C3D410000102 /* OrgManagerTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000102 /* OrgManagerTabView.swift */; };
+		A1B2C3D410000103 /* AcademicSupervisorTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000103 /* AcademicSupervisorTabView.swift */; };
+		A1B2C3D410000104 /* TrainingSupervisorTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000104 /* TrainingSupervisorTabView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -93,6 +97,10 @@
 		A1B2C3D420000038 /* DigitalIDCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalIDCardView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000039 /* JoiningDeclarationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoiningDeclarationSheet.swift; sourceTree = "<group>"; };
 		A1B2C3D420000040 /* OrgMembersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgMembersView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000101 /* SystemAdminTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/SystemAdmin/SystemAdminTabView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000102 /* OrgManagerTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/OrgManager/OrgManagerTabView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000103 /* AcademicSupervisorTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Academic/AcademicSupervisorTabView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000104 /* TrainingSupervisorTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/TrainingSupervisor/TrainingSupervisorTabView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -371,6 +379,10 @@
 				A1B2C3D410000038 /* DigitalIDCardView.swift in Sources */,
 				A1B2C3D410000039 /* JoiningDeclarationSheet.swift in Sources */,
 				A1B2C3D410000040 /* OrgMembersView.swift in Sources */,
+				A1B2C3D410000101 /* SystemAdminTabView.swift in Sources */,
+				A1B2C3D410000102 /* OrgManagerTabView.swift in Sources */,
+				A1B2C3D410000103 /* AcademicSupervisorTabView.swift in Sources */,
+				A1B2C3D410000104 /* TrainingSupervisorTabView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

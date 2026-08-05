@@ -71,11 +71,11 @@ struct MiranCard: ViewModifier {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: MiranTheme.corner, style: .continuous)
-                    .fill(Color(.secondarySystemGroupedBackground))
+                    .fill(Color.white.opacity(0.05))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: MiranTheme.corner, style: .continuous)
-                    .strokeBorder(tint.opacity(0.25), lineWidth: tint == .clear ? 0 : 1)
+                    .strokeBorder(tint == .clear ? Color.white.opacity(0.08) : tint.opacity(0.3), lineWidth: 1)
             )
     }
 }

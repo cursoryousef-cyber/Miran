@@ -1,0 +1,61 @@
+//
+//  TrainingSupervisorTabView.swift
+//  Miran
+//
+//  SwiftUI Interface for Training Supervisor (مشرف التدريب).
+//  مخصص لإدارة التدريب والمدربين والجداول وتوزيع المتدربين ومركز النداءات الميدانية.
+//  محجوب منه: إعدادات المنصة الكلية، إدارة التجمعات والجامعات.
+//
+
+import SwiftUI
+
+struct TrainingSupervisorTabView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @State private var selectedTab = 0
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            // 1. متابعة التدريب والمدربين والمتدربين
+            FieldTrainingManagementView()
+                .tabItem {
+                    Label("إدارة التدريب", systemImage: "person.2.badge.gearshape.fill")
+                }
+                .tag(0)
+
+            // 2. الجداول والتوزيع
+            AssignmentView()
+                .tabItem {
+                    Label("الجداول والتوزيع", systemImage: "calendar.badge.clock")
+                }
+                .tag(1)
+
+            // 3. مركز نداءات التدريب (إدارة النداءات الميدانية)
+            CallCenterView()
+                .tabItem {
+                    Label("مركز النداءات", systemImage: "bolt.heart.fill")
+                }
+                .tag(2)
+
+            // 4. تقارير التدريب والانضباط الميداني
+            FieldTrainingReportsView()
+                .tabItem {
+                    Label("تقارير التدريب", systemImage: "chart.bar.doc.horizontal.fill")
+                }
+                .tag(3)
+        }
+        .tint(MiranTheme.emerald)
+    }
+}
+
+// MARK: - Subviews for Training Supervisor
+struct FieldTrainingManagementView: View {
+    var body: some View {
+        TrainerHomeView()
+    }
+}
+
+struct FieldTrainingReportsView: View {
+    var body: some View {
+        ReportsView()
+    }
+}

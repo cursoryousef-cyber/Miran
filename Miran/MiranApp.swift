@@ -54,16 +54,32 @@ struct RBACMainView: View {
         Group {
             if let user = user {
                 switch user.primaryRole {
-                case "platform_owner", "org_manager":
+                case "platform_owner", "system_admin":
+                    // 1. مدير المنصة / مدير النظام: واجهة حصرية لـ Platform Management فقط بدون نداءات ميدانية
+                    SystemAdminTabView()
+
+                case "org_manager":
+                    // 2. مدير الجهة: إدارة أعضاء الجهة والبرامج والدفعات والموافقات والتقارير
                     OrgManagerTabView()
+
                 case "academic_supervisor":
-                    AcademicTabView()
+                    // 3. المشرف الأكاديمي: إدارة العملية الأكاديمية والمتابعة والـ Logbook والاعتمادات
+                    AcademicSupervisorTabView()
+
+                case "training_supervisor", "training_manager":
+                    // 4. مشرف التدريب: إدارة التدريب الميداني والجداول ومركز النداءات
+                    TrainingSupervisorTabView()
+
                 case "trainer":
+                    // 5. المدرب: المتدربين، التقييم، الأنشطة، والنداءات الميدانية
                     TrainerTabView()
+
                 case "trainee":
+                    // 6. المتدرب: جدولي، حضوري، السجل السريري، واستقبال النداءات فقط
                     TraineeTabView()
+
                 default:
-                    // دور غير معروف — عرض بيانات أساسية فقط
+                    // دور غير معروف — عرض بيانات أساسية وتنبيه التواصل
                     UnknownRoleView(roleCode: user.primaryRole)
                 }
             } else {
@@ -111,29 +127,6 @@ struct RBACMainView: View {
                     await store.fetchAllProductionData()
                 }
             }
-        }
-    }
-}
-
-// MARK: - Org Manager Tab View (مدير الجهة + Platform Owner)
-struct OrgManagerTabView: View {
-    @EnvironmentObject var authViewModel: AuthViewModel
-    @State private var selectedTab = 0
-
-    var body: some View {
-        TabView(selection: $selectedTab) {
-            AcademicTabView()
-                .tabItem { Label("لوحة الإدارة", systemImage: "chart.bar.doc.horizontal") }
-                .tag(0)
-
-            TrainerTabView()
-                .tabItem { Label("النداءات", systemImage: "bolt.heart") }
-                .tag(1)
-
-            // لوحة إدارة الأعضاء — مدير الجهة فقط
-            OrgMembersView()
-                .tabItem { Label("إدارة الأعضاء", systemImage: "person.3.fill") }
-                .tag(2)
         }
     }
 }

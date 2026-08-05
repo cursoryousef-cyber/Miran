@@ -20,27 +20,52 @@ import {
   BookOpen,
 } from 'lucide-react';
 
-const navigationItems = [
-  { name: 'لوحة التحكم الرئيسيّة', path: '/', icon: LayoutDashboard },
-  { name: 'السجل السريري (Clinical Logbook)', path: '/logbook', icon: BookOpen },
-  { name: 'مراقبة سلامة الخدمات (Health)', path: '/health-monitor', icon: Activity },
-  { name: 'الجهات والتجمعات الصحية', path: '/organizations', icon: Building2 },
-  { name: 'معالج إنشاء الجهات آلياً', path: '/organizations/wizard', icon: Wand2 },
-  { name: 'اتفاقيات الشراكة والتدريب', path: '/affiliations', icon: FolderGit2 },
-  { name: 'الدفعات الأكاديمية (Intakes)', path: '/intakes', icon: GraduationCap },
-  { name: 'إدارة الأشخاص والحسابات', path: '/users', icon: Users },
-  { name: 'إدارة أعضاء الجهة (RBAC)', path: '/org-members', icon: UserCog },
-  { name: 'إدارة الأدوار والصلاحيات', path: '/roles-management', icon: Key },
-  { name: 'سجلات التدقيق والمراقبة', path: '/audit-logs', icon: Shield },
-  { name: 'الإقرارات والتعهدات الوطنية', path: '/declarations', icon: FileSignature },
-  { name: 'محرك سير العمل (Workflows)', path: '/workflows', icon: GitMerge },
-  { name: 'سياسات الوصول (Policy Engine)', path: '/policies', icon: ShieldCheck },
-  { name: 'مركز الربط والـ Webhooks', path: '/integrations', icon: Zap },
-  { name: 'خدمة التقارير والتحليلات', path: '/reports', icon: FileSpreadsheet },
-  { name: 'إعدادات المنصة والترخيص', path: '/settings', icon: Settings },
+interface NavigationItem {
+  name: string;
+  path: string;
+  icon: any;
+  allowedRoles: string[];
+}
+
+const navigationItems: NavigationItem[] = [
+  { name: 'لوحة التحكم الرئيسيّة', path: '/', icon: LayoutDashboard, allowedRoles: ['platform_owner', 'system_admin', 'org_manager', 'academic_supervisor', 'training_supervisor', 'trainer', 'trainee'] },
+  { name: 'السجل السريري (Logbook)', path: '/logbook', icon: BookOpen, allowedRoles: ['academic_supervisor', 'training_supervisor', 'trainer', 'trainee', 'platform_owner', 'org_manager'] },
+  { name: 'مراقبة سلامة الخدمات (Health)', path: '/health-monitor', icon: Activity, allowedRoles: ['platform_owner', 'system_admin'] },
+  { name: 'الجهات والتجمعات الصحية', path: '/organizations', icon: Building2, allowedRoles: ['platform_owner', 'system_admin'] },
+  { name: 'معالج إنشاء الجهات آلياً', path: '/organizations/wizard', icon: Wand2, allowedRoles: ['platform_owner', 'system_admin'] },
+  { name: 'اتفاقيات الشراكة والتدريب', path: '/affiliations', icon: FolderGit2, allowedRoles: ['platform_owner', 'system_admin', 'org_manager'] },
+  { name: 'الدفعات الأكاديمية (Intakes)', path: '/intakes', icon: GraduationCap, allowedRoles: ['platform_owner', 'system_admin', 'org_manager', 'academic_supervisor'] },
+  { name: 'إدارة الأشخاص والحسابات', path: '/users', icon: Users, allowedRoles: ['platform_owner', 'system_admin'] },
+  { name: 'إدارة أعضاء الجهة (RBAC)', path: '/org-members', icon: UserCog, allowedRoles: ['platform_owner', 'system_admin', 'org_manager'] },
+  { name: 'إدارة الأدوار والصلاحيات', path: '/roles-management', icon: Key, allowedRoles: ['platform_owner', 'system_admin'] },
+  { name: 'سجلات التدقيق والمراقبة', path: '/audit-logs', icon: Shield, allowedRoles: ['platform_owner', 'system_admin'] },
+  { name: 'الإقرارات والتعهدات الوطنية', path: '/declarations', icon: FileSignature, allowedRoles: ['platform_owner', 'system_admin', 'org_manager', 'academic_supervisor'] },
+  { name: 'محرك سير العمل (Workflows)', path: '/workflows', icon: GitMerge, allowedRoles: ['platform_owner', 'system_admin'] },
+  { name: 'سياسات الوصول (Policy Engine)', path: '/policies', icon: ShieldCheck, allowedRoles: ['platform_owner', 'system_admin'] },
+  { name: 'مركز الربط والـ Webhooks', path: '/integrations', icon: Zap, allowedRoles: ['platform_owner', 'system_admin'] },
+  { name: 'خدمة التقارير والتحليلات', path: '/reports', icon: FileSpreadsheet, allowedRoles: ['platform_owner', 'system_admin', 'org_manager', 'academic_supervisor', 'training_supervisor'] },
+  { name: 'إعدادات المنصة والترخيص', path: '/settings', icon: Settings, allowedRoles: ['platform_owner', 'system_admin'] },
 ];
 
 export const Sidebar: React.FC = () => {
+  // Extract user role from stored user profile or default to platform_owner
+  const storedUserRaw = localStorage.getItem('miran_user_profile');
+  let userRole = 'platform_owner';
+  if (storedUserRaw) {
+    try {
+      const parsed = JSON.parse(storedUserRaw);
+      if (parsed?.primaryRole) {
+        userRole = parsed.primaryRole;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  const visibleItems = navigationItems.filter((item) =>
+    item.allowedRoles.includes(userRole)
+  );
+
   return (
     <aside style={{
       width: '280px',
@@ -72,9 +97,9 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Navigation Menu */}
+      {/* Navigation Menu Filtered by Role */}
       <nav style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '20px', flex: 1 }}>
-        {navigationItems.map((item) => {
+        {visibleItems.map((item) => {
           const Icon = item.icon;
           return (
             <NavLink
