@@ -55,6 +55,7 @@
 		A1B2C3D410000105 /* OrganizationsManagementFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000105 /* OrganizationsManagementFullView.swift */; };
 		A1B2C3D410000106 /* UsersAndRolesManagementFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000106 /* UsersAndRolesManagementFullView.swift */; };
 		A1B2C3D410000107 /* ClinicalLogbookManagementFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000107 /* ClinicalLogbookManagementFullView.swift */; };
+		A1B2C3D410000108 /* UserDetailRBACView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000108 /* UserDetailRBACView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -107,6 +108,7 @@
 		A1B2C3D420000105 /* OrganizationsManagementFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/SystemAdmin/OrganizationsManagementFullView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000106 /* UsersAndRolesManagementFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/SystemAdmin/UsersAndRolesManagementFullView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000107 /* ClinicalLogbookManagementFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Logbook/ClinicalLogbookManagementFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000108 /* UserDetailRBACView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/SystemAdmin/UserDetailRBACView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -392,6 +394,7 @@
 				A1B2C3D410000105 /* OrganizationsManagementFullView.swift in Sources */,
 				A1B2C3D410000106 /* UsersAndRolesManagementFullView.swift in Sources */,
 				A1B2C3D410000107 /* ClinicalLogbookManagementFullView.swift in Sources */,
+				A1B2C3D410000108 /* UserDetailRBACView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -214,6 +214,14 @@ async function main() {
       orgId: holdingOrg.id,
     },
     {
+      natId: '1000000099',
+      nameAr: 'مدير النظام التنفيذي',
+      email: 'admin@miran.health',
+      username: 'sysadmin',
+      roleCode: 'system_admin',
+      orgId: holdingOrg.id,
+    },
+    {
       natId: '1000000001',
       nameAr: 'مدير تجمع الحدود الشمالية',
       email: 'cluster.manager@miran.health',
