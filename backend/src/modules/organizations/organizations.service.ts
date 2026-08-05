@@ -168,7 +168,7 @@ export class OrganizationsService {
 
   async getTypes() {
     return this.prisma.organizationType.findMany({
-      orderBy: { hierarchyLevel: 'desc' },
+      orderBy: { sortOrder: 'asc' },
     });
   }
 }
