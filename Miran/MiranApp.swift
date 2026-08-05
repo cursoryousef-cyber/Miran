@@ -58,8 +58,8 @@ struct RBACMainView: View {
                     // 1. مدير المنصة / مدير النظام: واجهة حصرية لـ Platform Management فقط بدون نداءات ميدانية
                     SystemAdminTabView()
 
-                case "org_manager":
-                    // 2. مدير الجهة: إدارة أعضاء الجهة والبرامج والدفعات والموافقات والتقارير
+                case "org_manager", "cluster_manager":
+                    // 2. مدير الجهة والتجمع الصحي: إدارة أعضاء الجهة والبرامج والدفعات والموافقات والتقارير
                     OrgManagerTabView()
 
                 case "academic_supervisor":
