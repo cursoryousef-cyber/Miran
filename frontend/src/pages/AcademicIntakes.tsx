@@ -78,11 +78,14 @@ export const AcademicIntakes: React.FC = () => {
 
   const submitRequestMutation = useMutation({
     mutationFn: async () => {
+      const sourceOrgId = user?.activeOrganization?.id || 'a0000000-0000-0000-0000-000000000004'; // Northern Borders University UUID
+      const targetOrgId = targetClusterId || orgsData?.[0]?.id || 'a0000000-0000-0000-0000-000000000003'; // Cluster UUID
       return apiClient.post('/organization-affiliations', {
-        nameAr: requestTitle,
+        sourceOrgId,
+        targetOrgId,
         affiliationType: 'internship_request',
+        nameAr: requestTitle,
         agreementRef: `REQ-${Date.now().toString().slice(-6)}`,
-        targetOrganizationId: targetClusterId || orgsData?.[0]?.id,
         notes: `طلب توزيع ${studentCount} طالب امتياز على مستشفيات التجمع`,
       });
     },

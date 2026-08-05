@@ -29,7 +29,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
         if (Array.isArray(resp.message)) {
           errors = { validation: resp.message as string[] };
-          message = 'بيانات غير صالحة';
+          message = resp.message as any;
         }
       }
     } else if (exception instanceof Error) {

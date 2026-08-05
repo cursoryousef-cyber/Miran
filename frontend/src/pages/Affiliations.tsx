@@ -45,9 +45,13 @@ export const Affiliations: React.FC = () => {
 
   const allocateMutation = useMutation({
     mutationFn: async () => {
+      const sourceOrgId = user?.activeOrganization?.id || 'a0000000-0000-0000-0000-000000000003'; // Cluster UUID
+      const targetOrgId = selectedReq?.sourceOrgId || 'a0000000-0000-0000-0000-000000000005'; // North Tower Hosp UUID
       return apiClient.post('/organization-affiliations', {
-        nameAr: `اعتماد وتوزيع مقاعد: ${selectedReq?.nameAr || 'طلب الامتياز'}`,
+        sourceOrgId,
+        targetOrgId,
         affiliationType: 'cluster_allocation',
+        nameAr: `اعتماد وتوزيع مقاعد: ${selectedReq?.nameAr || 'طلب الامتياز'}`,
         agreementRef: `ALLOC-${Date.now().toString().slice(-6)}`,
         notes: `توزيع المقاعد: برج الشمال (${northTowerSeats})، رفحاء (${rafhaSeats})، طريف (${turaifSeats})`,
       });
