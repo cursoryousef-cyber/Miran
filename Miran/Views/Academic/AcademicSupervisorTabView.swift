@@ -15,10 +15,10 @@ struct AcademicSupervisorTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // 1. الدفعات الأكاديمية
-            AcademicIntakesView()
+            // 1. لوحة قيادة المشرف الأكاديمي
+            AcademicSupervisorDashboardFullView()
                 .tabItem {
-                    Label("الدفعات", systemImage: "graduationcap.fill")
+                    Label("لوحة التحكم", systemImage: "graduationcap.circle.fill")
                 }
                 .tag(0)
 

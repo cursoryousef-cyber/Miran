@@ -341,8 +341,53 @@ struct CreateClinicalCaseRequest: Encodable {
     let notes: String?
 }
 
+// MARK: - Clinical & Academic Task
+struct TaskModel: Codable, Identifiable {
+    let id: String
+    let titleAr: String
+    let descriptionAr: String?
+    let dueDate: String
+    let departmentName: String?
+    let competencyName: String?
+    let status: String // pending, submitted, approved, rejected
+    let assignedTraineeId: String?
+}
+
+// MARK: - Auto Rotation Plan
+struct AutoRotationPlanModel: Codable, Identifiable {
+    let id: String
+    let programName: String
+    let totalMonths: Int
+    let rotationsList: [RotationSlot]
+}
+
+struct RotationSlot: Codable, Identifiable {
+    var id: String { departmentCode }
+    let departmentName: String
+    let departmentCode: String
+    let durationMonths: Int
+}
+
+// MARK: - Comprehensive System Dashboard Metrics
+struct DashboardMetricsModel: Codable {
+    let totalOrganizations: Int
+    let totalUniversities: Int
+    let totalHospitals: Int
+    let totalDepartments: Int
+    let totalPrograms: Int
+    let totalIntakes: Int
+    let totalTrainees: Int
+    let totalTrainers: Int
+    let totalSupervisors: Int
+    let totalUsers: Int
+    let totalCalls: Int
+    let totalClinicalCases: Int
+    let totalApprovedLogbooks: Int
+}
+
 // MARK: - API Response Wrapper
 struct APIListResponse<T: Codable>: Codable {
     let data: [T]
 }
+
 

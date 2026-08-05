@@ -56,6 +56,11 @@
 		A1B2C3D410000106 /* UsersAndRolesManagementFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000106 /* UsersAndRolesManagementFullView.swift */; };
 		A1B2C3D410000107 /* ClinicalLogbookManagementFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000107 /* ClinicalLogbookManagementFullView.swift */; };
 		A1B2C3D410000108 /* UserDetailRBACView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000108 /* UserDetailRBACView.swift */; };
+		A1B2C3D410000109 /* OrgManagerDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000109 /* OrgManagerDashboardFullView.swift */; };
+		A1B2C3D410000110 /* AcademicSupervisorDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000110 /* AcademicSupervisorDashboardFullView.swift */; };
+		A1B2C3D410000111 /* TrainingSupervisorDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000111 /* TrainingSupervisorDashboardFullView.swift */; };
+		A1B2C3D410000112 /* TrainerDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000112 /* TrainerDashboardFullView.swift */; };
+		A1B2C3D410000113 /* TraineeDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000113 /* TraineeDashboardFullView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -109,6 +114,11 @@
 		A1B2C3D420000106 /* UsersAndRolesManagementFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/SystemAdmin/UsersAndRolesManagementFullView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000107 /* ClinicalLogbookManagementFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Logbook/ClinicalLogbookManagementFullView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000108 /* UserDetailRBACView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/SystemAdmin/UserDetailRBACView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000109 /* OrgManagerDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/OrgManager/OrgManagerDashboardFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000110 /* AcademicSupervisorDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Academic/AcademicSupervisorDashboardFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000111 /* TrainingSupervisorDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/TrainingSupervisor/TrainingSupervisorDashboardFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000112 /* TrainerDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Trainer/TrainerDashboardFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000113 /* TraineeDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Trainee/TraineeDashboardFullView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -395,6 +405,11 @@
 				A1B2C3D410000106 /* UsersAndRolesManagementFullView.swift in Sources */,
 				A1B2C3D410000107 /* ClinicalLogbookManagementFullView.swift in Sources */,
 				A1B2C3D410000108 /* UserDetailRBACView.swift in Sources */,
+				A1B2C3D410000109 /* OrgManagerDashboardFullView.swift in Sources */,
+				A1B2C3D410000110 /* AcademicSupervisorDashboardFullView.swift in Sources */,
+				A1B2C3D410000111 /* TrainingSupervisorDashboardFullView.swift in Sources */,
+				A1B2C3D410000112 /* TrainerDashboardFullView.swift in Sources */,
+				A1B2C3D410000113 /* TraineeDashboardFullView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

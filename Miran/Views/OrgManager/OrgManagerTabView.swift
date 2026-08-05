@@ -16,10 +16,10 @@ struct OrgManagerTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // 1. أعضاء الجهة (مدربين، متدربين، ومشرفين)
-            OrgMembersView()
+            // 1. لوحة قيادة مدير الجهة والتجمع
+            OrgManagerDashboardFullView()
                 .tabItem {
-                    Label("أعضاء الجهة", systemImage: "person.3.fill")
+                    Label("لوحة التحكم", systemImage: "building.2.crop.circle.fill")
                 }
                 .tag(0)
 

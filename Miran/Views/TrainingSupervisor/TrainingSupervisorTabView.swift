@@ -15,10 +15,10 @@ struct TrainingSupervisorTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // 1. متابعة التدريب والمدربين والمتدربين
-            FieldTrainingManagementView()
+            // 1. لوحة قيادة مشرف التدريب الميداني
+            TrainingSupervisorDashboardFullView()
                 .tabItem {
-                    Label("إدارة التدريب", systemImage: "person.2.badge.gearshape.fill")
+                    Label("لوحة التحكم", systemImage: "cross.case.circle.fill")
                 }
                 .tag(0)
 
