@@ -18,7 +18,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 @ApiTags('Organization Affiliations (الاتفاقيات بين الجهات)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('organization-affiliations')
 export class OrganizationAffiliationsController {
   constructor(private affiliationsService: OrganizationAffiliationsService) {}

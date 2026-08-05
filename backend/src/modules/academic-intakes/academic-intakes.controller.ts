@@ -17,7 +17,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 @ApiTags('Academic Intakes (إدارة الدفعات الأكاديمية والطلاب)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('academic-intakes')
 export class AcademicIntakesController {
   constructor(private intakesService: AcademicIntakesService) {}
