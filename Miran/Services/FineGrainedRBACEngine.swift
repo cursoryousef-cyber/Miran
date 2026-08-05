@@ -93,3 +93,101 @@ final class FineGrainedRBACEngine {
         }
     }
 }
+
+// MARK: - RBAC Permission Engine for UI Conditional Render
+enum RBACAction {
+    case create
+    case read
+    case update
+    case delete
+    case details
+    case approve
+    case export
+}
+
+enum RBACScope {
+    case organizations
+    case clusters
+    case hospitals
+    case universities
+    case colleges
+    case departments
+    case programs
+    case intakes
+    case agreements
+    case users
+    case roles
+    case permissions
+    case workflow
+    case settings
+    case audit
+    case students
+    case assignments
+    case rotations
+    case schedules
+    case trainers
+    case tasks
+    case notes
+    case evaluations
+    case competencies
+    case logbook
+    case procedures
+    case completedPrograms
+    case finalResults
+}
+
+struct RBACPermissionEngine {
+    static func hasPermission(roles: [UserRole], action: RBACAction, scope: RBACScope) -> Bool {
+        let roleStrings = roles.map { $0.rawValue }
+        if roleStrings.contains("platform_owner") || roleStrings.contains("system_admin") || roleStrings.contains("holding_administrator") {
+            if scope == .audit && action == .delete { return false } // Audit is immutable
+            return true
+        }
+
+        if roleStrings.contains("university_administrator") || roleStrings.contains("academic_affairs") {
+            if [.students, .intakes, .programs, .agreements].contains(scope) {
+                return [.create, .read, .update, .delete, .details].contains(action)
+            }
+            return action == .read
+        }
+
+        if roleStrings.contains("cluster_administrator") || roleStrings.contains("training_director") {
+            if [.assignments, .hospitals, .clusters, .intakes, .agreements].contains(scope) {
+                return [.create, .read, .update, .delete, .details].contains(action)
+            }
+            return action == .read
+        }
+
+        if roleStrings.contains("hospital_administrator") || roleStrings.contains("department_head") {
+            if [.rotations, .schedules, .assignments, .trainers, .departments].contains(scope) {
+                return [.create, .read, .update, .delete, .details].contains(action)
+            }
+            return action == .read
+        }
+
+        if roles.contains(.trainer) || roleStrings.contains("trainer") {
+            if [.tasks, .notes, .evaluations, .competencies, .logbook].contains(scope) {
+                if action == .delete { return false }
+                return [.create, .read, .update, .approve, .details].contains(action)
+            }
+            return action == .read
+        }
+
+        if roles.contains(.trainee) || roleStrings.contains("trainee") {
+            if [.logbook, .procedures, .tasks].contains(scope) {
+                if action == .delete { return false }
+                return [.create, .read, .update, .details].contains(action)
+            }
+            return action == .read
+        }
+
+        if roles.contains(.academic) || roleStrings.contains("academic_supervisor") {
+            if [.completedPrograms, .finalResults].contains(scope) {
+                return [.read, .update, .approve, .details].contains(action)
+            }
+            return action == .read
+        }
+
+        return false
+    }
+}

@@ -3,41 +3,21 @@
 //  Miran
 //
 //  SwiftUI Main Interface for System Administrator (مدير المنصة والنظام - Control Center).
-//  Pure Platform Administration (Organizations, Universities, Hospitals, Programs, Users, RBAC, Agreements, Reports, Audit, Settings).
-//  EXCLUDES: Daily Operational screens (Trainees, Rotations, Attendance, Logbook, Live Calls).
+//  Matches Healthcare Internship Platform UI Design System 100% with Dark/Light/System theme switching.
 //
 
 import SwiftUI
 
-// MARK: - Helper Views for System Admin
+// MARK: - Compatibility Helper Views
 struct MetricStatCard: View {
     let title: String
     let count: String
     let icon: String
     let color: Color
+    @Environment(\.colorScheme) var systemColorScheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.headline)
-                    .foregroundColor(color)
-                Spacer()
-                Text(count)
-                    .font(.title2.weight(.bold))
-                    .foregroundColor(.white)
-            }
-            Text(title)
-                .font(.caption.weight(.medium))
-                .foregroundColor(MiranTheme.subtext)
-        }
-        .padding()
-        .background(Color.white.opacity(0.04))
-        .cornerRadius(16)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(color.opacity(0.3), lineWidth: 1)
-        )
+        DynamicMetricCard(title: title, count: count, icon: icon, color: color)
     }
 }
 
@@ -46,38 +26,110 @@ struct AdminActionRow: View {
     let subtitle: String
     let icon: String
     let color: Color
+    @Environment(\.colorScheme) var systemColorScheme
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundColor(color)
-                .frame(width: 40, height: 40)
-                .background(color.opacity(0.15))
-                .clipShape(Circle())
+        DynamicAdminActionRow(title: title, subtitle: subtitle, icon: icon, color: color)
+    }
+}
+struct DynamicMetricCard: View {
+    let title: String
+    let count: String
+    let icon: String
+    let color: Color
+    @Environment(\.colorScheme) var systemColorScheme
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundColor(.white)
-                Text(subtitle)
-                    .font(.caption2)
-                    .foregroundColor(MiranTheme.subtext)
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 12) {
+            HStack {
+                Text(count)
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
+                Spacer()
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(color.opacity(0.15))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: icon)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(color)
+                }
             }
-            Spacer()
-            Image(systemName: "chevron.left")
-                .font(.caption)
-                .foregroundColor(MiranTheme.subtext)
+
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
+                .multilineTextAlignment(.trailing)
         }
-        .padding()
-        .background(Color.white.opacity(0.04))
-        .cornerRadius(14)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .background(MiranTheme.surface(for: systemColorScheme))
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(MiranTheme.border(for: systemColorScheme), lineWidth: 1)
+        )
+        .shadow(
+            color: systemColorScheme == .light ? Color.black.opacity(0.04) : Color.clear,
+            radius: 8, x: 0, y: 2
+        )
     }
 }
 
+// MARK: - Dynamic Action Row
+struct DynamicAdminActionRow: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let color: Color
+    @Environment(\.colorScheme) var systemColorScheme
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
+
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
+            }
+            .multilineTextAlignment(.trailing)
+
+            Spacer()
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(color.opacity(0.15))
+                    .frame(width: 46, height: 46)
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(color)
+            }
+        }
+        .padding(16)
+        .background(MiranTheme.surface(for: systemColorScheme))
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(MiranTheme.border(for: systemColorScheme), lineWidth: 1)
+        )
+        .shadow(
+            color: systemColorScheme == .light ? Color.black.opacity(0.04) : Color.clear,
+            radius: 8, x: 0, y: 2
+        )
+    }
+}
+
+// MARK: - System Admin TabView
 struct SystemAdminTabView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var store: AppStore
+    @Environment(\.colorScheme) var systemColorScheme
     @State private var selectedTab = 0
 
     var body: some View {
@@ -85,122 +137,172 @@ struct SystemAdminTabView: View {
             // 1. مركز التحكم الوطني والإحصائيات الكلية
             SystemAdminDashboardView()
                 .tabItem {
-                    Label("مركز التحكم", systemImage: "chart.bar.fill")
+                    Label("لوحة الإدارة", systemImage: "chart.bar.fill")
                 }
                 .tag(0)
 
-            // 2. إدارة الجهات والجامعات والمستشفيات
+            // 2. إدارة الجهات والأقسام
             OrganizationsAdminView()
                 .tabItem {
-                    Label("الجهات والمستشفيات", systemImage: "building.2.fill")
+                    Label("الجهات والأقسام", systemImage: "building.2.fill")
                 }
                 .tag(1)
 
-            // 3. إدارة المستخدمين والأدوار والصلاحيات
+            // 3. إدارة المستخدمين والصلاحيات
             UsersAndRolesAdminView()
                 .tabItem {
-                    Label("المستخدمين وRBAC", systemImage: "person.3.sequence.fill")
+                    Label("المستخدمين والصلاحيات", systemImage: "person.3.sequence.fill")
                 }
                 .tag(2)
 
-            // 4. سجلات التدقيق والمراقبة العامة
+            // 4. سجلات التدقيق والتقارير
             AuditAndReportsAdminView()
                 .tabItem {
-                    Label("سجلات التدقيق", systemImage: "shield.checkered")
+                    Label("السجلات والتقارير", systemImage: "shield.checkered")
                 }
                 .tag(3)
         }
-        .tint(MiranTheme.emerald)
+        .tint(MiranTheme.primary)
     }
 }
 
-// MARK: - System Admin Control Center View (Purified Control Center)
+// MARK: - System Admin Dashboard View (Matching Image Specification 100%)
 struct SystemAdminDashboardView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var store: AppStore
+    @Environment(\.colorScheme) var systemColorScheme
 
     var body: some View {
         NavigationView {
             ZStack {
-                MiranTheme.background
+                MiranTheme.background(for: systemColorScheme)
                     .ignoresSafeArea()
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        // Control Center Banner
-                        VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .trailing, spacing: 20) {
+                        // Top Header with Theme Switcher Control
+                        VStack(spacing: 16) {
                             HStack {
-                                Text("مركز التحكم الوطني (Control Center)")
-                                    .font(.title2.weight(.bold))
-                                    .foregroundColor(.white)
+                                Button {
+                                    authViewModel.logout()
+                                } label: {
+                                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                                        .font(.system(size: 20, weight: .bold))
+                                        .foregroundColor(MiranTheme.error)
+                                        .padding(10)
+                                        .background(MiranTheme.error.opacity(0.12))
+                                        .clipShape(Circle())
+                                }
+
                                 Spacer()
-                                Image(systemName: "shield.badge.checkmark.fill")
-                                    .font(.system(size: 28))
-                                    .foregroundColor(MiranTheme.emerald)
+
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text("مدير النظام")
+                                        .font(.system(size: 18, weight: .bold))
+                                        .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
+                                }
+
+                                Image(systemName: "gearshape.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
                             }
-                            Text("التحكم الكلي بالمنصة والجهات والجامعات والمستشفيات والـ RBAC وسجلات الرقابة")
-                                .font(.caption)
-                                .foregroundColor(MiranTheme.subtext)
+
+                            // Theme Selector Control (نهاري - النظام - ليلي)
+                            ThemeModePicker()
                         }
                         .padding(.horizontal)
 
-                        // Pure Admin Metrics Grid (10 Core Metrics — No Operational Data)
+                        // Main Title Banner
+                        VStack(alignment: .trailing, spacing: 6) {
+                            Text("إدارة المنصة الوطنية")
+                                .font(.system(size: 22, weight: .black))
+                                .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
+
+                            Text("(System Admin)")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(MiranTheme.primary)
+
+                            Text("التحكم الكامل بالحسابات والجهات والترخيص وسجلات التدقيق")
+                                .font(.system(size: 12))
+                                .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
+                        }
+                        .padding(.horizontal)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+
+                        // 4 Key Stat Cards Grid (Matching Prompt UI image)
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            Group {
-                                MetricStatCard(title: "الجهات والتجمعات الصحية", count: "8", icon: "building.2.crop.circle", color: MiranTheme.emerald)
-                                MetricStatCard(title: "المستشفيات المعتمدة", count: "14", icon: "cross.case.fill", color: .blue)
-                                MetricStatCard(title: "الجامعات والكليات", count: "6", icon: "graduationcap.fill", color: .purple)
-                                MetricStatCard(title: "البرامج التدريبية الوطنية", count: "18", icon: "list.clipboard.fill", color: .orange)
-                                MetricStatCard(title: "اتفاقيات الشراكة العقدية", count: "12", icon: "doc.plaintext.fill", color: MiranTheme.teal)
-                            }
-                            Group {
-                                MetricStatCard(title: "إجمالي حسابات المستخدمين", count: "468", icon: "key.fill", color: .cyan)
-                                MetricStatCard(title: "مدراء التجمعات الصحيّة", count: "12", icon: "person.badge.key.fill", color: .indigo)
-                                MetricStatCard(title: "سجلات التدقيق والمراقبة", count: "3,480", icon: "shield.checkered", color: .pink)
-                                MetricStatCard(title: "حالة سلامة الـ APIs", count: "100%", icon: "activity", color: MiranTheme.emerald)
-                                MetricStatCard(title: "إقرارات الترخيص", count: "24", icon: "checkmark.seal.fill", color: .yellow)
-                            }
+                            DynamicMetricCard(
+                                title: "الأقسام المعتمدة",
+                                count: "8",
+                                icon: "building.columns.fill",
+                                color: MiranTheme.primary
+                            )
+
+                            DynamicMetricCard(
+                                title: "المشاركون في الأنشطة",
+                                count: "140",
+                                icon: "cross.case.fill",
+                                color: MiranTheme.primary
+                            )
+
+                            DynamicMetricCard(
+                                title: "المدربون النشطون",
+                                count: "34",
+                                icon: "person.2.fill",
+                                color: MiranTheme.info(for: systemColorScheme)
+                            )
+
+                            DynamicMetricCard(
+                                title: "الروتيشنات الجارية",
+                                count: "12",
+                                icon: "graduationcap.fill",
+                                color: MiranTheme.accent
+                            )
                         }
                         .padding(.horizontal)
 
-                        // Pure Admin Management Action Rows
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("إدارة وحدات المنصة والتحكم")
-                                .font(.headline.weight(.bold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal)
-
-                            VStack(spacing: 10) {
-                                NavigationLink(destination: OrganizationsAdminView()) {
-                                    AdminActionRow(title: "إدارة التجمعات والجامعات والمستشفيات (Organizations)", subtitle: "إضافة وتعديل واعتماد المراكز والجامعات", icon: "building.columns.fill", color: MiranTheme.emerald)
-                                }
-
-                                NavigationLink(destination: UsersAndRolesAdminView()) {
-                                    AdminActionRow(title: "إدارة المستخدمين والأدوار والصلاحيات (Users & RBAC)", subtitle: "إدارة الحسابات والأدوار والـ Policy Claims", icon: "person.badge.key.fill", color: .blue)
-                                }
-
-                                NavigationLink(destination: AuditAndReportsAdminView()) {
-                                    AdminActionRow(title: "سجلات التدقيق والرقابة (Audit Logs)", subtitle: "مراقبة سجل التغييرات والـ Event Ledger المشفر", icon: "shield.checkered", color: .orange)
-                                }
-                            }
+                        // Admin Operations Section Title
+                        Text("العمليات الإدارية الحصرية")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
                             .padding(.horizontal)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+
+                        // 3 Primary Action Rows
+                        VStack(spacing: 12) {
+                            NavigationLink(destination: OrganizationsAdminView()) {
+                                DynamicAdminActionRow(
+                                    title: "إدارة التجمعات الصحية والأقسام",
+                                    subtitle: "إضافة وتعديل وحظر الجهات المعتمدة",
+                                    icon: "building.columns.fill",
+                                    color: MiranTheme.primary
+                                )
+                            }
+
+                            NavigationLink(destination: UsersAndRolesAdminView()) {
+                                DynamicAdminActionRow(
+                                    title: "إدارة الحسابات والأدوار (RBAC)",
+                                    subtitle: "تعيين وتأهيل أدوار المشرفين والمدربين",
+                                    icon: "person.badge.key.fill",
+                                    color: MiranTheme.info(for: systemColorScheme)
+                                )
+                            }
+
+                            NavigationLink(destination: AuditAndReportsAdminView()) {
+                                DynamicAdminActionRow(
+                                    title: "سجل العمليات والتقارير الكلية (Audit Trail)",
+                                    subtitle: "تتبع نشاط الحسابات والأمن بالمنصة",
+                                    icon: "doc.text.magnifyingglass",
+                                    color: MiranTheme.warning
+                                )
+                            }
                         }
+                        .padding(.horizontal)
                     }
                     .padding(.vertical)
                 }
             }
-            .navigationTitle("مدير المنصة والنظام")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        authViewModel.logout()
-                    } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .foregroundColor(.red)
-                    }
-                }
-            }
+            .navigationBarHidden(true)
         }
     }
 }
@@ -218,22 +320,24 @@ struct UsersAndRolesAdminView: View {
 }
 
 struct AuditAndReportsAdminView: View {
+    @Environment(\.colorScheme) var systemColorScheme
+
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "doc.text.magnifyingglass")
                 .font(.system(size: 60))
-                .foregroundColor(MiranTheme.emerald)
+                .foregroundColor(MiranTheme.primary)
             Text("سجلات التدقيق والرقابة الوطنية (Audit Trail)")
                 .font(.title3.bold())
-                .foregroundColor(.white)
+                .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
             Text("جميع عمليات إضافة الحسابات، تعديل الصلاحيات، واعتماد التجمعات موثقة بختم زمني مشفر.")
                 .font(.caption)
-                .foregroundColor(MiranTheme.subtext)
+                .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(MiranTheme.background.ignoresSafeArea())
+        .background(MiranTheme.background(for: systemColorScheme).ignoresSafeArea())
         .navigationTitle("سجل العمليات والتدقيق")
     }
 }

@@ -9,7 +9,7 @@
 import SwiftUI
 
 struct UsersAndRolesManagementFullView: View {
-    @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var store: AppStore
     @State private var accounts: [UserAccountViewModel] = []
     @State private var isLoading = false
     @State private var errorMessage: String? = nil
@@ -20,6 +20,11 @@ struct UsersAndRolesManagementFullView: View {
     @State private var showCreateUserSheet = false
     @State private var accountToDelete: UserAccountViewModel? = nil
     @State private var showDeleteAlert = false
+
+    private var userRoles: [UserRole] {
+        if let r = store.role { return [r] }
+        return [.academic]
+    }
 
     var filteredAccounts: [UserAccountViewModel] {
         accounts.filter { acc in
@@ -119,12 +124,14 @@ struct UsersAndRolesManagementFullView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    showCreateUserSheet = true
-                } label: {
-                    Image(systemName: "person.badge.plus")
-                        .font(.title3)
-                        .foregroundColor(MiranTheme.emerald)
+                if RBACPermissionEngine.hasPermission(roles: userRoles, action: .create, scope: .users) {
+                    Button {
+                        showCreateUserSheet = true
+                    } label: {
+                        Image(systemName: "person.badge.plus")
+                            .font(.title3)
+                            .foregroundColor(MiranTheme.emerald)
+                    }
                 }
             }
         }

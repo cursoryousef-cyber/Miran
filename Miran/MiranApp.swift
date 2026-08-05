@@ -11,15 +11,19 @@ import SwiftUI
 struct MiranApp: App {
     @StateObject private var authViewModel = AuthViewModel()
     @StateObject private var store = AppStore()
+    @StateObject private var themeManager = ThemeManager.shared
+    @Environment(\.colorScheme) var systemColorScheme
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(authViewModel)
                 .environmentObject(store)
+                .environmentObject(themeManager)
                 .environment(\.layoutDirection, .rightToLeft)
                 .environment(\.locale, Locale(identifier: "ar"))
-                .tint(MiranTheme.accent)
+                .tint(MiranTheme.primary)
+                .preferredColorScheme(themeManager.colorScheme(for: systemColorScheme))
                 .onAppear {
                     authViewModel.appStore = store
                 }
@@ -32,7 +36,7 @@ struct RootView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
 
     var body: some View {
-        Group {
+        ZStack {
             if authViewModel.isAuthenticated {
                 RBACMainView()
             } else {
@@ -47,11 +51,12 @@ struct RootView: View {
 struct RBACMainView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var store: AppStore
+    @Environment(\.colorScheme) var systemColorScheme
 
     var user: UserProfileResponse? { authViewModel.currentUser }
 
     var body: some View {
-        Group {
+        ZStack {
             if let user = user {
                 switch user.primaryRole {
                 case "platform_owner", "system_admin":
@@ -91,18 +96,18 @@ struct RBACMainView: View {
                         .scaleEffect(1.2)
                     Text("جاري تحميل بيانات المنصة والـ RBAC...")
                         .font(.subheadline)
-                        .foregroundColor(MiranTheme.subtext)
+                        .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
 
                     if let err = authViewModel.errorMessage {
                         Text(err)
                             .font(.caption)
-                            .foregroundColor(.red)
+                            .foregroundColor(MiranTheme.error)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(MiranTheme.background.ignoresSafeArea())
+                .background(MiranTheme.background(for: systemColorScheme).ignoresSafeArea())
             }
         }
     }
@@ -112,20 +117,21 @@ struct RBACMainView: View {
 struct UnknownRoleView: View {
     let roleCode: String
     @EnvironmentObject var authViewModel: AuthViewModel
+    @Environment(\.colorScheme) var systemColorScheme
 
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "exclamationmark.shield.fill")
                 .font(.system(size: 60))
-                .foregroundColor(.amber)
+                .foregroundColor(MiranTheme.warning)
 
             Text("رمز الدور غامض: \(roleCode)")
                 .font(.title3.bold())
-                .foregroundColor(.white)
+                .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
 
             Text("حسابك يملك رمز دور محدد ولكن لا توجد لوحة تحكم مطابقة في نظام الـ RBAC الحالي.")
                 .font(.caption)
-                .foregroundColor(MiranTheme.subtext)
+                .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
@@ -136,14 +142,14 @@ struct UnknownRoleView: View {
                     .font(.headline)
                     .padding()
                     .frame(maxWidth: .infinity)
-                    .background(Color.red)
+                    .background(MiranTheme.error)
                     .foregroundColor(.white)
                     .cornerRadius(12)
             }
             .padding(.horizontal)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(MiranTheme.background.ignoresSafeArea())
+        .background(MiranTheme.background(for: systemColorScheme).ignoresSafeArea())
     }
 }
 
@@ -159,18 +165,19 @@ struct UniversityAdminTabView: View {
                 }
                 .tag(0)
         }
-        .tint(MiranTheme.emerald)
+        .tint(MiranTheme.primary)
     }
 }
 
 // MARK: - University Admin Dashboard
 struct UniversityAdminDashboardView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @Environment(\.colorScheme) var systemColorScheme
 
     var body: some View {
         NavigationView {
             ZStack {
-                MiranTheme.background.ignoresSafeArea()
+                MiranTheme.background(for: systemColorScheme).ignoresSafeArea()
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
@@ -178,23 +185,23 @@ struct UniversityAdminDashboardView: View {
                             HStack {
                                 Text("إدارة جامعة الحدود الشمالية (University Admin)")
                                     .font(.title2.bold())
-                                    .foregroundColor(.white)
+                                    .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
                                 Spacer()
                                 Image(systemName: "graduationcap.circle.fill")
                                     .font(.system(size: 28))
-                                    .foregroundColor(.purple)
+                                    .foregroundColor(MiranTheme.accent)
                             }
                             Text("رفع خطط الامتياز وتقديم طلبات التدريب للكلية")
                                 .font(.subheadline)
-                                .foregroundColor(MiranTheme.subtext)
+                                .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
                         }
                         .padding(.horizontal)
 
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            MetricStatCard(title: "طلاب الامتياز المسجلين", count: "140", icon: "person.3.fill", color: .purple)
-                            MetricStatCard(title: "طلبات التدريب المرسلة", count: "4", icon: "paperplane.fill", color: MiranTheme.emerald)
-                            MetricStatCard(title: "البرامج التدريبية", count: "3", icon: "book.fill", color: .blue)
-                            MetricStatCard(title: "النتائج النهائية المعتمدة", count: "128", icon: "award.fill", color: .orange)
+                            DynamicMetricCard(title: "طلاب الامتياز المسجلين", count: "140", icon: "person.3.fill", color: MiranTheme.accent)
+                            DynamicMetricCard(title: "طلبات التدريب المرسلة", count: "4", icon: "paperplane.fill", color: MiranTheme.primary)
+                            DynamicMetricCard(title: "البرامج التدريبية", count: "3", icon: "book.fill", color: MiranTheme.info(for: systemColorScheme))
+                            DynamicMetricCard(title: "النتائج النهائية المعتمدة", count: "128", icon: "award.fill", color: MiranTheme.warning)
                         }
                         .padding(.horizontal)
                     }
@@ -207,7 +214,7 @@ struct UniversityAdminDashboardView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { authViewModel.logout() } label: {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .foregroundColor(.red)
+                            .foregroundColor(MiranTheme.error)
                     }
                 }
             }
@@ -227,7 +234,7 @@ struct ClusterTrainingAdminTabView: View {
                 }
                 .tag(0)
         }
-        .tint(MiranTheme.emerald)
+        .tint(MiranTheme.primary)
     }
 }
 
@@ -243,6 +250,6 @@ struct HospitalSupervisorTabView: View {
                 }
                 .tag(0)
         }
-        .tint(MiranTheme.emerald)
+        .tint(MiranTheme.primary)
     }
 }

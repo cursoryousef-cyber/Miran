@@ -8,7 +8,7 @@ import { TextField, Button, Alert, CircularProgress } from '@mui/material';
 export const Login: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [email, setEmail] = useState('admin@miran.health');
+  const [email, setEmail] = useState('platform@miran.health');
   const [password, setPassword] = useState('Miran@Admin2024!');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);

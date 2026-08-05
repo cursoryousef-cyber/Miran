@@ -1,95 +1,142 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
   Building2,
   Users,
-  UserCog,
   GraduationCap,
   GitMerge,
   ShieldCheck,
-  Zap,
   FileSpreadsheet,
   Settings,
   FolderGit2,
-  FileSignature,
   Activity,
   Shield,
   Key,
   BookOpen,
-  Award
+  Award,
+  UserCog,
+  Stethoscope,
+  ClipboardList,
+  FileSignature,
+  Network,
 } from 'lucide-react';
 
-interface NavigationItem {
+// ─── Navigation definitions per role ───────────────────────────────────────
+interface NavItem {
   name: string;
   path: string;
   icon: any;
-  allowedRoles: string[];
 }
 
-const navigationItems: NavigationItem[] = [
-  // 1. Platform Owner / System Admin Central Navigation
-  { name: 'مركز التحكم الوطني (Control Center)', path: '/', icon: LayoutDashboard, allowedRoles: ['platform_owner', 'system_admin'] },
-  { name: 'الجهات والتجمعات الصحية', path: '/organizations', icon: Building2, allowedRoles: ['platform_owner', 'system_admin', 'cluster_manager', 'org_manager'] },
-  { name: 'إدارة الأشخاص والحسابات', path: '/users', icon: Users, allowedRoles: ['platform_owner', 'system_admin'] },
-  { name: 'إدارة الأدوار والصلاحيات (RBAC)', path: '/roles-management', icon: Key, allowedRoles: ['platform_owner', 'system_admin'] },
-  { name: 'سجلات التدقيق والرقابة (Audit)', path: '/audit-logs', icon: Shield, allowedRoles: ['platform_owner', 'system_admin'] },
-  { name: 'مراقبة سلامة الخدمات (Health)', path: '/health-monitor', icon: Activity, allowedRoles: ['platform_owner', 'system_admin'] },
-  { name: 'محرك سير العمل (Workflows)', path: '/workflows', icon: GitMerge, allowedRoles: ['platform_owner', 'system_admin'] },
-  { name: 'سياسات الوصول والترخيص', path: '/settings', icon: Settings, allowedRoles: ['platform_owner', 'system_admin'] },
-
-  // 2. University Navigation
-  { name: 'لوحة الجامعة والبرامج', path: '/', icon: GraduationCap, allowedRoles: ['university_admin'] },
-  { name: 'رفع خطط طلاب الامتياز', path: '/intakes', icon: GraduationCap, allowedRoles: ['university_admin', 'org_manager'] },
-  { name: 'تقديم طلبات التدريب للتجمع', path: '/affiliations', icon: FolderGit2, allowedRoles: ['university_admin', 'org_manager'] },
-
-  // 3. Cluster Training Admin Navigation
-  { name: 'لوحة التدريب بالتجمع', path: '/', icon: LayoutDashboard, allowedRoles: ['cluster_manager', 'training_manager'] },
-  { name: 'طلبات التدريب الواردة', path: '/affiliations', icon: FolderGit2, allowedRoles: ['cluster_manager', 'training_manager'] },
-  { name: 'توزيع الطلاب على المستشفيات', path: '/organizations', icon: Building2, allowedRoles: ['cluster_manager', 'training_manager'] },
-
-  // 4. Hospital Supervisor Navigation
-  { name: 'لوحة مشرف امتياز المستشفى', path: '/', icon: LayoutDashboard, allowedRoles: ['hospital_supervisor', 'training_supervisor'] },
-  { name: 'طلاب المستشفى والأقسام', path: '/org-members', icon: UserCog, allowedRoles: ['hospital_supervisor', 'training_supervisor'] },
-  { name: 'إسناد المدرب والتوزيع الميداني', path: '/intakes', icon: GraduationCap, allowedRoles: ['hospital_supervisor', 'training_supervisor'] },
-
-  // 5. Trainer Navigation
-  { name: 'لوحة الاستشاري والمدرب', path: '/', icon: LayoutDashboard, allowedRoles: ['trainer'] },
-  { name: 'متدربيي المسندين والتقييمات', path: '/org-members', icon: UserCog, allowedRoles: ['trainer'] },
-  { name: 'مراجعة واعتماد الـ Logbook', path: '/logbook', icon: BookOpen, allowedRoles: ['trainer'] },
-
-  // 6. Trainee Navigation
-  { name: 'لوحة طبيب الامتياز', path: '/', icon: LayoutDashboard, allowedRoles: ['trainee'] },
-  { name: 'جدولي والـ Logbook والمهام', path: '/logbook', icon: BookOpen, allowedRoles: ['trainee'] },
-  { name: 'الإقرارات والبطاقة الرقمية', path: '/declarations', icon: FileSignature, allowedRoles: ['trainee'] },
-
-  // 7. Academic Supervisor (MVP - No Daily Operations)
-  { name: 'لوحة الاعتماد النهائي للجامعة', path: '/', icon: Award, allowedRoles: ['academic_supervisor'] },
-  { name: 'اعتماد نتائج وحصيلة البرنامج', path: '/reports', icon: FileSpreadsheet, allowedRoles: ['academic_supervisor'] }
+// Platform Owner / System Admin / Holding Admin
+const platformNav: NavItem[] = [
+  { name: 'مركز التحكم الوطني', path: '/', icon: LayoutDashboard },
+  { name: 'الجهات والتجمعات الصحية', path: '/organizations', icon: Building2 },
+  { name: 'إدارة المستخدمين والحسابات', path: '/users', icon: Users },
+  { name: 'الأدوار والصلاحيات (RBAC)', path: '/roles-management', icon: Key },
+  { name: 'سجلات التدقيق الأمني', path: '/audit-logs', icon: Shield },
+  { name: 'مراقبة سلامة الخدمات', path: '/health-monitor', icon: Activity },
+  { name: 'محرك سير العمل', path: '/workflows', icon: GitMerge },
+  { name: 'إعدادات المنصة', path: '/settings', icon: Settings },
 ];
 
-export const Sidebar: React.FC = () => {
-  const storedUserRaw = localStorage.getItem('miran_user_profile');
-  let userRole = 'platform_owner';
-  if (storedUserRaw) {
-    try {
-      const parsed = JSON.parse(storedUserRaw);
-      if (parsed?.primaryRole) {
-        userRole = parsed.primaryRole;
-      } else if (Array.isArray(parsed?.roles) && parsed.roles.length > 0) {
-        userRole = parsed.roles[0];
-      }
-    } catch {
-      // Fallback
-    }
+// University Admin
+const universityNav: NavItem[] = [
+  { name: 'لوحة الجامعة', path: '/', icon: GraduationCap },
+  { name: 'البرامج والدفعات الأكاديمية', path: '/intakes', icon: ClipboardList },
+  { name: 'طلبات التدريب للتجمعات', path: '/affiliations', icon: FolderGit2 },
+  { name: 'أعضاء الجامعة والطلاب', path: '/org-members', icon: Users },
+];
+
+// Cluster Training Admin
+const clusterNav: NavItem[] = [
+  { name: 'لوحة التجمع الصحي', path: '/', icon: Network },
+  { name: 'طلبات التدريب الواردة', path: '/affiliations', icon: FolderGit2 },
+  { name: 'المستشفيات والسعة', path: '/organizations', icon: Building2 },
+  { name: 'توزيع المتدربين', path: '/intakes', icon: GraduationCap },
+];
+
+// Hospital Supervisor / Director
+const hospitalNav: NavItem[] = [
+  { name: 'لوحة المستشفى', path: '/', icon: Stethoscope },
+  { name: 'الروتيشنات والأقسام', path: '/intakes', icon: ClipboardList },
+  { name: 'المتدربون والمدربون', path: '/org-members', icon: UserCog },
+  { name: 'السجل السريري (Logbook)', path: '/logbook', icon: BookOpen },
+];
+
+// Trainer
+const trainerNav: NavItem[] = [
+  { name: 'لوحة المدرب', path: '/', icon: Stethoscope },
+  { name: 'متدربيّ المسندين', path: '/org-members', icon: UserCog },
+  { name: 'Logbook والتقييمات', path: '/logbook', icon: BookOpen },
+];
+
+// Trainee
+const traineeNav: NavItem[] = [
+  { name: 'لوحة طبيب الامتياز', path: '/', icon: LayoutDashboard },
+  { name: 'السجل السريري (Logbook)', path: '/logbook', icon: BookOpen },
+  { name: 'الإقرارات والبطاقة الرقمية', path: '/declarations', icon: FileSignature },
+];
+
+// Academic Supervisor
+const academicNav: NavItem[] = [
+  { name: 'لوحة الاعتماد الأكاديمي', path: '/', icon: Award },
+  { name: 'اعتماد النتائج النهائية', path: '/reports', icon: FileSpreadsheet },
+  { name: 'متابعة البرامج المكتملة', path: '/intakes', icon: ClipboardList },
+];
+
+function getNavForRole(role: string): NavItem[] {
+  switch (role) {
+    case 'platform_owner':
+    case 'system_admin':
+    case 'holding_administrator':
+      return platformNav;
+    case 'university_administrator':
+    case 'academic_affairs':
+      return universityNav;
+    case 'cluster_administrator':
+    case 'training_director':
+      return clusterNav;
+    case 'hospital_administrator':
+    case 'department_head':
+    case 'training_supervisor':
+      return hospitalNav;
+    case 'trainer':
+      return trainerNav;
+    case 'trainee':
+      return traineeNav;
+    case 'academic_supervisor':
+      return academicNav;
+    default:
+      return traineeNav;
   }
+}
 
-  // Handle role alias mappings
-  if (userRole === 'org_manager') userRole = 'cluster_manager';
+function getRoleLabelAr(role: string): string {
+  const map: Record<string, string> = {
+    platform_owner: 'مدير المنصة الوطنية',
+    system_admin: 'مدير النظام',
+    holding_administrator: 'مدير الصحة القابضة',
+    cluster_administrator: 'مدير التجمع الصحي',
+    university_administrator: 'مدير الجامعة',
+    hospital_administrator: 'مشرف المستشفى',
+    training_director: 'مدير التدريب',
+    department_head: 'رئيس القسم',
+    academic_supervisor: 'مشرف أكاديمي',
+    training_supervisor: 'مشرف تدريب ميداني',
+    trainer: 'مدرب سريري',
+    trainee: 'طبيب امتياز',
+    academic_affairs: 'الشؤون الأكاديمية',
+    org_manager: 'مدير جهة',
+  };
+  return map[role] || role;
+}
 
-  const visibleItems = navigationItems.filter((item) =>
-    item.allowedRoles.includes(userRole)
-  );
+export const Sidebar: React.FC = () => {
+  const { user, primaryRole } = useAuth();
+  const navItems = getNavForRole(primaryRole);
 
   return (
     <aside style={{
@@ -103,7 +150,7 @@ export const Sidebar: React.FC = () => {
       padding: '24px 16px',
     }}>
       {/* Brand Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 12px 28px 12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 12px 20px 12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
         <div style={{
           width: '44px',
           height: '44px',
@@ -122,14 +169,28 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
+      {/* Role Badge */}
+      <div style={{
+        margin: '16px 12px 8px 12px',
+        padding: '10px 14px',
+        background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(6, 182, 212, 0.1))',
+        borderRadius: '10px',
+        border: '1px solid rgba(16, 185, 129, 0.25)',
+      }}>
+        <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600, marginBottom: '2px' }}>الدور الحالي</div>
+        <div style={{ fontSize: '13px', color: '#34d399', fontWeight: 700 }}>{getRoleLabelAr(primaryRole)}</div>
+        <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>{user?.activeOrganization?.nameAr}</div>
+      </div>
+
       {/* Navigation Menu */}
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '24px' }}>
-        {visibleItems.map((item) => {
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '16px' }}>
+        {navItems.map((item) => {
           const Icon = item.icon;
           return (
             <NavLink
               key={item.path + item.name}
               to={item.path}
+              end={item.path === '/'}
               style={({ isActive }) => ({
                 display: 'flex',
                 alignItems: 'center',

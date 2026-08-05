@@ -46,6 +46,7 @@ async function main() {
 
   const roles = [
     { code: 'platform_owner', nameAr: 'مدير المنصة الوطنية', nameEn: 'Platform Owner', hierarchyLevel: 100, isSystem: true },
+    { code: 'system_admin', nameAr: 'مدير النظام التنفيذي', nameEn: 'System Administrator', hierarchyLevel: 95, isSystem: true },
     { code: 'holding_administrator', nameAr: 'مدير الصحة القابضة', nameEn: 'Holding Administrator', hierarchyLevel: 90, isSystem: true },
     { code: 'cluster_administrator', nameAr: 'مدير التجمع الصحي', nameEn: 'Cluster Administrator', hierarchyLevel: 80, isSystem: true },
     { code: 'hospital_administrator', nameAr: 'مدير المستشفى / المركز', nameEn: 'Hospital Administrator', hierarchyLevel: 70, isSystem: true },
@@ -152,9 +153,9 @@ async function main() {
   console.log('🩺 Seeding Clinical Departments at North Tower Complex...');
 
   const deptInternal = await prisma.department.upsert({
-    where: { id: 'dept-nb-internal-med-01' },
+    where: { id: 'a0000000-0000-0000-0000-000000000001' },
     create: {
-      id: 'dept-nb-internal-med-01',
+      id: 'a0000000-0000-0000-0000-000000000001',
       organizationId: northTowerHosp.id,
       nameAr: 'قسم الباطنة العامة — برج الشمال',
       nameEn: 'General Internal Medicine Department',
@@ -163,14 +164,38 @@ async function main() {
       roundLocation: 'برج الشمال — البرج الطبي الدور الرابع',
       roundTime: '08:00',
       meetingRoom: 'قاعة الأطباء المقيمين ٤٠١',
+      isActive: true,
     },
-    update: {},
+    update: {
+      nameAr: 'قسم الباطنة العامة — برج الشمال',
+      organizationId: northTowerHosp.id,
+    },
+  });
+
+  const deptPediatrics = await prisma.department.upsert({
+    where: { id: 'a0000000-0000-0000-0000-000000000002' },
+    create: {
+      id: 'a0000000-0000-0000-0000-000000000002',
+      organizationId: northTowerHosp.id,
+      nameAr: 'قسم طب الأطفال الحديث — برج الشمال',
+      nameEn: 'Pediatric Department',
+      code: 'NT-PED-MED',
+      capacity: 20,
+      roundLocation: 'برج الشمال — جناح الأطفال الدور الثالث',
+      roundTime: '08:30',
+      meetingRoom: 'قاعة الأطفال ٣٠٥',
+      isActive: true,
+    },
+    update: {
+      nameAr: 'قسم طب الأطفال الحديث — برج الشمال',
+      organizationId: northTowerHosp.id,
+    },
   });
 
   const deptSurgery = await prisma.department.upsert({
-    where: { id: 'dept-nb-surgery-02' },
+    where: { id: 'a0000000-0000-0000-0000-000000000003' },
     create: {
-      id: 'dept-nb-surgery-02',
+      id: 'a0000000-0000-0000-0000-000000000003',
       organizationId: northTowerHosp.id,
       nameAr: 'قسم الجراحة العامة وجراحة اليوم الواحد',
       nameEn: 'General Surgery & Day Surgery Department',
@@ -184,9 +209,9 @@ async function main() {
   });
 
   const deptER = await prisma.department.upsert({
-    where: { id: 'dept-nb-er-03' },
+    where: { id: 'a0000000-0000-0000-0000-000000000004' },
     create: {
-      id: 'dept-nb-er-03',
+      id: 'a0000000-0000-0000-0000-000000000004',
       organizationId: northTowerHosp.id,
       nameAr: 'قسم الطوارئ والحوادث المتقدمة',
       nameEn: 'Advanced Emergency & Trauma Department',
@@ -195,8 +220,12 @@ async function main() {
       roundLocation: 'برج الشمال — الدور الأرضي مدخل الطوارئ',
       roundTime: '07:00',
       meetingRoom: 'غرفة تسليم الشيفتات العاجلة',
+      isActive: true,
     },
-    update: {},
+    update: {
+      nameAr: 'قسم الطوارئ والحوادث المتقدمة',
+      organizationId: northTowerHosp.id,
+    },
   });
 
   // --------------------------------------------------------------------------
@@ -205,6 +234,7 @@ async function main() {
   console.log('👥 Seeding Comprehensive User Accounts for All Roles...');
 
   const accountsSeedConfig = [
+    // 1. Platform Owner
     {
       natId: '1000000000',
       nameAr: 'مدير المنصة الوطنية',
@@ -213,46 +243,61 @@ async function main() {
       roleCode: 'platform_owner',
       orgId: holdingOrg.id,
     },
+    // 2. Holding Administrator
     {
-      natId: '1000000099',
-      nameAr: 'مدير النظام التنفيذي',
-      email: 'admin@miran.health',
-      username: 'sysadmin',
-      roleCode: 'system_admin',
+      natId: '1000000010',
+      nameAr: 'مدير شركة الصحة القابضة',
+      email: 'holding@miran.health',
+      username: 'holdingadmin',
+      roleCode: 'holding_administrator',
       orgId: holdingOrg.id,
     },
+    // 3. Cluster Administrator
     {
       natId: '1000000001',
-      nameAr: 'مدير تجمع الحدود الشمالية',
-      email: 'cluster.manager@miran.health',
-      username: 'clustermanager',
-      roleCode: 'org_manager',
+      nameAr: 'مدير التدريب بالتجمع الصحي',
+      email: 'cluster@miran.health',
+      username: 'clusteradmin',
+      roleCode: 'cluster_administrator',
       orgId: clusterOrg.id,
     },
+    // 4. University Administrator
     {
-      natId: '1000000002',
-      nameAr: 'د. خالد الأكاديمي — جامعة الحدود الشمالية',
-      email: 'academic.manager@miran.health',
-      username: 'academicmanager',
-      roleCode: 'academic_supervisor',
+      natId: '1000000099',
+      nameAr: 'مدير جامعة الحدود الشمالية',
+      email: 'uni.admin@nbu.edu.sa',
+      username: 'uniadmin',
+      roleCode: 'university_administrator',
       orgId: uniOrg.id,
     },
+    // 5. Hospital Director
+    {
+      natId: '1000000097',
+      nameAr: 'مدير مستشفى برج الشمال',
+      email: 'hospital.director@miran.health',
+      username: 'hospitaldirector',
+      roleCode: 'hospital_administrator',
+      orgId: northTowerHosp.id,
+    },
+    // 6. Hospital Supervisor (Training Supervisor)
     {
       natId: '1000000003',
       nameAr: 'د. فهد المشرف — مستشفى برج الشمال',
-      email: 'training.supervisor@miran.health',
-      username: 'trainingsupervisor',
+      email: 'hospital.supervisor@miran.health',
+      username: 'hospitalsupervisor',
       roleCode: 'training_supervisor',
       orgId: northTowerHosp.id,
     },
+    // 7. Trainer
     {
       natId: '1011111111',
-      nameAr: 'د. سالم العتيبي (مدرب الباطنية الميداني)',
+      nameAr: 'د. سالم العتيبي — استشاري الباطنية',
       email: 'salem@miran.health',
       username: 'drsalem',
       roleCode: 'trainer',
       orgId: northTowerHosp.id,
     },
+    // 8. Trainee
     {
       natId: '1022222222',
       nameAr: 'طبيب امتياز عبدالله المطيري',
@@ -260,6 +305,15 @@ async function main() {
       username: 'abdullah',
       roleCode: 'trainee',
       orgId: northTowerHosp.id,
+    },
+    // 9. Academic Supervisor
+    {
+      natId: '1000000002',
+      nameAr: 'د. خالد الأكاديمي — مشرف أكاديمي',
+      email: 'academic@nbu.edu.sa',
+      username: 'academicsupervisor',
+      roleCode: 'academic_supervisor',
+      orgId: uniOrg.id,
     },
   ];
 
@@ -302,7 +356,9 @@ async function main() {
         organizationId: cfg.orgId,
         isPrimary: true,
       },
-      update: {},
+      update: {
+        isPrimary: true,
+      },
     });
 
     await prisma.userRole.upsert({
@@ -430,12 +486,16 @@ async function main() {
 
   console.log('✅ Production-like Seed successfully completed!');
   console.log('========================================================================');
-  console.log('📌 1. Platform Owner: platform@miran.health | Pass: Miran@Admin2024!');
-  console.log('📌 2. Org Manager: cluster.manager@miran.health | Pass: Miran@Admin2024!');
-  console.log('📌 3. Academic Supervisor: academic.manager@miran.health | Pass: Miran@Admin2024!');
-  console.log('📌 4. Training Supervisor: training.supervisor@miran.health | Pass: Miran@Admin2024!');
-  console.log('📌 5. Trainer: salem@miran.health | Pass: Miran@Admin2024!');
-  console.log('📌 6. Trainee: abdullah@miran.health | Pass: Miran@Admin2024!');
+  console.log('📌 1. Platform Owner:       platform@miran.health');
+  console.log('📌 2. Holding Admin:        holding@miran.health');
+  console.log('📌 3. Cluster Admin:        cluster@miran.health');
+  console.log('📌 4. University Admin:     uni.admin@nbu.edu.sa');
+  console.log('📌 5. Hospital Director:    hospital.director@miran.health');
+  console.log('📌 6. Hospital Supervisor:  hospital.supervisor@miran.health');
+  console.log('📌 7. Trainer:              salem@miran.health');
+  console.log('📌 8. Trainee:              abdullah@miran.health');
+  console.log('📌 9. Academic Supervisor:  academic@nbu.edu.sa');
+  console.log('🔑 Password for ALL:        Miran@Admin2024!');
   console.log('========================================================================');
 }
 

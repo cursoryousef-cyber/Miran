@@ -56,7 +56,7 @@ struct TraineeDetailView: View {
         return VStack(alignment: .leading, spacing: 12) {
             SectionTitle("مؤشر الحرص", systemImage: "bolt.heart.fill")
             HStack(spacing: 16) {
-                ScoreDial(score: d.value, label: d.label, color: d.color, size: 100)
+                ScoreDial(score: Double(d.value), label: d.label, color: d.color, size: 100)
                 VStack(alignment: .leading, spacing: 8) {
                     InfoRow(label: "الاستجابة", value: Fmt.percent(d.responseRate))
                     InfoRow(label: "الحضور الفعلي", value: Fmt.percent(d.attendanceRate))

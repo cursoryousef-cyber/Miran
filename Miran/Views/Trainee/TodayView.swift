@@ -86,7 +86,7 @@ struct TodayView: View {
                     Spacer()
                     Text("\(rotation.daysRemaining) يوماً").font(.caption).bold()
                 }
-                MiranProgressBar(value: rotation.progress)
+                MiranProgressBar(progress: rotation.progress)
             }
         }
         .miranCard(tint: MiranTheme.accent)
@@ -171,7 +171,7 @@ struct TodayView: View {
         return VStack(alignment: .leading, spacing: 12) {
             SectionTitle("مؤشر حرصك", systemImage: "bolt.heart")
             HStack(spacing: 18) {
-                ScoreDial(score: d.value, label: d.label, color: d.color, size: 96)
+                ScoreDial(score: Double(d.value), label: d.label, color: d.color, size: 96)
                 VStack(alignment: .leading, spacing: 8) {
                     InfoRow(label: "نسبة الاستجابة", value: Fmt.percent(d.responseRate))
                     InfoRow(label: "متوسط الإقرار",

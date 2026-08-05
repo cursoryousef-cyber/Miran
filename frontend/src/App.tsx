@@ -37,10 +37,29 @@ const queryClient = new QueryClient({
   },
 });
 
+// ─── Auth Guard ──────────────────────────────────────────────────────────
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated } = useAuth();
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 };
+
+// ─── Role Guard: blocks access and redirects to / ────────────────────────
+const RoleRoute: React.FC<{ allowedRoles: string[]; children: React.ReactNode }> = ({ allowedRoles, children }) => {
+  const { hasAnyRole } = useAuth();
+  if (!hasAnyRole(allowedRoles)) {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
+};
+
+// ─── Role constants ──────────────────────────────────────────────────────
+const PLATFORM = ['platform_owner', 'system_admin', 'holding_administrator'];
+const UNIVERSITY = ['university_administrator', 'academic_affairs'];
+const CLUSTER = ['cluster_administrator', 'training_director'];
+const HOSPITAL = ['hospital_administrator', 'department_head', 'training_supervisor'];
+const TRAINER = ['trainer'];
+const TRAINEE = ['trainee'];
+const ACADEMIC = ['academic_supervisor'];
 
 export const App: React.FC = () => {
   return (
@@ -61,23 +80,36 @@ export const App: React.FC = () => {
                     </ProtectedRoute>
                   }
                 >
+                  {/* Dashboard — available to all authenticated users, renders per-role */}
                   <Route index element={<Dashboard />} />
-                  <Route path="organizations" element={<Organizations />} />
-                  <Route path="organizations/wizard" element={<OrganizationWizard />} />
-                  <Route path="affiliations" element={<Affiliations />} />
-                  <Route path="intakes" element={<AcademicIntakes />} />
-                  <Route path="users" element={<UsersPage />} />
-                  <Route path="org-members" element={<OrgMembersPage />} />
-                  <Route path="declarations" element={<Declarations />} />
-                  <Route path="workflows" element={<Workflows />} />
-                  <Route path="policies" element={<Policies />} />
-                  <Route path="integrations" element={<Integrations />} />
-                  <Route path="reports" element={<Reports />} />
-                  <Route path="settings" element={<SettingsPage />} />
-                  <Route path="health-monitor" element={<HealthMonitor />} />
-                  <Route path="audit-logs" element={<AuditLogs />} />
-                  <Route path="roles-management" element={<RolesManagement />} />
-                  <Route path="logbook" element={<LogbookPage />} />
+
+                  {/* Platform-only routes */}
+                  <Route path="organizations" element={<RoleRoute allowedRoles={[...PLATFORM, ...CLUSTER]}><Organizations /></RoleRoute>} />
+                  <Route path="organizations/wizard" element={<RoleRoute allowedRoles={PLATFORM}><OrganizationWizard /></RoleRoute>} />
+                  <Route path="users" element={<RoleRoute allowedRoles={PLATFORM}><UsersPage /></RoleRoute>} />
+                  <Route path="roles-management" element={<RoleRoute allowedRoles={PLATFORM}><RolesManagement /></RoleRoute>} />
+                  <Route path="audit-logs" element={<RoleRoute allowedRoles={PLATFORM}><AuditLogs /></RoleRoute>} />
+                  <Route path="health-monitor" element={<RoleRoute allowedRoles={PLATFORM}><HealthMonitor /></RoleRoute>} />
+                  <Route path="workflows" element={<RoleRoute allowedRoles={PLATFORM}><Workflows /></RoleRoute>} />
+                  <Route path="settings" element={<RoleRoute allowedRoles={PLATFORM}><SettingsPage /></RoleRoute>} />
+                  <Route path="policies" element={<RoleRoute allowedRoles={PLATFORM}><Policies /></RoleRoute>} />
+                  <Route path="integrations" element={<RoleRoute allowedRoles={PLATFORM}><Integrations /></RoleRoute>} />
+
+                  {/* University + Cluster + Hospital + Academic */}
+                  <Route path="affiliations" element={<RoleRoute allowedRoles={[...UNIVERSITY, ...CLUSTER]}><Affiliations /></RoleRoute>} />
+                  <Route path="intakes" element={<RoleRoute allowedRoles={[...UNIVERSITY, ...CLUSTER, ...HOSPITAL, ...ACADEMIC]}><AcademicIntakes /></RoleRoute>} />
+
+                  {/* Hospital + Trainer */}
+                  <Route path="org-members" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...UNIVERSITY]}><OrgMembersPage /></RoleRoute>} />
+
+                  {/* Trainer + Trainee */}
+                  <Route path="logbook" element={<RoleRoute allowedRoles={[...TRAINER, ...TRAINEE, ...HOSPITAL]}><LogbookPage /></RoleRoute>} />
+
+                  {/* Trainee only */}
+                  <Route path="declarations" element={<RoleRoute allowedRoles={TRAINEE}><Declarations /></RoleRoute>} />
+
+                  {/* Academic Supervisor */}
+                  <Route path="reports" element={<RoleRoute allowedRoles={[...ACADEMIC, ...PLATFORM]}><Reports /></RoleRoute>} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { apiClient } from '../api/client';
+import { hasPermission, RBACAction, RBACScope } from '../utils/rbac';
 
 export interface UserOrg {
   id: string;
@@ -25,25 +26,41 @@ interface AuthContextType {
   user: UserProfile | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  primaryRole: string;
   login: (data: { user: UserProfile; tokens: { accessToken: string; refreshToken: string } }) => void;
   logout: () => void;
   switchOrganization: (orgId: string) => Promise<void>;
+  hasRole: (role: string) => boolean;
+  hasAnyRole: (roles: string[]) => boolean;
+  can: (action: RBACAction, scope: RBACScope) => boolean;
 }
+
+const STORAGE_KEY = 'user_profile';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function extractPrimaryRole(user: UserProfile | null): string {
+  if (!user?.roles || user.roles.length === 0) return '';
+  return user.roles[0];
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('user_profile');
-    return saved ? JSON.parse(saved) : null;
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try { return JSON.parse(saved); } catch { return null; }
+    }
+    return null;
   });
   const [isLoading, setIsLoading] = useState(false);
+
+  const primaryRole = extractPrimaryRole(user);
 
   const login = (data: { user: UserProfile; tokens: { accessToken: string; refreshToken: string } }) => {
     localStorage.setItem('access_token', data.tokens.accessToken);
     localStorage.setItem('refresh_token', data.tokens.refreshToken);
     localStorage.setItem('active_org_id', data.user.activeOrganization.id);
-    localStorage.setItem('user_profile', JSON.stringify(data.user));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data.user));
     setUser(data.user);
   };
 
@@ -56,7 +73,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       const res = await apiClient.post('/auth/switch-org', { organizationId: orgId });
-      const { activeOrganization, tokens } = res.data;
+      const { activeOrganization, tokens, roles, permissions } = res.data;
 
       localStorage.setItem('access_token', tokens.accessToken);
       localStorage.setItem('refresh_token', tokens.refreshToken);
@@ -66,13 +83,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const updatedUser: UserProfile = {
           ...user,
           activeOrganization,
+          roles: roles || user.roles,
+          permissions: permissions || user.permissions,
         };
-        localStorage.setItem('user_profile', JSON.stringify(updatedUser));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
         setUser(updatedUser);
       }
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const hasRole = (role: string): boolean => {
+    return user?.roles?.includes(role) ?? false;
+  };
+
+  const hasAnyRole = (roles: string[]): boolean => {
+    return roles.some((r) => user?.roles?.includes(r) ?? false);
+  };
+
+  const can = (action: RBACAction, scope: RBACScope): boolean => {
+    return hasPermission(user, action, scope);
   };
 
   return (
@@ -81,9 +112,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         isAuthenticated: !!user,
         isLoading,
+        primaryRole,
         login,
         logout,
         switchOrganization,
+        hasRole,
+        hasAnyRole,
+        can,
       }}
     >
       {children}
