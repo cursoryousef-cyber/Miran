@@ -9,7 +9,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 @ApiTags('Policies (محرك سياسات الوصول - Policy Engine ABAC)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('policies')
 export class PoliciesController {
   constructor(

@@ -1,16 +1,16 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Stethoscope, Users, ClipboardList, BookOpen } from 'lucide-react';
+import { Stethoscope, Users, ClipboardList, BookOpen, RefreshCw } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../api/client';
-import { Button } from '@mui/material';
+import { Button, IconButton, Tooltip } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 
 export const HospitalDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const { data: members } = useQuery({
+  const { data: members, refetch: refetchMembers } = useQuery({
     queryKey: ['hosp-members'],
     queryFn: async () => {
       const res = await apiClient.get('/org-members').catch(() => ({ data: { data: [] } }));
@@ -26,6 +26,25 @@ export const HospitalDashboard: React.FC = () => {
     },
   });
 
+  const { data: departments } = useQuery({
+    queryKey: ['hosp-departments'],
+    queryFn: async () => {
+      const res = await apiClient.get('/org-members/departments').catch(() => ({ data: { data: [] } }));
+      return res.data?.data || [];
+    },
+  });
+
+  const { data: notifications } = useQuery({
+    queryKey: ['hosp-notifications'],
+    queryFn: async () => {
+      const res = await apiClient.get('/notifications/unread-count').catch(() => ({ data: { data: { count: 0 } } }));
+      return res.data?.data || { count: 0 };
+    },
+  });
+
+  const trainers = members?.filter((m: any) => m.roles?.some((r: any) => r.code === 'trainer')) || [];
+  const trainees = members?.filter((m: any) => m.roles?.some((r: any) => r.code === 'trainee')) || [];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
       <div className="glass-card" style={{
@@ -33,16 +52,25 @@ export const HospitalDashboard: React.FC = () => {
         background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(15, 23, 42, 0.9) 100%)',
         border: '1px solid rgba(245, 158, 11, 0.3)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <Stethoscope size={20} color="#f59e0b" />
-          <span style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 700 }}>Hospital Supervisor Dashboard</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <Stethoscope size={20} color="#f59e0b" />
+              <span style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 700 }}>Hospital Supervisor Dashboard</span>
+            </div>
+            <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+              مرحباً، {user?.nameAr} 👋
+            </h1>
+            <p style={{ fontSize: '14px', color: '#cbd5e1', marginTop: '8px' }}>
+              {user?.activeOrganization?.nameAr} — إدارة الروتيشنات والمتدربين والمدربين
+            </p>
+          </div>
+          <Tooltip title="تحديث البيانات">
+            <IconButton onClick={() => refetchMembers()} style={{ color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
+              <RefreshCw size={18} />
+            </IconButton>
+          </Tooltip>
         </div>
-        <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-          مرحباً، {user?.nameAr} 👋
-        </h1>
-        <p style={{ fontSize: '14px', color: '#cbd5e1', marginTop: '8px' }}>
-          {user?.activeOrganization?.nameAr} — إدارة الروتيشنات والمتدربين والمدربين
-        </p>
         <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
           <Button variant="contained" onClick={() => navigate('/intakes')}
             style={{ background: 'linear-gradient(135deg, #d97706, #f59e0b)', fontWeight: 700 }}>
@@ -62,12 +90,22 @@ export const HospitalDashboard: React.FC = () => {
         </div>
         <div className="glass-card" style={{ padding: '24px' }}>
           <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>المتدربون الحاليون</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#10b981' }}>{members?.length || 0}</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#10b981' }}>{trainees.length}</div>
+        </div>
+        <div className="glass-card" style={{ padding: '24px' }}>
+          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>المدربون السريريون</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#8b5cf6' }}>{trainers.length}</div>
         </div>
         <div className="glass-card" style={{ padding: '24px' }}>
           <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>الأقسام السريرية</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#8b5cf6' }}>4</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#06b6d4' }}>{departments?.length || 0}</div>
         </div>
+        {notifications && (
+          <div className="glass-card" style={{ padding: '24px' }}>
+            <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>إشعارات غير مقروءة</div>
+            <div style={{ fontSize: '32px', fontWeight: 800, color: notifications.count > 0 ? '#f59e0b' : '#10b981' }}>{notifications.count}</div>
+          </div>
+        )}
       </div>
 
       <div className="glass-card" style={{ padding: '24px' }}>

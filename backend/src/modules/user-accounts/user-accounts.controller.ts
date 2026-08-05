@@ -18,7 +18,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 @ApiTags('User Accounts (إدارة حسابات الدخول وتعدد الجهات)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('user-accounts')
 export class UserAccountsController {
   constructor(private userAccountsService: UserAccountsService) {}

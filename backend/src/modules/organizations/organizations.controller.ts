@@ -19,7 +19,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 @ApiTags('Organizations (إدارة الجهات والشجرة التنظيمية)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('organizations')
 export class OrganizationsController {
   constructor(

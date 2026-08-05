@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Building, LogOut, User, ChevronDown, Bell } from 'lucide-react';
+import { Building, LogOut, User, ChevronDown } from 'lucide-react';
 import { Menu, MenuItem, IconButton, Avatar, Chip } from '@mui/material';
+import { NotificationCenter } from '../NotificationCenter';
 
 export const Header: React.FC = () => {
   const { user, switchOrganization, logout } = useAuth();
@@ -105,9 +106,7 @@ export const Header: React.FC = () => {
 
       {/* User Actions & Notifications */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <IconButton style={{ color: '#94a3b8' }}>
-          <Bell size={20} />
-        </IconButton>
+        <NotificationCenter />
 
         <button
           onClick={handleUserClick}

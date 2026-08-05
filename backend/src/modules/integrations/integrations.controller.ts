@@ -16,7 +16,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 @ApiTags('Integrations & Webhooks (مركز الربط والتكامل التكاملي - Integration Hub)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('integrations')
 export class IntegrationsController {
   constructor(private integrationsService: IntegrationsService) {}

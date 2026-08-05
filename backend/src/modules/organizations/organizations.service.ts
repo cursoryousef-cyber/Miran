@@ -43,6 +43,7 @@ export class OrganizationsService {
               children: true,
               userOrganizations: true,
               traineeProfiles: true,
+              trainerProfiles: true,
               departments: true,
             },
           },

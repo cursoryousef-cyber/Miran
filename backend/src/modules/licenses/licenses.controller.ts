@@ -8,7 +8,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 @ApiTags('Licenses & Subscriptions (إدارة تراخيص الباقات والسعات للجهات)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('licenses')
 export class LicensesController {
   constructor(private licensesService: LicensesService) {}

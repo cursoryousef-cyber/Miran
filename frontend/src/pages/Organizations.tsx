@@ -207,49 +207,68 @@ export const Organizations: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>اسم الجهة</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>اسم المستشفى / الجهة</TableCell>
               <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الرمز (Code)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>نوع الجهة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المدينة/المنطقة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>حالة دورة الحياة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>العدد (المتدربون / الأقسام)</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المدينة</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>السعة الإجمالية</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المقبولون (Accepted)</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المقاعد المتبقية (Remaining)</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>نسبة الإشغال (Occupancy %)</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المدربون / الأقسام</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة</TableCell>
               <TableCell style={{ color: '#94a3b8', fontWeight: 700, textAlign: 'center' }}>العمليات (RBAC)</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={7} style={{ textAlign: 'center', color: '#cbd5e1' }}>جاري التحميل من Production Backend...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} style={{ textAlign: 'center', color: '#cbd5e1' }}>جاري التحميل من Production Backend...</TableCell></TableRow>
             ) : data?.data?.length === 0 ? (
-              <TableRow><TableCell colSpan={7} style={{ textAlign: 'center', color: '#94a3b8' }}>لا توجد جهات مطابقة لشروط البحث.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} style={{ textAlign: 'center', color: '#94a3b8' }}>لا توجد جهات مطابقة لشروط البحث.</TableCell></TableRow>
             ) : (
-              data?.data?.map((org: any) => (
-                <TableRow key={org.id} hover>
-                  <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '8px',
-                        backgroundColor: 'rgba(5, 150, 105, 0.15)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}>
-                        <Building2 size={16} color="#10b981" />
+              data?.data?.map((org: any) => {
+                const capacity = org.capacity || 0;
+                const accepted = org._count?.traineeProfiles || 0;
+                const remaining = Math.max(0, capacity - accepted);
+                const occupancy = capacity > 0 ? Math.min(100, Math.round((accepted / capacity) * 100)) : 0;
+
+                return (
+                  <TableRow key={org.id} hover>
+                    <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          backgroundColor: 'rgba(5, 150, 105, 0.15)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}>
+                          <Building2 size={16} color="#10b981" />
+                        </div>
+                        <div>
+                          <div>{org.nameAr}</div>
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>{org.nameEn}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div>{org.nameAr}</div>
-                        <div style={{ fontSize: '11px', color: '#64748b' }}>{org.nameEn}</div>
+                    </TableCell>
+                    <TableCell style={{ fontFamily: 'monospace', fontWeight: 700, color: '#06b6d4' }}>{org.code}</TableCell>
+                    <TableCell style={{ color: '#cbd5e1' }}>{org.cityAr || 'عرعر'}</TableCell>
+                    <TableCell style={{ fontWeight: 700, color: '#38bdf8' }}>{capacity} مقعد</TableCell>
+                    <TableCell style={{ fontWeight: 700, color: '#10b981' }}>{accepted} متدرب</TableCell>
+                    <TableCell style={{ fontWeight: 700, color: remaining < 10 ? '#ef4444' : '#f59e0b' }}>{remaining} مقعد متاح</TableCell>
+                    <TableCell>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ flex: 1, height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ width: `${occupancy}%`, height: '100%', background: occupancy > 80 ? '#ef4444' : '#10b981', borderRadius: '4px' }} />
+                        </div>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#f8fafc' }}>{occupancy}%</span>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell style={{ fontFamily: 'monospace', fontWeight: 700, color: '#06b6d4' }}>{org.code}</TableCell>
-                  <TableCell><Chip label={org.organizationType?.nameAr || 'جهة'} size="small" variant="outlined" /></TableCell>
-                  <TableCell style={{ color: '#cbd5e1' }}>{org.cityAr ? `${org.cityAr} (${org.regionAr || ''})` : '—'}</TableCell>
-                  <TableCell>{getStatusChip(org.status)}</TableCell>
-                  <TableCell style={{ color: '#94a3b8', fontSize: '13px' }}>
-                    {org._count?.traineeProfiles || 0} متدرب / {org._count?.departments || 0} أقسام
-                  </TableCell>
+                    </TableCell>
+                    <TableCell style={{ color: '#94a3b8', fontSize: '13px' }}>
+                      {org._count?.trainerProfiles || 0} مدربين / {org._count?.departments || 0} أقسام
+                    </TableCell>
+                    <TableCell>{getStatusChip(org.status)}</TableCell>
                   <TableCell style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
                       <Tooltip title="عرض التفاصيل">
@@ -291,7 +310,8 @@ export const Organizations: React.FC = () => {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>

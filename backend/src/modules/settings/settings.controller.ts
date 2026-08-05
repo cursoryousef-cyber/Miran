@@ -8,7 +8,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 @ApiTags('Settings (مركز الإعدادات الديناميكية للمنصة والجهات - Configuration Service)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('settings')
 export class SettingsController {
   constructor(private settingsService: SettingsService) {}

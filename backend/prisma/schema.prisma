@@ -70,6 +70,7 @@ model Organization {
   address            String?   @db.Text
   settings           Json      @default("{}") @db.JsonB
   trainingYear       String?   @map("training_year") @db.VarChar(20)
+  capacity           Int       @default(0)
   defaultLanguage    String    @default("ar") @map("default_language") @db.VarChar(5)
   // Audit fields
   createdById        String?   @map("created_by") @db.Uuid

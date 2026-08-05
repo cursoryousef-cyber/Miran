@@ -15,7 +15,7 @@ export class OrgMembersController {
 
   // ─── قائمة أعضاء الجهة ───────────────────────────────────────────────────
   @Get()
-  @RequireRoles('org_manager', 'academic_supervisor', 'platform_owner')
+  @RequireRoles('org_manager', 'academic_supervisor', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'university_administrator')
   @ApiOperation({ summary: 'قائمة أعضاء الجهة مع أدوارهم' })
   async findAll(
     @CurrentUser() user: IAuthenticatedUser,
@@ -65,7 +65,7 @@ export class OrgMembersController {
 
   // ─── إضافة عضو جديد ──────────────────────────────────────────────────────
   @Post()
-  @RequireRoles('org_manager', 'platform_owner')
+  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'university_administrator')
   @ApiOperation({ summary: 'إضافة عضو جديد للجهة' })
   async create(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
     const passwordHash = await bcrypt.hash(dto.password || 'Miran@Admin2024!', 10);
@@ -162,7 +162,7 @@ export class OrgMembersController {
 
   // ─── تعديل عضو ───────────────────────────────────────────────────────────
   @Patch(':id')
-  @RequireRoles('org_manager', 'platform_owner')
+  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'university_administrator')
   @ApiOperation({ summary: 'تعديل بيانات عضو' })
   async update(@Param('id') accountId: string, @CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
     const account = await this.prisma.userAccount.findUnique({
@@ -198,7 +198,7 @@ export class OrgMembersController {
 
   // ─── تعطيل عضو ───────────────────────────────────────────────────────────
   @Delete(':id')
-  @RequireRoles('org_manager', 'platform_owner')
+  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'hospital_administrator')
   @ApiOperation({ summary: 'تعطيل حساب عضو' })
   async deactivate(@Param('id') accountId: string, @CurrentUser() user: IAuthenticatedUser) {
     await this.prisma.userOrganization.update({
@@ -224,7 +224,7 @@ export class OrgMembersController {
 
   // ─── قائمة الأدوار المتاحة ────────────────────────────────────────────────
   @Get('roles/available')
-  @RequireRoles('org_manager', 'academic_supervisor', 'platform_owner')
+  @RequireRoles('org_manager', 'academic_supervisor', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'university_administrator')
   @ApiOperation({ summary: 'قائمة الأدوار المتاحة للتعيين' })
   async getAvailableRoles() {
     const roles = await this.prisma.role.findMany({
@@ -237,7 +237,7 @@ export class OrgMembersController {
 
   // ─── قائمة الأقسام ───────────────────────────────────────────────────────
   @Get('departments')
-  @RequireRoles('org_manager', 'academic_supervisor', 'platform_owner')
+  @RequireRoles('org_manager', 'academic_supervisor', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'university_administrator')
   @ApiOperation({ summary: 'قائمة الأقسام في الجهة' })
   async getDepartments(@CurrentUser() user: IAuthenticatedUser) {
     const departments = await this.prisma.department.findMany({

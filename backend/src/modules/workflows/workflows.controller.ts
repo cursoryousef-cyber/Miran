@@ -15,7 +15,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 @ApiTags('Workflows (محرك سير العمل القابل للتعديل - Workflow Engine)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('workflows')
 export class WorkflowsController {
   constructor(private workflowsService: WorkflowsService) {}

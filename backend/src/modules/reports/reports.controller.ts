@@ -8,7 +8,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 @ApiTags('Reporting Service (خدمة التقارير والتحليلات المستقلة)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('reports')
 export class ReportsController {
   constructor(private reportsService: ReportsService) {}
