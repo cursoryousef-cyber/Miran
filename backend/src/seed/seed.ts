@@ -1,7 +1,9 @@
 // ============================================================================
-// مِران (Miran) — System Seed Script
-// Bootstraps OrganizationTypes, Roles, Permissions, Default Policies,
-// Default Workflows, Platform Owner, and Northern Borders Demo Data
+// مِران (Miran) — Production-like System Seed Script (v3.5)
+// Real-world demo data centered on:
+// 1. تجمع الحدود الشمالية الصحي (Northern Borders Health Cluster)
+// 2. جامعة الحدود الشمالية (Northern Border University)
+// 3. مستشفى برج الشمال الطبي (North Tower Medical Complex)
 // ============================================================================
 
 import { PrismaClient } from '@prisma/client';
@@ -10,104 +12,21 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting Miran Platform seed...');
+  console.log('🌱 Starting Miran Platform Production-like Seed...');
 
   // --------------------------------------------------------------------------
-  // 1. ORGANIZATION TYPES (أنواع الجهات الديناميكية)
+  // 1. ORGANIZATION TYPES (أنواع الجهات)
   // --------------------------------------------------------------------------
   console.log('📦 Seeding OrganizationTypes...');
 
   const orgTypes = [
-    {
-      code: 'holding',
-      nameAr: 'شركة الصحة القابضة',
-      nameEn: 'Health Holding Company',
-      icon: 'domain',
-      sortOrder: 1,
-      canHaveChildren: true,
-      allowedChildTypes: ['cluster', 'university'],
-      autoCreateRole: 'holding_administrator',
-    },
-    {
-      code: 'cluster',
-      nameAr: 'تجمع صحي',
-      nameEn: 'Health Cluster',
-      icon: 'account_tree',
-      sortOrder: 2,
-      canHaveChildren: true,
-      allowedChildTypes: ['hospital', 'specialty_center', 'phc'],
-      autoCreateRole: 'cluster_administrator',
-    },
-    {
-      code: 'hospital',
-      nameAr: 'مستشفى',
-      nameEn: 'Hospital',
-      icon: 'local_hospital',
-      sortOrder: 3,
-      canHaveChildren: true,
-      allowedChildTypes: ['department'],
-      autoCreateRole: 'hospital_administrator',
-    },
-    {
-      code: 'university',
-      nameAr: 'جامعة',
-      nameEn: 'University',
-      icon: 'school',
-      sortOrder: 4,
-      canHaveChildren: true,
-      allowedChildTypes: ['college'],
-      autoCreateRole: 'university_administrator',
-    },
-    {
-      code: 'college',
-      nameAr: 'كلية صحية',
-      nameEn: 'Health College',
-      icon: 'menu_book',
-      sortOrder: 5,
-      canHaveChildren: true,
-      allowedChildTypes: ['department'],
-      autoCreateRole: 'academic_affairs',
-    },
-    {
-      code: 'specialty_center',
-      nameAr: 'مركز تخصصي',
-      nameEn: 'Specialty Center',
-      icon: 'medical_services',
-      sortOrder: 6,
-      canHaveChildren: true,
-      allowedChildTypes: ['department'],
-      autoCreateRole: 'hospital_administrator',
-    },
-    {
-      code: 'phc',
-      nameAr: 'مركز رعاية صحية أولية',
-      nameEn: 'Primary Health Care Center',
-      icon: 'health_and_safety',
-      sortOrder: 7,
-      canHaveChildren: false,
-      allowedChildTypes: [],
-      autoCreateRole: 'hospital_administrator',
-    },
-    {
-      code: 'training_center',
-      nameAr: 'مركز تدريب مستقل',
-      nameEn: 'Training Center',
-      icon: 'psychology',
-      sortOrder: 8,
-      canHaveChildren: true,
-      allowedChildTypes: ['department'],
-      autoCreateRole: 'training_director',
-    },
-    {
-      code: 'department',
-      nameAr: 'قسم ألماني / سريري',
-      nameEn: 'Department',
-      icon: 'corporate_fare',
-      sortOrder: 9,
-      canHaveChildren: false,
-      allowedChildTypes: [],
-      autoCreateRole: 'department_head',
-    },
+    { code: 'holding', nameAr: 'شركة الصحة القابضة', nameEn: 'Health Holding Company', icon: 'domain', sortOrder: 1, canHaveChildren: true, allowedChildTypes: ['cluster', 'university'], autoCreateRole: 'holding_administrator' },
+    { code: 'cluster', nameAr: 'تجمع صحي', nameEn: 'Health Cluster', icon: 'account_tree', sortOrder: 2, canHaveChildren: true, allowedChildTypes: ['hospital', 'specialty_center', 'phc'], autoCreateRole: 'cluster_administrator' },
+    { code: 'hospital', nameAr: 'مستشفى / مجمع طبي', nameEn: 'Hospital / Medical Complex', icon: 'local_hospital', sortOrder: 3, canHaveChildren: true, allowedChildTypes: ['department'], autoCreateRole: 'hospital_administrator' },
+    { code: 'university', nameAr: 'جامعة', nameEn: 'University', icon: 'school', sortOrder: 4, canHaveChildren: true, allowedChildTypes: ['college'], autoCreateRole: 'university_administrator' },
+    { code: 'college', nameAr: 'كلية صحية', nameEn: 'Health College', icon: 'menu_book', sortOrder: 5, canHaveChildren: true, allowedChildTypes: ['department'], autoCreateRole: 'academic_affairs' },
+    { code: 'specialty_center', nameAr: 'مركز تخصصي', nameEn: 'Specialty Center', icon: 'medical_services', sortOrder: 6, canHaveChildren: true, allowedChildTypes: ['department'], autoCreateRole: 'hospital_administrator' },
+    { code: 'department', nameAr: 'قسم سريري / إداري', nameEn: 'Department', icon: 'corporate_fare', sortOrder: 9, canHaveChildren: false, allowedChildTypes: [], autoCreateRole: 'department_head' },
   ];
 
   const createdTypes: Record<string, string> = {};
@@ -121,7 +40,7 @@ async function main() {
   }
 
   // --------------------------------------------------------------------------
-  // 2. ROLES (الأدوار الـ 13)
+  // 2. ROLES (الأدوار الموحدة بالنظام)
   // --------------------------------------------------------------------------
   console.log('🎭 Seeding Roles...');
 
@@ -133,12 +52,12 @@ async function main() {
     { code: 'university_administrator', nameAr: 'مدير الجامعة', nameEn: 'University Administrator', hierarchyLevel: 70, isSystem: true },
     { code: 'academic_affairs', nameAr: 'مشرف الشؤون الأكاديمية', nameEn: 'Academic Affairs Supervisor', hierarchyLevel: 60, isSystem: true },
     { code: 'training_director', nameAr: 'مدير الشؤون التدريبية', nameEn: 'Training Director', hierarchyLevel: 60, isSystem: true },
-    { code: 'department_head', nameAr: 'رئيس القسم / مشرف التخصص', nameEn: 'Department Head', hierarchyLevel: 50, isSystem: true },
-    { code: 'trainer', nameAr: 'مدرب / استشاري', nameEn: 'Trainer / Consultant', hierarchyLevel: 40, isSystem: true },
-    { code: 'trainee', nameAr: 'متدرب (طبيب امتياز/مقيم/طالب)', nameEn: 'Trainee', hierarchyLevel: 10, isSystem: true },
-    { code: 'auditor', nameAr: 'مدقق ومراجع الجودة', nameEn: 'Auditor', hierarchyLevel: 50, isSystem: true },
-    { code: 'reviewer', nameAr: 'مراجع طلبات معتمد', nameEn: 'Reviewer', hierarchyLevel: 50, isSystem: true },
-    { code: 'external_system', nameAr: 'نظام خارجي مرتبط', nameEn: 'External Integrated System', hierarchyLevel: 10, isSystem: true },
+    { code: 'department_head', nameAr: 'رئيس القسم السريري', nameEn: 'Department Head', hierarchyLevel: 50, isSystem: true },
+    { code: 'academic_supervisor', nameAr: 'مشرف أكاديمي', nameEn: 'Academic Supervisor', hierarchyLevel: 40, isSystem: true },
+    { code: 'training_supervisor', nameAr: 'مشرف تدريب ميداني', nameEn: 'Training Supervisor', hierarchyLevel: 40, isSystem: true },
+    { code: 'trainer', nameAr: 'مدرب ميداني', nameEn: 'Trainer', hierarchyLevel: 30, isSystem: true },
+    { code: 'trainee', nameAr: 'متدرب / طبيب امتياز', nameEn: 'Trainee / Intern', hierarchyLevel: 10, isSystem: true },
+    { code: 'org_manager', nameAr: 'مدير الجهة', nameEn: 'Organization Manager', hierarchyLevel: 75, isSystem: true },
   ];
 
   const createdRoles: Record<string, string> = {};
@@ -151,75 +70,14 @@ async function main() {
     createdRoles[r.code] = record.id;
   }
 
-  // --------------------------------------------------------------------------
-  // 3. PERMISSIONS (الصلاحيات الـ 19+)
-  // --------------------------------------------------------------------------
-  console.log('🔑 Seeding Permissions...');
-
-  const permissions = [
-    { code: 'view_organizations', nameAr: 'عرض الجهات', nameEn: 'View Organizations', module: 'organizations' },
-    { code: 'manage_organizations', nameAr: 'إدارة الجهات والمعالج الآلي', nameEn: 'Manage Organizations', module: 'organizations' },
-    { code: 'view_users', nameAr: 'عرض المستخدمين', nameEn: 'View Users', module: 'users' },
-    { code: 'manage_users', nameAr: 'إدارة المستخدمين والحسابات', nameEn: 'Manage Users', module: 'users' },
-    { code: 'manage_roles', nameAr: 'إدارة الأدوار والصلاحيات والسياسات', nameEn: 'Manage Roles & Policies', module: 'rbac' },
-    { code: 'view_trainees', nameAr: 'عرض المتدربين والدفعات', nameEn: 'View Trainees', module: 'training' },
-    { code: 'manage_trainees', nameAr: 'إدارة المتدربين والبطاقات', nameEn: 'Manage Trainees', module: 'training' },
-    { code: 'view_rotations', nameAr: 'عرض الروتيشنات والجدول', nameEn: 'View Rotations', module: 'training' },
-    { code: 'manage_rotations', nameAr: 'إدارة وتوزيع الروتيشنات', nameEn: 'Manage Rotations', module: 'training' },
-    { code: 'launch_call', nameAr: 'إطلاق ندائات المدربين', nameEn: 'Launch Call', module: 'calls' },
-    { code: 'respond_call', nameAr: 'استجابة وتأكيد النداءات', nameEn: 'Respond Call', module: 'calls' },
-    { code: 'submit_evaluation', nameAr: 'تقديم التقييمات', nameEn: 'Submit Evaluation', module: 'evaluations' },
-    { code: 'view_evaluations', nameAr: 'عرض التقييمات ومؤشر الانضباط', nameEn: 'View Evaluations', module: 'evaluations' },
-    { code: 'manage_documents', nameAr: 'إدارة وتدقيق المستندات', nameEn: 'Manage Documents', module: 'documents' },
-    { code: 'view_reports', nameAr: 'عرض وتوليد التقارير', nameEn: 'View Reports', module: 'reports' },
-    { code: 'view_audit_logs', nameAr: 'عرض سجلات التدقيق', nameEn: 'View Audit Logs', module: 'audit' },
-  ];
-
-  for (const p of permissions) {
-    await prisma.permission.upsert({
-      where: { code: p.code },
-      create: p,
-      update: p,
-    });
-  }
+  const defaultPasswordHash = await bcrypt.hash('Miran@Admin2024!', 10);
 
   // --------------------------------------------------------------------------
-  // 4. PLATFORM OWNER BOOTSTRAP (مدير المنصة الأول)
+  // 3. ORGANIZATIONS (تجمع الحدود الشمالية + جامعة الحدود الشمالية + برج الشمال)
   // --------------------------------------------------------------------------
-  console.log('👤 Bootstrapping Platform Owner...');
+  console.log('🏰 Seeding Real Organizations...');
 
-  const rootPerson = await prisma.person.upsert({
-    where: { nationalId: '1000000000' },
-    create: {
-      nationalId: '1000000000',
-      nameAr: 'مدير المنصة الوطنية',
-      nameEn: 'Platform Owner Admin',
-      email: 'admin@miran.health',
-      phone: '+966500000000',
-    },
-    update: {},
-  });
-
-  const rootPasswordHash = await bcrypt.hash('Miran@Admin2024!', 10);
-  const rootAccount = await prisma.userAccount.upsert({
-    where: { email: 'admin@miran.health' },
-    create: {
-      personId: rootPerson.id,
-      email: 'admin@miran.health',
-      username: 'admin',
-      passwordHash: rootPasswordHash,
-      isEmailVerified: true,
-      isActive: true,
-    },
-    update: {},
-  });
-
-  // --------------------------------------------------------------------------
-  // 5. DEMO DATA: HEALTH HOLDING + NORTHERN BORDERS CLUSTER
-  // --------------------------------------------------------------------------
-  console.log('🏰 Creating Northern Borders Cluster Demo Data...');
-
-  // Top Level: Health Holding Company (الصحة القابضة)
+  // Health Holding Company
   const holdingOrg = await prisma.organization.upsert({
     where: { code: 'HEALTH-HOLDING' },
     create: {
@@ -229,15 +87,13 @@ async function main() {
       nameEn: 'Health Holding Company',
       status: 'active',
       cityAr: 'الرياض',
-      cityEn: 'Riyadh',
       regionAr: 'الرياض',
-      regionEn: 'Riyadh',
       contactEmail: 'info@healthholding.sa',
     },
     update: {},
   });
 
-  // Child: Northern Borders Health Cluster (تجمع الحدود الشمالية الصحي)
+  // Northern Borders Health Cluster (تجمع الحدود الشمالية الصحي)
   const clusterOrg = await prisma.organization.upsert({
     where: { code: 'NB-CLUSTER' },
     create: {
@@ -248,238 +104,178 @@ async function main() {
       nameEn: 'Northern Borders Health Cluster',
       status: 'active',
       cityAr: 'عرعر',
-      cityEn: 'Arar',
       regionAr: 'الحدود الشمالية',
-      regionEn: 'Northern Borders',
-      contactEmail: 'info@nbhc.health.sa',
+      contactEmail: 'contact@nbhc.health.sa',
+      contactPhone: '+966146620000',
     },
     update: {},
   });
 
-  // Child Hospital 1: Prince Abdulaziz bin Musaed Hospital
-  const hosp1 = await prisma.organization.upsert({
-    where: { code: 'HOSP-PABMH' },
+  // North Tower Medical Complex (مستشفى برج الشمال الطبي)
+  const northTowerHosp = await prisma.organization.upsert({
+    where: { code: 'HOSP-NORTH-TOWER' },
     create: {
       organizationTypeId: createdTypes['hospital'],
       parentId: clusterOrg.id,
-      code: 'HOSP-PABMH',
-      nameAr: 'مستشفى الأمير عبدالعزيز بن مساعد',
-      nameEn: 'Prince Abdulaziz bin Musaed Hospital',
+      code: 'HOSP-NORTH-TOWER',
+      nameAr: 'مستشفى برج الشمال الطبي',
+      nameEn: 'North Tower Medical Complex',
       status: 'active',
       cityAr: 'عرعر',
-      cityEn: 'Arar',
       regionAr: 'الحدود الشمالية',
+      contactEmail: 'northtower@nbhc.health.sa',
+      contactPhone: '+966146621111',
     },
     update: {},
   });
 
-  // Child Hospital 2: Arar Central Hospital
-  const hosp2 = await prisma.organization.upsert({
-    where: { code: 'HOSP-ACH' },
-    create: {
-      organizationTypeId: createdTypes['hospital'],
-      parentId: clusterOrg.id,
-      code: 'HOSP-ACH',
-      nameAr: 'مستشفى عرعر المركزي',
-      nameEn: 'Arar Central Hospital',
-      status: 'active',
-      cityAr: 'عرعر',
-      cityEn: 'Arar',
-      regionAr: 'الحدود الشمالية',
-    },
-    update: {},
-  });
-
-  // University: Northern Borders University (جامعة الحدود الشمالية)
+  // Northern Border University (جامعة الحدود الشمالية)
   const uniOrg = await prisma.organization.upsert({
     where: { code: 'NBU-UNIVERSITY' },
     create: {
       organizationTypeId: createdTypes['university'],
       code: 'NBU-UNIVERSITY',
       nameAr: 'جامعة الحدود الشمالية',
-      nameEn: 'Northern Borders University',
+      nameEn: 'Northern Border University',
       status: 'active',
       cityAr: 'عرعر',
-      cityEn: 'Arar',
       regionAr: 'الحدود الشمالية',
       contactEmail: 'info@nbu.edu.sa',
-    },
-    update: {},
-  });
-
-  // Link Root User to Holding Org as platform_owner
-  await prisma.userOrganization.upsert({
-    where: {
-      userAccountId_organizationId: {
-        userAccountId: rootAccount.id,
-        organizationId: holdingOrg.id,
-      },
-    },
-    create: {
-      userAccountId: rootAccount.id,
-      organizationId: holdingOrg.id,
-      isPrimary: true,
-    },
-    update: {},
-  });
-
-  await prisma.userRole.upsert({
-    where: {
-      userAccountId_roleId_organizationId: {
-        userAccountId: rootAccount.id,
-        roleId: createdRoles['platform_owner'],
-        organizationId: holdingOrg.id,
-      },
-    },
-    create: {
-      userAccountId: rootAccount.id,
-      roleId: createdRoles['platform_owner'],
-      organizationId: holdingOrg.id,
+      contactPhone: '+966146614444',
     },
     update: {},
   });
 
   // --------------------------------------------------------------------------
-  // 6. DEPARTMENTS & TRAINERS
+  // 4. CLINICAL DEPARTMENTS (الأقسام السريرية بمستشفى برج الشمال الطبي)
   // --------------------------------------------------------------------------
-  console.log('🩺 Seeding Departments & Trainers...');
+  console.log('🩺 Seeding Clinical Departments at North Tower Complex...');
 
-  const dept1 = await prisma.department.upsert({
-    where: { id: 'd1111111-1111-1111-1111-111111111111' },
+  const deptInternal = await prisma.department.upsert({
+    where: { id: 'dept-nb-internal-med-01' },
     create: {
-      id: 'd1111111-1111-1111-1111-111111111111',
-      organizationId: hosp1.id,
-      nameAr: 'قسم الباطنية العام',
-      nameEn: 'Internal Medicine Department',
-      code: 'INT-MED',
-      capacity: 15,
-      roundLocation: 'الدور الثالث — جناح باطنية رجال',
+      id: 'dept-nb-internal-med-01',
+      organizationId: northTowerHosp.id,
+      nameAr: 'قسم الباطنة العامة — برج الشمال',
+      nameEn: 'General Internal Medicine Department',
+      code: 'NT-INT-MED',
+      capacity: 25,
+      roundLocation: 'برج الشمال — البرج الطبي الدور الرابع',
       roundTime: '08:00',
-      meetingRoom: 'غرفة الاجتماعات ٣ب',
+      meetingRoom: 'قاعة الأطباء المقيمين ٤٠١',
     },
     update: {},
   });
 
-  const dept2 = await prisma.department.upsert({
-    where: { id: 'd2222222-2222-2222-2222-222222222222' },
+  const deptSurgery = await prisma.department.upsert({
+    where: { id: 'dept-nb-surgery-02' },
     create: {
-      id: 'd2222222-2222-2222-2222-222222222222',
-      organizationId: hosp1.id,
-      nameAr: 'قسم الجراحة العامة',
-      nameEn: 'General Surgery Department',
-      code: 'SURGERY',
-      capacity: 12,
-      roundLocation: 'الدور الرابع — جناح الجراحة',
-      roundTime: '06:30',
-      meetingRoom: 'قاعة الجراحة التعليمية',
-    },
-    update: {},
-  });
-
-  const dept3 = await prisma.department.upsert({
-    where: { id: 'd3333333-3333-3333-3333-333333333333' },
-    create: {
-      id: 'd3333333-3333-3333-3333-333333333333',
-      organizationId: hosp1.id,
-      nameAr: 'قسم الطوارئ والحوادث',
-      nameEn: 'Emergency Department',
-      code: 'ER',
+      id: 'dept-nb-surgery-02',
+      organizationId: northTowerHosp.id,
+      nameAr: 'قسم الجراحة العامة وجراحة اليوم الواحد',
+      nameEn: 'General Surgery & Day Surgery Department',
+      code: 'NT-SURGERY',
       capacity: 20,
-      roundLocation: 'منطقة الفرز — المدخل الرئيسي',
+      roundLocation: 'برج الشمال — جناح الجراحة الدور الخامس',
+      roundTime: '06:30',
+      meetingRoom: 'غرفة مناقشة الحالات الجراحية',
+    },
+    update: {},
+  });
+
+  const deptER = await prisma.department.upsert({
+    where: { id: 'dept-nb-er-03' },
+    create: {
+      id: 'dept-nb-er-03',
+      organizationId: northTowerHosp.id,
+      nameAr: 'قسم الطوارئ والحوادث المتقدمة',
+      nameEn: 'Advanced Emergency & Trauma Department',
+      code: 'NT-ER',
+      capacity: 30,
+      roundLocation: 'برج الشمال — الدور الأرضي مدخل الطوارئ',
       roundTime: '07:00',
-      meetingRoom: 'غرفة التسليم بجوار الفرز',
+      meetingRoom: 'غرفة تسليم الشيفتات العاجلة',
     },
     update: {},
   });
 
-  // Create Trainer Person & User Account
-  const trainerPerson = await prisma.person.upsert({
-    where: { nationalId: '1011111111' },
-    create: {
-      nationalId: '1011111111',
-      nameAr: 'د. سالم العتيبي',
-      nameEn: 'Dr. Salem Al-Otaibi',
-      email: 'salem@miran.health',
-      phone: '+966511111111',
-    },
-    update: {},
-  });
+  // --------------------------------------------------------------------------
+  // 5. USER ACCOUNTS FOR ALL 6 PRIMARY ROLES
+  // --------------------------------------------------------------------------
+  console.log('👥 Seeding Comprehensive User Accounts for All Roles...');
 
-  const trainerAccount = await prisma.userAccount.upsert({
-    where: { email: 'salem@miran.health' },
-    create: {
-      personId: trainerPerson.id,
+  const accountsSeedConfig = [
+    {
+      natId: '1000000000',
+      nameAr: 'مدير المنصة الوطنية',
+      email: 'platform@miran.health',
+      username: 'platform',
+      roleCode: 'platform_owner',
+      orgId: holdingOrg.id,
+    },
+    {
+      natId: '1000000001',
+      nameAr: 'مدير تجمع الحدود الشمالية',
+      email: 'cluster.manager@miran.health',
+      username: 'clustermanager',
+      roleCode: 'org_manager',
+      orgId: clusterOrg.id,
+    },
+    {
+      natId: '1000000002',
+      nameAr: 'د. خالد الأكاديمي — جامعة الحدود الشمالية',
+      email: 'academic.manager@miran.health',
+      username: 'academicmanager',
+      roleCode: 'academic_supervisor',
+      orgId: uniOrg.id,
+    },
+    {
+      natId: '1000000003',
+      nameAr: 'د. فهد المشرف — مستشفى برج الشمال',
+      email: 'training.supervisor@miran.health',
+      username: 'trainingsupervisor',
+      roleCode: 'training_supervisor',
+      orgId: northTowerHosp.id,
+    },
+    {
+      natId: '1011111111',
+      nameAr: 'د. سالم العتيبي (مدرب الباطنية الميداني)',
       email: 'salem@miran.health',
       username: 'drsalem',
-      passwordHash: rootPasswordHash,
-      isEmailVerified: true,
-      isActive: true,
+      roleCode: 'trainer',
+      orgId: northTowerHosp.id,
     },
-    update: {},
-  });
-
-  await prisma.userOrganization.upsert({
-    where: { userAccountId_organizationId: { userAccountId: trainerAccount.id, organizationId: hosp1.id } },
-    create: { userAccountId: trainerAccount.id, organizationId: hosp1.id, isPrimary: true },
-    update: {},
-  });
-
-  await prisma.userRole.upsert({
-    where: { userAccountId_roleId_organizationId: { userAccountId: trainerAccount.id, roleId: createdRoles['trainer'], organizationId: hosp1.id } },
-    create: { userAccountId: trainerAccount.id, roleId: createdRoles['trainer'], organizationId: hosp1.id },
-    update: {},
-  });
-
-  const trainerProfile = await prisma.trainerProfile.upsert({
-    where: { personId: trainerPerson.id },
-    create: {
-      personId: trainerPerson.id,
-      organizationId: hosp1.id,
-      departmentId: dept1.id,
-      titleAr: 'استشاري باطنية',
-      titleEn: 'Consultant Internal Medicine',
-      extensionNumber: '4122',
-      maxTrainees: 5,
-      specialization: 'Internal Medicine',
+    {
+      natId: '1022222222',
+      nameAr: 'طبيب امتياز عبدالله المطيري',
+      email: 'abdullah@miran.health',
+      username: 'abdullah',
+      roleCode: 'trainee',
+      orgId: northTowerHosp.id,
     },
-    update: {},
-  });
-
-  // --------------------------------------------------------------------------
-  // 7. TRAINEES & USER ACCOUNTS
-  // --------------------------------------------------------------------------
-  console.log('🎓 Seeding Trainees...');
-
-  const traineeData = [
-    { natId: '1022222222', nameAr: 'عبدالله ناصر المطيري', nameEn: 'Abdullah N. Almutairi', email: 'abdullah@miran.health', num: '11023', level: 'intern', spec: 'طب بشري' },
-    { natId: '1033333333', nameAr: 'ريم فهد الدوسري', nameEn: 'Reem F. Aldosari', email: 'reem@miran.health', num: '11024', level: 'intern', spec: 'طب بشري' },
-    { natId: '1044444444', nameAr: 'خالد سعود العنزي', nameEn: 'Khalid S. Alanazi', email: 'khalid@miran.health', num: '11025', level: 'intern', spec: 'طب بشري' },
-    { natId: '1055555555', nameAr: 'سارة محمد الرشيد', nameEn: 'Sara M. Alrashid', email: 'sara@miran.health', num: '11026', level: 'intern', spec: 'طب بشري' },
-    { natId: '1066666666', nameAr: 'فيصل عبدالرحمن الحميد', nameEn: 'Faisal A. Alhumaid', email: 'faisal@miran.health', num: '11027', level: 'resident', spec: 'باطنية — سنة ٢' },
   ];
 
-  const createdTraineeProfiles: any[] = [];
+  const createdUserMap: Record<string, any> = {};
 
-  for (const t of traineeData) {
-    const p = await prisma.person.upsert({
-      where: { nationalId: t.natId },
+  for (const cfg of accountsSeedConfig) {
+    const person = await prisma.person.upsert({
+      where: { nationalId: cfg.natId },
       create: {
-        nationalId: t.natId,
-        nameAr: t.nameAr,
-        nameEn: t.nameEn,
-        email: t.email,
-        phone: `+9665${t.num}00`,
+        nationalId: cfg.natId,
+        nameAr: cfg.nameAr,
+        email: cfg.email,
+        phone: `+9665${cfg.natId.slice(2, 9)}`,
       },
       update: {},
     });
 
-    const acc = await prisma.userAccount.upsert({
-      where: { email: t.email },
+    const userAccount = await prisma.userAccount.upsert({
+      where: { email: cfg.email },
       create: {
-        personId: p.id,
-        email: t.email,
-        username: t.email.split('@')[0],
-        passwordHash: rootPasswordHash,
+        personId: person.id,
+        email: cfg.email,
+        username: cfg.username,
+        passwordHash: defaultPasswordHash,
         isEmailVerified: true,
         isActive: true,
       },
@@ -487,150 +283,157 @@ async function main() {
     });
 
     await prisma.userOrganization.upsert({
-      where: { userAccountId_organizationId: { userAccountId: acc.id, organizationId: hosp1.id } },
-      create: { userAccountId: acc.id, organizationId: hosp1.id, isPrimary: true },
-      update: {},
-    });
-
-    await prisma.userRole.upsert({
-      where: { userAccountId_roleId_organizationId: { userAccountId: acc.id, roleId: createdRoles['trainee'], organizationId: hosp1.id } },
-      create: { userAccountId: acc.id, roleId: createdRoles['trainee'], organizationId: hosp1.id },
-      update: {},
-    });
-
-    const tp = await prisma.traineeProfile.upsert({
-      where: { personId: p.id },
+      where: {
+        userAccountId_organizationId: {
+          userAccountId: userAccount.id,
+          organizationId: cfg.orgId,
+        },
+      },
       create: {
-        personId: p.id,
-        organizationId: hosp1.id,
-        traineeNumber: t.num,
-        level: t.level,
-        specialtyAr: t.spec,
-        specialtyEn: t.spec,
-        applicationStatus: 'approved',
-        cardStatus: 'active',
-        cardUuid: `CARD-${t.num}`,
-        photoApproved: true,
+        userAccountId: userAccount.id,
+        organizationId: cfg.orgId,
+        isPrimary: true,
       },
       update: {},
     });
 
-    createdTraineeProfiles.push(tp);
-  }
-
-  // --------------------------------------------------------------------------
-  // 8. ROTATIONS
-  // --------------------------------------------------------------------------
-  console.log('🔄 Seeding Rotations...');
-
-  const today = new Date();
-  const startDate = new Date(today.getTime() - 15 * 24 * 60 * 60 * 1000);
-  const endDate = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000);
-
-  for (const tp of createdTraineeProfiles) {
-    const existingRot = await prisma.rotation.findFirst({
-      where: { traineeProfileId: tp.id, departmentId: dept1.id },
-    });
-    if (!existingRot) {
-      await prisma.rotation.create({
-        data: {
-          organizationId: hosp1.id,
-          traineeProfileId: tp.id,
-          departmentId: dept1.id,
-          trainerProfileId: trainerProfile.id,
-          startDate: startDate,
-          endDate: endDate,
-          status: 'active',
-          midpointMeetingDone: true,
+    await prisma.userRole.upsert({
+      where: {
+        userAccountId_roleId_organizationId: {
+          userAccountId: userAccount.id,
+          roleId: createdRoles[cfg.roleCode],
+          organizationId: cfg.orgId,
         },
-      });
-    }
+      },
+      create: {
+        userAccountId: userAccount.id,
+        roleId: createdRoles[cfg.roleCode],
+        organizationId: cfg.orgId,
+      },
+      update: {},
+    });
+
+    createdUserMap[cfg.roleCode] = { person, userAccount };
   }
 
   // --------------------------------------------------------------------------
-  // 9. TRAINER CALLS & PARTICIPANTS
+  // 6. PROFILES (TRAINER & TRAINEE PROFILES)
   // --------------------------------------------------------------------------
-  console.log('🚨 Seeding Emergency Calls...');
+  console.log('🩺 Seeding Trainer & Trainee Profiles...');
 
-  const call1 = await prisma.trainerCall.upsert({
-    where: { id: 'c1111111-1111-1111-1111-111111111111' },
+  const trainerProfile = await prisma.trainerProfile.upsert({
+    where: { personId: createdUserMap['trainer'].person.id },
     create: {
-      id: 'c1111111-1111-1111-1111-111111111111',
-      organizationId: hosp1.id,
-      departmentId: dept1.id,
-      trainerProfileId: trainerProfile.id,
-      callType: 'urgent',
-      customTitle: 'استدعاء عاجل — حالة حرجة بالطوارئ',
-      note: 'يرجى التواجد فوراً بإنعاش باطنية',
-      location: 'الدور الثالث — غرفة الإنعاش ٣٠٢',
-      expectedMinutes: 20,
-      launchedAt: new Date(),
-      status: 'active',
+      personId: createdUserMap['trainer'].person.id,
+      organizationId: northTowerHosp.id,
+      departmentId: deptInternal.id,
+      titleAr: 'استشاري ورئيس قسم الباطنية — برج الشمال',
+      titleEn: 'Consultant & Head of Internal Medicine',
+      extensionNumber: '7011',
+      maxTrainees: 8,
+      specialization: 'Internal Medicine & Critical Care',
     },
     update: {},
   });
 
-  for (const tp of createdTraineeProfiles) {
-    const existingP = await prisma.callParticipant.findFirst({
-      where: { callId: call1.id, traineeProfileId: tp.id },
-    });
-    if (!existingP) {
-      await prisma.callParticipant.create({
-        data: {
-          callId: call1.id,
-          traineeProfileId: tp.id,
-          state: 'notified',
-          notifiedAt: new Date(),
-        },
-      });
-    }
-  }
+  const traineeProfile = await prisma.traineeProfile.upsert({
+    where: { personId: createdUserMap['trainee'].person.id },
+    create: {
+      personId: createdUserMap['trainee'].person.id,
+      organizationId: northTowerHosp.id,
+      traineeNumber: 'NBU-INT-2026-091',
+      level: 'intern',
+      specialtyAr: 'طبيب امتياز — طب وجراحة عامة',
+      specialtyEn: 'MBBS Medical Intern',
+      applicationStatus: 'approved',
+      cardStatus: 'active',
+      cardUuid: 'CARD-NBU-NT-9901',
+      photoApproved: true,
+    },
+    update: {},
+  });
 
   // --------------------------------------------------------------------------
-  // 10. NOTIFICATIONS
+  // 7. ROTATIONS & SCHEDULES
   // --------------------------------------------------------------------------
-  console.log('🔔 Seeding Notifications...');
+  console.log('🔄 Seeding Active Rotations...');
 
-  for (const tp of createdTraineeProfiles) {
-    const acc = await prisma.userAccount.findFirst({ where: { personId: tp.personId } });
-    if (acc) {
-      const notifCount = await prisma.notification.count({ where: { userId: acc.id } });
-      if (notifCount === 0) {
-        await prisma.notification.create({
-          data: {
-            organizationId: hosp1.id,
-            userId: acc.id,
-            titleAr: 'تم إطلاق نداء عاجل جديدة',
-            bodyAr: 'استدعاء عاجل من د. سالم العتيبي في جناح الباطنية',
-            type: 'call_alert',
-            isRead: false,
-          },
-        });
-        await prisma.notification.create({
-          data: {
-            organizationId: hosp1.id,
-            userId: acc.id,
-            titleAr: 'مرحباً بك في منصة مِران',
-            bodyAr: 'تم اعتماد حسابك وإصدار بطاقة التدريب الذكية بنجاح',
-            type: 'general',
-            isRead: true,
-          },
-        });
-      }
-    }
-  }
+  const now = new Date();
+  const startDate = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000);
+  const endDate = new Date(now.getTime() + 40 * 24 * 60 * 60 * 1000);
 
-  console.log('✅ Seed completed successfully with ALL live records!');
-  console.log('---------------------------------------------------------');
-  console.log('👑 Admin: admin@miran.health | Password: Miran@Admin2024!');
-  console.log('👨‍🏫 Trainer: salem@miran.health | Password: Miran@Admin2024!');
-  console.log('👨‍🎓 Trainee: abdullah@miran.health | Password: Miran@Admin2024!');
-  console.log('---------------------------------------------------------');
+  await prisma.rotation.create({
+    data: {
+      organizationId: northTowerHosp.id,
+      traineeProfileId: traineeProfile.id,
+      departmentId: deptInternal.id,
+      trainerProfileId: trainerProfile.id,
+      startDate: startDate,
+      endDate: endDate,
+      status: 'active',
+      midpointMeetingDone: true,
+    },
+  });
+
+  // --------------------------------------------------------------------------
+  // 8. EMERGENCY CALLS & ALERT CENTER
+  // --------------------------------------------------------------------------
+  console.log('🚨 Seeding M-CALL Field Emergency Call...');
+
+  const emergencyCall = await prisma.trainerCall.create({
+    data: {
+      organizationId: northTowerHosp.id,
+      departmentId: deptInternal.id,
+      trainerProfileId: trainerProfile.id,
+      callType: 'urgent',
+      customTitle: 'نداء طوارئ سريري — العناية المركزة برج الشمال',
+      note: 'حالة انخفاض أكسجين حادة بالطوارئ، يلزم تواجد المتدربين فوراً',
+      location: 'مستشفى برج الشمال — الدور الرابع العناية المركزة غرفة ٤٠٢',
+      expectedMinutes: 15,
+      launchedAt: new Date(),
+      status: 'active',
+    },
+  });
+
+  await prisma.callParticipant.create({
+    data: {
+      callId: emergencyCall.id,
+      traineeProfileId: traineeProfile.id,
+      state: 'notified',
+      notifiedAt: new Date(),
+    },
+  });
+
+  // --------------------------------------------------------------------------
+  // 9. AUDIT LOGS
+  // --------------------------------------------------------------------------
+  console.log('📜 Seeding System Audit Trail...');
+
+  await prisma.auditLog.create({
+    data: {
+      organizationId: northTowerHosp.id,
+      userAccountId: createdUserMap['platform_owner'].userAccount.id,
+      action: 'SYSTEM_BOOTSTRAP_COMPLETE',
+      entityType: 'PLATFORM',
+      entityId: holdingOrg.id,
+      details: JSON.stringify({ message: 'تم اعتماد وتجهيز بيئة تجمع الحدود الشمالية الصحي ومستشفى برج الشمال الطبي بالكامل.' }),
+    },
+  });
+
+  console.log('✅ Production-like Seed successfully completed!');
+  console.log('========================================================================');
+  console.log('📌 1. Platform Owner: platform@miran.health | Pass: Miran@Admin2024!');
+  console.log('📌 2. Org Manager: cluster.manager@miran.health | Pass: Miran@Admin2024!');
+  console.log('📌 3. Academic Supervisor: academic.manager@miran.health | Pass: Miran@Admin2024!');
+  console.log('📌 4. Training Supervisor: training.supervisor@miran.health | Pass: Miran@Admin2024!');
+  console.log('📌 5. Trainer: salem@miran.health | Pass: Miran@Admin2024!');
+  console.log('📌 6. Trainee: abdullah@miran.health | Pass: Miran@Admin2024!');
+  console.log('========================================================================');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seed failed:', e);
+    console.error('❌ Seed execution failed:', e);
     process.exit(1);
   })
   .finally(async () => {
