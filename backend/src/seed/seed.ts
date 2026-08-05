@@ -411,16 +411,85 @@ async function main() {
     update: {},
   });
 
-  // --------------------------------------------------------------------------
-  // 7. ROTATIONS & SCHEDULES
-  // --------------------------------------------------------------------------
-  console.log('🔄 Seeding Active Rotations...');
-
+  // Date Helper
   const now = new Date();
   const startDate = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000);
   const endDate = new Date(now.getTime() + 40 * 24 * 60 * 60 * 1000);
 
-  await prisma.rotation.create({
+  // --------------------------------------------------------------------------
+  // 7. ACADEMIC PROGRAM & BATCH (جامعة الحدود الشمالية — دفعة 2027)
+  // --------------------------------------------------------------------------
+  console.log('🎓 Seeding NBU Academic Program & 2027 Internship Batch...');
+
+  const nbuProgram = await prisma.program.upsert({
+    where: { id: 'b0000000-0000-0000-0000-000000000001' },
+    create: {
+      id: 'b0000000-0000-0000-0000-000000000001',
+      organizationId: uniOrg.id,
+      code: 'MBBS-INT-2027',
+      nameAr: 'برنامج امتياز الطب والجراحة العامة 2027',
+      nameEn: 'MBBS Medical Internship Program 2027',
+      programType: 'internship',
+      durationMonths: 12,
+    },
+    update: {},
+  });
+
+  await prisma.academicIntake.upsert({
+    where: { id: 'c0000000-0000-0000-0000-000000000001' },
+    create: {
+      id: 'c0000000-0000-0000-0000-000000000001',
+      organizationId: uniOrg.id,
+      programId: nbuProgram.id,
+      code: 'INTAKE-NBU-2027',
+      nameAr: 'دفعة أطباء الامتياز — 2026/2027',
+      nameEn: 'Medical Intern Batch 2026/2027',
+      academicYear: '2026/2027',
+      capacity: 50,
+      startDate: startDate,
+      endDate: endDate,
+      status: 'active',
+    },
+    update: {},
+  });
+
+  // Additional Hospitals under Northern Borders Health Cluster
+  const rafhaHosp = await prisma.organization.upsert({
+    where: { code: 'HOSP-RAFHA' },
+    create: {
+      organizationTypeId: createdTypes['hospital'],
+      parentId: clusterOrg.id,
+      code: 'HOSP-RAFHA',
+      nameAr: 'مستشفى رفحاء المركزي',
+      nameEn: 'Rafha General Hospital',
+      status: 'active',
+      cityAr: 'رفحاء',
+      regionAr: 'الحدود الشمالية',
+    },
+    update: {},
+  });
+
+  const turaifHosp = await prisma.organization.upsert({
+    where: { code: 'HOSP-TURAIF' },
+    create: {
+      organizationTypeId: createdTypes['hospital'],
+      parentId: clusterOrg.id,
+      code: 'HOSP-TURAIF',
+      nameAr: 'مستشفى طريف العام',
+      nameEn: 'Turaif General Hospital',
+      status: 'active',
+      cityAr: 'طريف',
+      regionAr: 'الحدود الشمالية',
+    },
+    update: {},
+  });
+
+  // --------------------------------------------------------------------------
+  // 8. ROTATIONS & SCHEDULES
+  // --------------------------------------------------------------------------
+  console.log('🔄 Seeding Active Rotations...');
+
+  const activeRotation = await prisma.rotation.create({
     data: {
       organizationId: northTowerHosp.id,
       traineeProfileId: traineeProfile.id,
@@ -434,21 +503,40 @@ async function main() {
   });
 
   // --------------------------------------------------------------------------
-  // 8. EMERGENCY CALLS & ALERT CENTER
+  // 9. ATTENDANCE RECORD (Check-In / Check-Out with GPS & QR Code)
   // --------------------------------------------------------------------------
-  console.log('🚨 Seeding M-CALL Field Emergency Call...');
+  console.log('📍 Seeding Attendance Check-in Record with GPS/QR...');
+
+  await prisma.attendance.create({
+    data: {
+      organizationId: northTowerHosp.id,
+      traineeProfileId: traineeProfile.id,
+      date: now,
+      checkIn: new Date(now.getTime() - 8 * 60 * 60 * 1000),
+      checkOut: now,
+      method: 'gps_qr',
+      geoLat: 30.9753,
+      geoLng: 41.0381,
+      status: 'present',
+    },
+  });
+
+  // --------------------------------------------------------------------------
+  // 10. EMERGENCY CALLS & CLINICAL CASE LOG
+  // --------------------------------------------------------------------------
+  console.log('🚨 Seeding M-CALL Field Emergency Call & Clinical Case Log...');
 
   const emergencyCall = await prisma.trainerCall.create({
     data: {
       organizationId: northTowerHosp.id,
       departmentId: deptInternal.id,
       trainerProfileId: trainerProfile.id,
-      callType: 'urgent',
-      customTitle: 'نداء طوارئ سريري — العناية المركزة برج الشمال',
-      note: 'حالة انخفاض أكسجين حادة بالطوارئ، يلزم تواجد المتدربين فوراً',
-      location: 'مستشفى برج الشمال — الدور الرابع العناية المركزة غرفة ٤٠٢',
-      expectedMinutes: 15,
-      launchedAt: new Date(),
+      callType: 'cardiac_arrest',
+      customTitle: 'نداء طوارئ سريري حرج — توقف قلب في العناية المركزة',
+      note: 'حالة Cardiac Arrest في العناية المركزة غرفة ٤٠٢ — يرجى الاستجابة فوراً',
+      location: 'مستشفى برج الشمال — الدور الرابع غرفة ٤٠٢',
+      expectedMinutes: 10,
+      launchedAt: new Date(now.getTime() - 2 * 60 * 60 * 1000),
       status: 'active',
     },
   });
@@ -457,24 +545,74 @@ async function main() {
     data: {
       callId: emergencyCall.id,
       traineeProfileId: traineeProfile.id,
-      state: 'notified',
-      notifiedAt: new Date(),
+      state: 'confirmed_arrived',
+      notifiedAt: new Date(now.getTime() - 2 * 60 * 60 * 1000),
+      ackAt: new Date(now.getTime() - 118 * 60 * 1000),
+      selfArrivedAt: new Date(now.getTime() - 114 * 60 * 1000),
+      confirmedAt: new Date(now.getTime() - 110 * 60 * 1000),
+    },
+  });
+
+  // Clinical Case Log linked to Trainee, Trainer, Dept
+  await prisma.clinicalCaseLog.create({
+    data: {
+      organizationId: northTowerHosp.id,
+      traineeProfileId: traineeProfile.id,
+      trainerProfileId: trainerProfile.id,
+      departmentId: deptInternal.id,
+      diagnosis: 'Acute Cardiac Arrest & CPR Resuscitation',
+      notes: 'تم إجراء إنعاش قلبي رئوي متقدم وتعديل الصدمات الكهربائية بنجاح تحت إشراف د. سالم العتيبي.',
+      status: 'approved',
     },
   });
 
   // --------------------------------------------------------------------------
-  // 9. AUDIT LOGS
+  // 11. EVALUATIONS & AUDIT LOGS
   // --------------------------------------------------------------------------
-  console.log('📜 Seeding System Audit Trail...');
+  console.log('📝 Seeding Clinical Evaluation & System Audit Trail...');
+
+  const evalForm = await prisma.evaluationForm.upsert({
+    where: { id: 'd0000000-0000-0000-0000-000000000001' },
+    create: {
+      id: 'd0000000-0000-0000-0000-000000000001',
+      organizationId: northTowerHosp.id,
+      nameAr: 'استمارة تقييم الأداء السريري للمتدرب',
+      nameEn: 'Clinical Performance Evaluation Form',
+      formType: 'clinical_performance',
+    },
+    update: {},
+  });
+
+  await prisma.evaluation.create({
+    data: {
+      organizationId: northTowerHosp.id,
+      formId: evalForm.id,
+      rotationId: activeRotation.id,
+      evaluatorId: createdUserMap['trainer'].userAccount.id,
+      evaluateeId: createdUserMap['trainee'].userAccount.id,
+      evaluationType: 'clinical_performance',
+      scores: {
+        professionalism: 5,
+        communication: 5,
+        clinicalJudgment: 4.8,
+        patientSafety: 5,
+        leadership: 4.9,
+        decisionMaking: 4.8,
+      },
+      totalScore: 4.92,
+      comments: 'طبيب امتياز متميز جداً، ملتزم وسريع الاستجابة للنداءات ودقيق في التعامل السريري.',
+      submittedAt: new Date(),
+    },
+  });
 
   await prisma.auditLog.create({
     data: {
       organizationId: northTowerHosp.id,
       actorId: createdUserMap['platform_owner'].userAccount.id,
-      action: 'SYSTEM_BOOTSTRAP_COMPLETE',
+      action: 'WORKFLOW_V5_SEED_COMPLETE',
       entityType: 'PLATFORM',
       entityId: holdingOrg.id,
-      newValues: { message: 'تم اعتماد وتجهيز بيئة تجمع الحدود الشمالية الصحي ومستشفى برج الشمال الطبي بالكامل.' },
+      newValues: { message: 'تم تجهيز الدورة الكاملة لتدريب الامتياز من الجامعة وحتى الاعتماد النهائي بنجاح.' },
     },
   });
 

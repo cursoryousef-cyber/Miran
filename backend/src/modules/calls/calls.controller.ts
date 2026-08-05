@@ -14,7 +14,7 @@ export class CallsController {
 
   // ─── للمدربين ومديري الجهات ومدير المنصة ──────────────────────────────────
   @Get('active')
-  @RequireRoles('trainer', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner', 'hospital_administrator', 'training_supervisor', 'cluster_administrator')
   @ApiOperation({ summary: 'عرض النداءات النشطة — للمدرب ومدير الجهة ومدير المنصة' })
   async getActiveCalls(@CurrentUser() user: IAuthenticatedUser) {
     const calls = await this.prisma.trainerCall.findMany({
@@ -30,7 +30,7 @@ export class CallsController {
   }
 
   @Post('launch')
-  @RequireRoles('trainer', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner', 'hospital_administrator', 'training_supervisor', 'cluster_administrator')
   @ApiOperation({ summary: 'إطلاق نداء جديد — للمدرب ومدير الجهة ومدير المنصة' })
   async launchCall(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
     const trainerProfile = await this.prisma.trainerProfile.findFirst({
