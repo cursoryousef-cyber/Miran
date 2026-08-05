@@ -1,5 +1,6 @@
-import { Controller, Get, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Query } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import * as bcrypt from 'bcrypt';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
@@ -327,6 +328,139 @@ export class TraineesController {
 
     events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     return { data: events };
+  }
+
+  // ─── قائمة المتدربين الواردين للتجمع الصحي ────────────────────────────────
+  @Get('incoming')
+  @RequireRoles('cluster_administrator', 'training_director', 'platform_owner', 'hospital_administrator', 'hospital_supervisor')
+  @ApiOperation({ summary: 'قائمة متدربي الامتياز الواردين للتجمع الصحي' })
+  async getIncomingTrainees(@CurrentUser() user: IAuthenticatedUser) {
+    const trainees = await this.prisma.traineeProfile.findMany({
+      include: {
+        person: true,
+        organization: true,
+        program: true,
+        academicIntake: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return { data: trainees };
+  }
+
+  // ─── استيراد جماعي لمتدربي الامتياز من ملف Excel ────────────────────────
+  @Post('bulk-import')
+  @RequireRoles('cluster_administrator', 'training_director', 'platform_owner', 'university_administrator')
+  @ApiOperation({ summary: 'استيراد جماعي لمتدربي الامتياز وإنشاء حساباتهم وملفاتهم تلقائياً' })
+  async bulkImportTrainees(@Body() body: { trainees: any[] }, @CurrentUser() user: IAuthenticatedUser) {
+    const results: any[] = [];
+    const errors: any[] = [];
+    let importedCount = 0;
+
+    const defaultHospital = await this.prisma.organization.findFirst({
+      where: { code: 'HOSP-NORTH-TOWER' },
+    });
+
+    const defaultHospitalId = defaultHospital?.id || user.organizationId;
+
+    for (let i = 0; i < (body.trainees || []).length; i++) {
+      const t = body.trainees[i];
+      try {
+        if (!t.academicId || !t.nationalId || !t.email) {
+          throw new Error('الرقم الأكاديمي، الهوية، والبريد الإلكتروني حقول إجبارية');
+        }
+
+        // 1. Find or create Person
+        let person = await this.prisma.person.findFirst({
+          where: { nationalId: String(t.nationalId) },
+        });
+
+        if (!person) {
+          person = await this.prisma.person.create({
+            data: {
+              nationalId: String(t.nationalId),
+              nameAr: t.nameAr || 'طبيب امتياز',
+              nameEn: t.nameEn || t.nameAr || 'Medical Intern',
+              email: t.email,
+              phone: t.phone ? String(t.phone) : null,
+            },
+          });
+        }
+
+        // 2. Find or create UserAccount
+        let userAccount = await this.prisma.userAccount.findUnique({
+          where: { email: t.email },
+        });
+
+        if (!userAccount) {
+          const hashedPassword = await bcrypt.hash('Miran@Admin2024!', 10);
+          userAccount = await this.prisma.userAccount.create({
+            data: {
+              personId: person.id,
+              email: t.email,
+              passwordHash: hashedPassword,
+              isActive: true,
+            },
+          });
+        }
+
+        // 3. Assign Trainee Role to UserAccount
+        const targetHospitalId = t.hospitalId || defaultHospitalId;
+        const traineeRole = await this.prisma.role.findFirst({ where: { code: 'trainee' } });
+
+        if (traineeRole) {
+          await this.prisma.userRole.upsert({
+            where: {
+              userAccountId_roleId_organizationId: {
+                userAccountId: userAccount.id,
+                roleId: traineeRole.id,
+                organizationId: targetHospitalId,
+              },
+            },
+            create: {
+              userAccountId: userAccount.id,
+              roleId: traineeRole.id,
+              organizationId: targetHospitalId,
+            },
+            update: {},
+          });
+        }
+
+        // 4. Create or Update TraineeProfile
+        await this.prisma.traineeProfile.upsert({
+          where: { personId: person.id },
+          create: {
+            personId: person.id,
+            organizationId: targetHospitalId,
+            traineeNumber: String(t.academicId),
+            level: 'intern',
+            specialtyAr: t.specialty || 'طب وجراحة عامة',
+            specialtyEn: 'MBBS Medical Intern',
+            applicationStatus: 'approved',
+            cardStatus: 'active',
+            cardUuid: `CARD-${t.academicId}`,
+            photoApproved: true,
+          },
+          update: {
+            organizationId: targetHospitalId,
+          },
+        });
+
+        importedCount++;
+        results.push({ row: i + 1, academicId: t.academicId, nameAr: t.nameAr, status: 'success' });
+      } catch (err: any) {
+        errors.push({ row: i + 1, academicId: t.academicId || 'N/A', nameAr: t.nameAr || 'غير محدد', error: err.message });
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        importedCount,
+        rejectedCount: errors.length,
+        results,
+        errors,
+      },
+    };
   }
 
   // ─── قائمة المتدربين — حسب الدور ─────────────────────────────────────────

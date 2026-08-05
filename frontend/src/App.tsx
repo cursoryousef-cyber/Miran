@@ -14,6 +14,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Organizations } from './pages/Organizations';
 import { OrganizationWizard } from './pages/OrganizationWizard';
 import { Affiliations } from './pages/Affiliations';
+import { ClusterTrainees } from './pages/ClusterTrainees';
 import { AcademicIntakes } from './pages/AcademicIntakes';
 import { UsersPage } from './pages/Users';
 import { Declarations } from './pages/Declarations';
@@ -97,6 +98,7 @@ export const App: React.FC = () => {
 
                   {/* University + Cluster + Hospital + Academic */}
                   <Route path="affiliations" element={<RoleRoute allowedRoles={[...UNIVERSITY, ...CLUSTER]}><Affiliations /></RoleRoute>} />
+                  <Route path="cluster-trainees" element={<RoleRoute allowedRoles={[...CLUSTER, ...PLATFORM]}><ClusterTrainees /></RoleRoute>} />
                   <Route path="intakes" element={<RoleRoute allowedRoles={[...UNIVERSITY, ...CLUSTER, ...HOSPITAL, ...ACADEMIC]}><AcademicIntakes /></RoleRoute>} />
 
                   {/* Hospital + Trainer */}

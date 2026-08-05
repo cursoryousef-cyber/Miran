@@ -54,6 +54,7 @@ const universityNav: NavItem[] = [
 const clusterNav: NavItem[] = [
   { name: 'لوحة التجمع الصحي', path: '/', icon: Network },
   { name: 'طلبات التدريب الواردة', path: '/affiliations', icon: FolderGit2 },
+  { name: 'متدربو الامتياز الواردون (Excel)', path: '/cluster-trainees', icon: FileSpreadsheet },
   { name: 'المستشفيات والسعة', path: '/organizations', icon: Building2 },
   { name: 'توزيع المتدربين', path: '/intakes', icon: GraduationCap },
 ];
