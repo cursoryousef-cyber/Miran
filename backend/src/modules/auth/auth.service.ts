@@ -95,11 +95,8 @@ export class AuthService {
       data: { loginAttempts: 0, lockedUntil: null, lastLoginAt: new Date() },
     });
 
-    // Multi-Org Resolution: Prioritize Health Holding for master roles
-    let primaryOrg = account.organizations.find((uo) => uo.organization.code === 'HEALTH-HOLDING');
-    if (!primaryOrg) {
-      primaryOrg = account.organizations.find((uo) => uo.isPrimary) || account.organizations[0];
-    }
+    // Multi-Org Resolution: Prioritize account's primary organization (isPrimary: true)
+    let primaryOrg = account.organizations.find((uo) => uo.isPrimary) || account.organizations[0];
 
     if (!primaryOrg) {
       throw new ForbiddenException('المستخدم غير مرتبط بأي جهة تابعة للنظام');

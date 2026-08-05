@@ -328,7 +328,10 @@ async function main() {
         email: cfg.email,
         phone: `+9665${cfg.natId.slice(2, 9)}`,
       },
-      update: {},
+      update: {
+        nameAr: cfg.nameAr,
+        email: cfg.email,
+      },
     });
 
     const userAccount = await prisma.userAccount.upsert({
@@ -341,40 +344,31 @@ async function main() {
         isEmailVerified: true,
         isActive: true,
       },
-      update: {},
+      update: {
+        passwordHash: defaultPasswordHash,
+        isActive: true,
+      },
     });
 
-    await prisma.userOrganization.upsert({
-      where: {
-        userAccountId_organizationId: {
-          userAccountId: userAccount.id,
-          organizationId: cfg.orgId,
-        },
-      },
-      create: {
+    // Reset previous organizations and roles to guarantee 100% clean isolation
+    await prisma.userOrganization.deleteMany({ where: { userAccountId: userAccount.id } });
+    await prisma.userRole.deleteMany({ where: { userAccountId: userAccount.id } });
+
+    await prisma.userOrganization.create({
+      data: {
         userAccountId: userAccount.id,
         organizationId: cfg.orgId,
         isPrimary: true,
-      },
-      update: {
-        isPrimary: true,
+        isActive: true,
       },
     });
 
-    await prisma.userRole.upsert({
-      where: {
-        userAccountId_roleId_organizationId: {
-          userAccountId: userAccount.id,
-          roleId: createdRoles[cfg.roleCode],
-          organizationId: cfg.orgId,
-        },
-      },
-      create: {
+    await prisma.userRole.create({
+      data: {
         userAccountId: userAccount.id,
         roleId: createdRoles[cfg.roleCode],
         organizationId: cfg.orgId,
       },
-      update: {},
     });
 
     createdUserMap[cfg.roleCode] = { person, userAccount };
