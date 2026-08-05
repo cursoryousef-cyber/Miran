@@ -61,6 +61,10 @@
 		A1B2C3D410000111 /* TrainingSupervisorDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000111 /* TrainingSupervisorDashboardFullView.swift */; };
 		A1B2C3D410000112 /* TrainerDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000112 /* TrainerDashboardFullView.swift */; };
 		A1B2C3D410000113 /* TraineeDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000113 /* TraineeDashboardFullView.swift */; };
+		A1B2C3D410000114 /* WorkflowEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000114 /* WorkflowEngine.swift */; };
+		A1B2C3D410000115 /* RotationSchedulerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000115 /* RotationSchedulerEngine.swift */; };
+		A1B2C3D410000116 /* FineGrainedRBACEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000116 /* FineGrainedRBACEngine.swift */; };
+		A1B2C3D410000117 /* WorkflowTimelineComponent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000117 /* WorkflowTimelineComponent.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -119,6 +123,10 @@
 		A1B2C3D420000111 /* TrainingSupervisorDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/TrainingSupervisor/TrainingSupervisorDashboardFullView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000112 /* TrainerDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Trainer/TrainerDashboardFullView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000113 /* TraineeDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Trainee/TraineeDashboardFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000114 /* WorkflowEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Services/WorkflowEngine.swift; sourceTree = "<group>"; };
+		A1B2C3D420000115 /* RotationSchedulerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Services/RotationSchedulerEngine.swift; sourceTree = "<group>"; };
+		A1B2C3D420000116 /* FineGrainedRBACEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Services/FineGrainedRBACEngine.swift; sourceTree = "<group>"; };
+		A1B2C3D420000117 /* WorkflowTimelineComponent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Components/WorkflowTimelineComponent.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -410,6 +418,10 @@
 				A1B2C3D410000111 /* TrainingSupervisorDashboardFullView.swift in Sources */,
 				A1B2C3D410000112 /* TrainerDashboardFullView.swift in Sources */,
 				A1B2C3D410000113 /* TraineeDashboardFullView.swift in Sources */,
+				A1B2C3D410000114 /* WorkflowEngine.swift in Sources */,
+				A1B2C3D410000115 /* RotationSchedulerEngine.swift in Sources */,
+				A1B2C3D410000116 /* FineGrainedRBACEngine.swift in Sources */,
+				A1B2C3D410000117 /* WorkflowTimelineComponent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
