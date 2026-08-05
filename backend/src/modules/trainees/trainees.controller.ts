@@ -8,7 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 @ApiTags('Trainees (المتدربون)')
 @Controller('trainees')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class TraineesController {
   constructor(private prisma: PrismaService) {}
