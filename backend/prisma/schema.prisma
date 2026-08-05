@@ -128,6 +128,8 @@ model Organization {
   reportDefinitions  ReportDefinition[]
   generatedReports   GeneratedReport[]
   sponsoredTrainees  TraineeProfile[] @relation("SponsorOrg")
+  trainingReqsSent     TrainingRequest[] @relation("TrainingReqSourceOrg")
+  trainingReqsReceived TrainingRequest[] @relation("TrainingReqTargetOrg")
   declarations       Declaration[]
   declarationAcceptances DeclarationAcceptance[]
 
@@ -608,6 +610,7 @@ model Program {
   traineeProfiles TraineeProfile[]
   rotations       Rotation[]
   academicIntakes AcademicIntake[]
+  trainingRequests TrainingRequest[]
 
   @@index([organizationId])
   @@map("programs")
@@ -661,9 +664,37 @@ model AcademicIntake {
   program         Program        @relation(fields: [programId], references: [id])
   coordinator     UserAccount?   @relation("IntakeCoordinator", fields: [coordinatorId], references: [id])
   traineeProfiles TraineeProfile[]
+  trainingRequests TrainingRequest[]
 
   @@index([organizationId, academicYear])
   @@map("academic_intakes")
+}
+
+model TrainingRequest {
+  id               String    @id @default(uuid()) @db.Uuid
+  requestNumber    String    @unique @map("request_number") @db.VarChar(50)
+  sourceOrgId      String    @map("source_org_id") @db.Uuid
+  targetOrgId      String    @map("target_org_id") @db.Uuid
+  programId        String?   @map("program_id") @db.Uuid
+  academicIntakeId String?   @map("academic_intake_id") @db.Uuid
+  studentCount     Int       @default(0) @map("student_count")
+  priority         String    @default("normal") @db.VarChar(20)
+  status           String    @default("submitted") @db.VarChar(30)
+  notes            String?   @db.Text
+  allocations      Json      @default("[]") @db.JsonB
+  createdById      String?   @map("created_by") @db.Uuid
+  updatedById      String?   @map("updated_by") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  sourceOrg      Organization    @relation("TrainingReqSourceOrg", fields: [sourceOrgId], references: [id])
+  targetOrg      Organization    @relation("TrainingReqTargetOrg", fields: [targetOrgId], references: [id])
+  program        Program?        @relation(fields: [programId], references: [id])
+  academicIntake AcademicIntake? @relation(fields: [academicIntakeId], references: [id])
+
+  @@index([sourceOrgId])
+  @@index([targetOrgId])
+  @@map("training_requests")
 }
 
 model TraineeProfile {

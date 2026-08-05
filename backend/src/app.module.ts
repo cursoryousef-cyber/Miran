@@ -29,6 +29,7 @@ import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { GlobalSearchModule } from './modules/global-search/global-search.module';
 import { RolesPermissionsModule } from './modules/roles-permissions/roles-permissions.module';
 import { LogbookModule } from './modules/logbook/logbook.module';
+import { TrainingRequestsModule } from './modules/training-requests/training-requests.module';
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { LogbookModule } from './modules/logbook/logbook.module';
     GlobalSearchModule,
     RolesPermissionsModule,
     LogbookModule,
+    TrainingRequestsModule,
   ],
   providers: [
     {

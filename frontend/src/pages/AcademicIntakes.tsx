@@ -78,21 +78,18 @@ export const AcademicIntakes: React.FC = () => {
 
   const submitRequestMutation = useMutation({
     mutationFn: async () => {
-      const sourceOrgId = user?.activeOrganization?.id || 'a0000000-0000-0000-0000-000000000004'; // Northern Borders University UUID
-      const targetOrgId = targetClusterId || orgsData?.[0]?.id || 'a0000000-0000-0000-0000-000000000003'; // Cluster UUID
-      return apiClient.post('/organization-affiliations', {
-        sourceOrgId,
+      const targetOrgId = targetClusterId || orgsData?.[0]?.id || '5ff7f3e8-efa8-4552-ba25-b04304e235ef'; // Northern Borders Cluster UUID
+      return apiClient.post('/training-requests', {
         targetOrgId,
-        affiliationType: 'internship_request',
-        nameAr: requestTitle,
-        agreementRef: `REQ-${Date.now().toString().slice(-6)}`,
-        notes: `طلب توزيع ${studentCount} طالب امتياز على مستشفيات التجمع`,
+        studentCount,
+        priority: 'normal',
+        notes: `طلب توزيع ${studentCount} طالب امتياز من جامعة الحدود الشمالية على مستشفيات التجمع الصحي`,
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['affiliations'] });
+      queryClient.invalidateQueries({ queryKey: ['training-requests'] });
       setOpenReqModal(false);
-      setSuccessMsg('تم إرسال طلب التدريب (Internship Request) بنجاح إلى التجمع الصحي وسجل بحالة Submitted!');
+      setSuccessMsg('تم إنشاء ورسالة طلب التدريب التشغيلي (Training Request) بنجاح إلى التجمع الصحي بحالة Submitted!');
     },
   });
 
