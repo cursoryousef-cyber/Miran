@@ -137,7 +137,7 @@ export const Login: React.FC = () => {
         </form>
 
         <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '12px', color: '#64748b' }}>
-          بيانات التجربة المسبقة: <span style={{ color: '#34d399' }}>admin@miran.health</span>
+          حسابات التجارب: <span style={{ color: '#34d399' }}>platform@miran.health</span> | <span style={{ color: '#06b6d4' }}>uni.admin@nbu.edu.sa</span> | <span style={{ color: '#f59e0b' }}>cluster@miran.health</span>
         </div>
       </div>
     </div>
