@@ -13,9 +13,10 @@ export const TraineeDashboard: React.FC = () => {
   const { data: summary } = useQuery({
     queryKey: ['trainee-summary'],
     queryFn: async () => {
-      const res = await apiClient.get('/trainees/dashboard-summary').catch(() => ({ data: null }));
-      return res.data;
+      const res = await apiClient.get('/operations/trainee/dashboard');
+      return res.data?.data;
     },
+    refetchInterval: 15000,
   });
 
   const { data: profile } = useQuery({
@@ -57,9 +58,9 @@ export const TraineeDashboard: React.FC = () => {
             <span style={{ fontSize: '13px', color: '#94a3b8' }}>أيام الروتيشن المتبقية</span>
             <Clock size={20} color="#10b981" />
           </div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#10b981', marginTop: '8px' }}>{summary?.remainingDays ?? '—'} يوماً</div>
-          <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '4px' }}>القسم: {summary?.activeRotation?.departmentName || '—'}</div>
-          <LinearProgress variant="determinate" value={summary?.activeRotation?.progressPercentage || 0} style={{ borderRadius: '6px', height: '8px', backgroundColor: 'rgba(255,255,255,0.1)', marginTop: '12px' }} />
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#10b981', marginTop: '8px' }}>{summary?.rotation ? Math.max(0, Math.ceil((new Date(summary.rotation.endDate).getTime() - Date.now()) / 86400000)) : '—'} يوماً</div>
+          <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '4px' }}>القسم: {summary?.rotation?.department?.nameAr || '—'}</div>
+          <LinearProgress variant="determinate" value={summary?.competencies?.percentage || 0} style={{ borderRadius: '6px', height: '8px', backgroundColor: 'rgba(255,255,255,0.1)', marginTop: '12px' }} />
         </div>
 
         <div className="glass-card" style={{ padding: '24px' }}>
@@ -67,8 +68,8 @@ export const TraineeDashboard: React.FC = () => {
             <span style={{ fontSize: '13px', color: '#94a3b8' }}>الوردية الحالية</span>
             <Calendar size={20} color="#06b6d4" />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 800, color: '#06b6d4', marginTop: '8px' }}>{summary?.currentShift?.shiftType || '—'}</div>
-          <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '4px' }}>{summary?.currentShift?.startTime || ''} - {summary?.currentShift?.endTime || ''}</div>
+          <div style={{ fontSize: '24px', fontWeight: 800, color: '#06b6d4', marginTop: '8px' }}>{summary?.attendanceRate ?? 0}%</div>
+          <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '4px' }}>نسبة الحضور الشهرية</div>
         </div>
 
         <div className="glass-card" style={{ padding: '24px' }}>
@@ -76,7 +77,7 @@ export const TraineeDashboard: React.FC = () => {
             <span style={{ fontSize: '13px', color: '#94a3b8' }}>إنجاز الأهداف</span>
             <CheckCircle2 size={20} color="#8b5cf6" />
           </div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#8b5cf6', marginTop: '8px' }}>{summary?.objectivePercentage ?? 0}%</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#8b5cf6', marginTop: '8px' }}>{summary?.competencies?.percentage ?? 0}%</div>
         </div>
       </div>
 

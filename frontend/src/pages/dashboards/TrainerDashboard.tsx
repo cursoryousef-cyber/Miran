@@ -10,12 +10,13 @@ export const TrainerDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const { data: members } = useQuery({
-    queryKey: ['trainer-members'],
+  const { data: stats } = useQuery({
+    queryKey: ['trainer-operations-dashboard'],
     queryFn: async () => {
-      const res = await apiClient.get('/org-members').catch(() => ({ data: { data: [] } }));
-      return res.data?.data || [];
+      const res = await apiClient.get('/operations/trainer/dashboard');
+      return res.data?.data;
     },
+    refetchInterval: 15000,
   });
 
   return (
@@ -50,15 +51,15 @@ export const TrainerDashboard: React.FC = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
         <div className="glass-card" style={{ padding: '24px' }}>
           <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>المتدربون المسندون</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#10b981' }}>{members?.length || 0}</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#10b981' }}>{stats?.assignedTrainees ?? 0}</div>
         </div>
         <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>تقييمات معلقة</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#f59e0b' }}>0</div>
+          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>تصحيحات حضور معلقة</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#f59e0b' }}>{stats?.pendingAttendance ?? 0}</div>
         </div>
         <div className="glass-card" style={{ padding: '24px' }}>
           <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>Logbook ينتظر اعتماد</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#ef4444' }}>0</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#ef4444' }}>{stats?.pendingLogbook ?? 0}</div>
         </div>
       </div>
     </div>

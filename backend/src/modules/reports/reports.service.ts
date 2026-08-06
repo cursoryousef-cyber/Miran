@@ -24,6 +24,7 @@ export class ReportsService {
       throw new NotFoundException('قالب التقرير غير موجود أو غير مفعّل');
     }
 
+    const rowCount = await this.countRows(def.reportType, user.organizationId);
     const generated = await this.prisma.generatedReport.create({
       data: {
         organizationId: user.organizationId,
@@ -33,7 +34,7 @@ export class ReportsService {
         format: dto.format || def.defaultFormat,
         status: 'completed',
         completedAt: new Date(),
-        rowCount: 42,
+        rowCount,
       },
     });
 
@@ -58,5 +59,30 @@ export class ReportsService {
         reportDefinition: true,
       },
     });
+  }
+
+  private countRows(reportType: string, organizationId: string) {
+    switch (reportType) {
+      case 'attendance':
+        return this.prisma.attendance.count({ where: { organizationId } });
+      case 'competencies':
+        return this.prisma.competencyProgress.count({
+          where: { traineeProfile: { organizationId } },
+        });
+      case 'evaluations':
+        return this.prisma.evaluation.count({ where: { organizationId } });
+      case 'logbook':
+        return this.prisma.clinicalCaseLog.count({ where: { organizationId } });
+      case 'procedures':
+        return this.prisma.procedureCatalog.count({ where: { isActive: true } });
+      case 'rotation':
+      case 'rotations':
+        return this.prisma.rotation.count({ where: { organizationId } });
+      case 'trainee':
+      case 'trainees':
+        return this.prisma.traineeProfile.count({ where: { organizationId } });
+      default:
+        return this.prisma.generatedReport.count({ where: { organizationId } });
+    }
   }
 }

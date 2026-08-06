@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
@@ -52,9 +52,6 @@ export class LogbookController {
     let profile = await this.prisma.traineeProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
     });
-    if (!profile) {
-      profile = await this.prisma.traineeProfile.findFirst();
-    }
     if (!profile) return { data: [] };
 
     const logs = await this.prisma.clinicalCaseLog.findMany({
@@ -106,9 +103,6 @@ export class LogbookController {
     let profile = await this.prisma.traineeProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
     });
-    if (!profile) {
-      profile = await this.prisma.traineeProfile.findFirst();
-    }
     if (!profile) return { error: 'لا يوجد ملف متدرب مراد بالتسجيل عليه' };
 
     const activeRotation = await this.prisma.rotation.findFirst({
@@ -124,9 +118,9 @@ export class LogbookController {
         departmentId: activeRotation?.departmentId,
         procedureId: dto.procedureId,
         diagnosis: dto.diagnosis,
-        patientAge: dto.patientAge || 35,
-        patientGender: dto.patientGender || 'ذكر',
-        specialtyAr: dto.specialtyAr || 'طوارئ وباطنية',
+        patientAge: dto.patientAge,
+        patientGender: dto.patientGender,
+        specialtyAr: dto.specialtyAr,
         complexity: dto.complexity || 'medium',
         participationLevel: dto.participationLevel || 'performed',
         notes: dto.notes,
@@ -168,6 +162,32 @@ export class LogbookController {
     return { success: true, entry };
   }
 
+  @Get('cases')
+  @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
+  async getCases(@CurrentUser() user: IAuthenticatedUser) {
+    const trainer = await this.prisma.trainerProfile.findFirst({
+      where: { person: { userAccounts: { some: { id: user.accountId } } } },
+    });
+    const logs = await this.prisma.clinicalCaseLog.findMany({
+      where: { organizationId: user.organizationId, ...(trainer ? { trainerProfileId: trainer.id } : {}) },
+      include: {
+        traineeProfile: { include: { person: true } },
+        procedure: true,
+        department: true,
+        trainerProfile: { include: { person: true } },
+        signoffs: { include: { signer: { include: { person: true } } } },
+      },
+      orderBy: { performedAt: 'desc' },
+    });
+    return { data: logs };
+  }
+
+  @Post('cases')
+  @RequireRoles('trainee', 'platform_owner', 'org_manager')
+  async createCaseAlias(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
+    return this.createLogEntry(user, dto);
+  }
+
   // ─── 3. الاعتماد الإلكتروني (Digital Sign-off Workflow) ─────────────────────
   @Post('entries/:id/approve')
   @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
@@ -182,6 +202,7 @@ export class LogbookController {
 
     const nextStatus = isAcademic ? 'completed' : 'trainer_approved';
 
+    const previous = await this.prisma.clinicalCaseLog.findUnique({ where: { id: logId } });
     const updatedLog = await this.prisma.clinicalCaseLog.update({
       where: { id: logId },
       data: {
@@ -194,13 +215,110 @@ export class LogbookController {
         caseLogId: logId,
         signerId: user.accountId,
         signerRole: isAcademic ? 'academic_supervisor' : 'trainer',
-        signatureUrl: dto.signatureUrl || `SIG-OFFICIAL-${user.accountId}`,
-        feedback: dto.feedback || 'تم فحص الحالة واعتماد الأداء السريري بنجاح',
+        signatureUrl: dto.signatureUrl,
+        feedback: dto.feedback,
         signedAt: new Date(),
+      },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: user.organizationId,
+        actorId: user.accountId,
+        action: 'logbook.approve',
+        entityType: 'ClinicalCaseLog',
+        entityId: logId,
+        oldValues: previous ? { status: previous.status } : undefined,
+        newValues: { status: nextStatus },
       },
     });
 
     return { success: true, log: updatedLog };
+  }
+
+  @Patch('entries/:id')
+  @RequireRoles('trainee', 'platform_owner', 'org_manager')
+  @ApiOperation({ summary: 'تعديل مسودة سجل سريري قبل الاعتماد' })
+  async updateLogEntry(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
+    const profile = await this.prisma.traineeProfile.findFirst({
+      where: { person: { userAccounts: { some: { id: user.accountId } } } },
+    });
+    const previous = await this.prisma.clinicalCaseLog.findFirst({
+      where: {
+        id,
+        ...(profile ? { traineeProfileId: profile.id } : { organizationId: user.organizationId }),
+        status: { in: ['draft', 'submitted', 'modification_requested', 'rejected'] },
+      },
+    });
+    if (!previous) return { success: false, message: 'لا يمكن تعديل هذا السجل' };
+    const log = await this.prisma.clinicalCaseLog.update({
+      where: { id },
+      data: {
+        diagnosis: dto.diagnosis,
+        procedureId: dto.procedureId,
+        patientAge: dto.patientAge,
+        patientGender: dto.patientGender,
+        specialtyAr: dto.specialtyAr,
+        complexity: dto.complexity,
+        participationLevel: dto.participationLevel,
+        notes: dto.notes,
+        evidenceUrls: dto.evidenceUrls,
+        status: dto.status,
+      },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: user.organizationId,
+        actorId: user.accountId,
+        action: 'logbook.update',
+        entityType: 'ClinicalCaseLog',
+        entityId: id,
+        oldValues: { status: previous.status },
+        newValues: { status: log.status },
+      },
+    });
+    return { success: true, data: log };
+  }
+
+  @Patch('entries/:id/submit')
+  @RequireRoles('trainee', 'platform_owner', 'org_manager')
+  async submitLogEntry(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
+    return this.transitionLog(id, user, 'submitted', 'logbook.submit');
+  }
+
+  @Put('cases/:id/approve')
+  @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
+  async approveCaseAlias(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
+    return this.approveLogEntry(id, user, {});
+  }
+
+  @Put('cases/:id/reject')
+  @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
+  async rejectCaseAlias(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
+    return this.transitionLog(id, user, 'rejected', 'logbook.reject');
+  }
+
+  @Patch('entries/:id/reject')
+  @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
+  async rejectLogEntry(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser, @Body() dto: { feedback?: string }) {
+    const result = await this.transitionLog(id, user, 'rejected', 'logbook.reject');
+    if (result.success && dto.feedback) {
+      await this.prisma.logbookSignoff.create({
+        data: { caseLogId: id, signerId: user.accountId, signerRole: user.roles[0] || 'reviewer', feedback: dto.feedback },
+      });
+    }
+    return result;
+  }
+
+  @Patch('entries/:id/request-modification')
+  @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
+  async requestModification(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser, @Body() dto: { feedback?: string }) {
+    const result = await this.transitionLog(id, user, 'modification_requested', 'logbook.request_modification');
+    if (result.success && dto.feedback) {
+      await this.prisma.logbookSignoff.create({
+        data: { caseLogId: id, signerId: user.accountId, signerRole: user.roles[0] || 'reviewer', feedback: dto.feedback },
+      });
+    }
+    return result;
   }
 
   // ─── 4. حقيبة الكفاءات والتقدم (Competency Portfolio Progress) ───────────
@@ -218,10 +336,7 @@ export class LogbookController {
     }
 
     if (!targetTraineeId) {
-      const firstProfile = await this.prisma.traineeProfile.findFirst();
-      targetTraineeId = firstProfile?.id;
     }
-
     if (!targetTraineeId) return { data: [], overallPercentage: 0 };
 
     const competencies = await this.prisma.competencyProgress.findMany({
@@ -250,7 +365,6 @@ export class LogbookController {
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
     });
     if (!profile && !user.roles.includes('platform_owner') && !user.roles.includes('org_manager') && !user.roles.includes('hospital_administrator')) {
-      profile = await this.prisma.traineeProfile.findFirst();
     }
 
     const whereCondition = profile ? { traineeProfileId: profile.id } : { organizationId: user.organizationId };
@@ -273,5 +387,25 @@ export class LogbookController {
       pendingApproval,
       completionRate: totalCases > 0 ? Math.round((approvedCases / totalCases) * 100) : 0,
     };
+  }
+
+  private async transitionLog(id: string, user: IAuthenticatedUser, status: string, action: string) {
+    const previous = await this.prisma.clinicalCaseLog.findFirst({
+      where: { id, organizationId: user.organizationId },
+    });
+    if (!previous) return { success: false, message: 'السجل غير موجود' };
+    const log = await this.prisma.clinicalCaseLog.update({ where: { id }, data: { status } });
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: user.organizationId,
+        actorId: user.accountId,
+        action,
+        entityType: 'ClinicalCaseLog',
+        entityId: id,
+        oldValues: { status: previous.status },
+        newValues: { status },
+      },
+    });
+    return { success: true, data: log };
   }
 }

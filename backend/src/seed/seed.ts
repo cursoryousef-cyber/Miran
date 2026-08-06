@@ -345,6 +345,7 @@ async function main() {
         isActive: true,
       },
       update: {
+        personId: person.id,
         passwordHash: defaultPasswordHash,
         isActive: true,
       },
@@ -489,8 +490,10 @@ async function main() {
   // --------------------------------------------------------------------------
   console.log('🔄 Seeding Active Rotations...');
 
-  const activeRotation = await prisma.rotation.create({
-    data: {
+  const activeRotation = await prisma.rotation.upsert({
+    where: { id: 'e0000000-0000-0000-0000-000000000001' },
+    create: {
+      id: 'e0000000-0000-0000-0000-000000000001',
       organizationId: northTowerHosp.id,
       traineeProfileId: traineeProfile.id,
       departmentId: deptInternal.id,
@@ -500,6 +503,15 @@ async function main() {
       status: 'active',
       midpointMeetingDone: true,
     },
+    update: {
+      organizationId: northTowerHosp.id,
+      traineeProfileId: traineeProfile.id,
+      departmentId: deptInternal.id,
+      trainerProfileId: trainerProfile.id,
+      startDate,
+      endDate,
+      status: 'active',
+    },
   });
 
   // --------------------------------------------------------------------------
@@ -507,18 +519,25 @@ async function main() {
   // --------------------------------------------------------------------------
   console.log('📍 Seeding Attendance Check-in Record with GPS/QR...');
 
-  await prisma.attendance.create({
-    data: {
-      organizationId: northTowerHosp.id,
-      traineeProfileId: traineeProfile.id,
-      date: now,
-      checkIn: new Date(now.getTime() - 8 * 60 * 60 * 1000),
-      checkOut: now,
-      method: 'gps_qr',
-      geoLat: 30.9753,
-      geoLng: 41.0381,
-      status: 'present',
-    },
+  await prisma.attendance.deleteMany({ where: { traineeProfileId: traineeProfile.id } });
+  await prisma.attendance.createMany({
+    data: Array.from({ length: 7 }).map((_, i) => {
+      const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      return {
+        organizationId: northTowerHosp.id,
+        traineeProfileId: traineeProfile.id,
+        date,
+        checkIn: new Date(date.getTime() + 7 * 60 * 60 * 1000 + (i === 2 ? 20 * 60 * 1000 : 0)),
+        checkOut: new Date(date.getTime() + 15 * 60 * 60 * 1000),
+        method: i % 2 ? 'gps' : 'qr',
+        geoLat: 30.9753,
+        geoLng: 41.0381,
+        isLate: i === 2,
+        lateMinutes: i === 2 ? 20 : null,
+        status: i === 5 ? 'correction_requested' : 'present',
+        excuseReason: i === 5 ? 'طلب تعديل وقت الانصراف بعد اعتماد المشرف' : null,
+      };
+    }),
   });
 
   // --------------------------------------------------------------------------
@@ -554,43 +573,92 @@ async function main() {
   });
 
   // Clinical Case Log linked to Trainee, Trainer, Dept
-  await prisma.clinicalCaseLog.create({
+  const procedures = [
+    ['PROC-MINICEX', 'Mini-CEX: عرض حالة سريرية مركزة', 'Mini-CEX Case Presentation', 'Evaluation', 3],
+    ['PROC-DOPS', 'DOPS: إجراء وريدي وتوثيق سلامة المريض', 'DOPS IV Procedure', 'National Procedures', 5],
+    ['PROC-CBD', 'CBD: مناقشة حالة سريرية', 'Case Based Discussion', 'Evaluation', 3],
+    ['PROC-CPR', 'الإنعاش القلبي الرئوي المتقدم', 'Advanced CPR', 'Emergency', 2],
+  ];
+  const createdProcedures: any[] = [];
+  for (const [code, titleAr, titleEn, category, minRequired] of procedures) {
+    createdProcedures.push(await prisma.procedureCatalog.upsert({
+      where: { code: String(code) },
+      create: { code: String(code), titleAr: String(titleAr), titleEn: String(titleEn), category: String(category), minRequired: Number(minRequired) },
+      update: { titleAr: String(titleAr), titleEn: String(titleEn), category: String(category), minRequired: Number(minRequired), isActive: true },
+    }));
+  }
+
+  await prisma.clinicalCaseLog.deleteMany({ where: { traineeProfileId: traineeProfile.id } });
+  const caseLog = await prisma.clinicalCaseLog.create({
     data: {
       organizationId: northTowerHosp.id,
       traineeProfileId: traineeProfile.id,
       trainerProfileId: trainerProfile.id,
+      rotationId: activeRotation.id,
       departmentId: deptInternal.id,
+      procedureId: createdProcedures[3].id,
       diagnosis: 'Acute Cardiac Arrest & CPR Resuscitation',
-      notes: 'تم إجراء إنعاش قلبي رئوي متقدم وتعديل الصدمات الكهربائية بنجاح تحت إشراف د. سالم العتيبي.',
-      status: 'approved',
+      notes: 'تم إجراء إنعاش قلبي رئوي متقدم وتوثيق الحالة في السجل السريري.',
+      evidenceUrls: ['stored-files://qa/cpr-note.pdf', 'stored-files://qa/ecg-image.png'],
+      status: 'submitted',
     },
   });
+  await prisma.logbookSignoff.create({
+    data: {
+      caseLogId: caseLog.id,
+      signerId: createdUserMap['trainer'].userAccount.id,
+      signerRole: 'trainer',
+      feedback: 'جاهز للمراجعة النهائية بعد إرفاق تقرير ECG.',
+      signatureUrl: 'stored-files://signatures/trainer-salem.png',
+    },
+  });
+  for (const proc of createdProcedures) {
+    await prisma.competencyProgress.upsert({
+      where: { traineeProfileId_procedureId: { traineeProfileId: traineeProfile.id, procedureId: proc.id } },
+      create: { traineeProfileId: traineeProfile.id, procedureId: proc.id, requiredCount: proc.minRequired, completedCount: proc.code === 'PROC-CPR' ? 1 : 0, status: proc.code === 'PROC-CPR' ? 'in_progress' : 'pending' },
+      update: { requiredCount: proc.minRequired, completedCount: proc.code === 'PROC-CPR' ? 1 : 0, status: proc.code === 'PROC-CPR' ? 'in_progress' : 'pending' },
+    });
+  }
 
   // --------------------------------------------------------------------------
   // 11. EVALUATIONS & AUDIT LOGS
   // --------------------------------------------------------------------------
   console.log('📝 Seeding Clinical Evaluation & System Audit Trail...');
 
-  const evalForm = await prisma.evaluationForm.upsert({
-    where: { id: 'd0000000-0000-0000-0000-000000000001' },
-    create: {
-      id: 'd0000000-0000-0000-0000-000000000001',
-      organizationId: northTowerHosp.id,
-      nameAr: 'استمارة تقييم الأداء السريري للمتدرب',
-      nameEn: 'Clinical Performance Evaluation Form',
-      formType: 'clinical_performance',
-    },
-    update: {},
-  });
+  const evaluationTypes = [
+    ['mini_cex', 'Mini-CEX'],
+    ['dops', 'DOPS'],
+    ['cbd', 'CBD'],
+    ['360', '360 Feedback'],
+    ['mid_rotation', 'Mid Rotation'],
+    ['end_rotation', 'End Rotation'],
+  ];
+  const evalForms: any[] = [];
+  for (let i = 0; i < evaluationTypes.length; i++) {
+    const [formType, nameEn] = evaluationTypes[i];
+    evalForms.push(await prisma.evaluationForm.upsert({
+      where: { id: `d0000000-0000-0000-0000-00000000000${i + 1}` },
+      create: {
+        id: `d0000000-0000-0000-0000-00000000000${i + 1}`,
+        organizationId: northTowerHosp.id,
+        nameAr: `استمارة ${nameEn}`,
+        nameEn,
+        formType,
+        items: [{ code: 'clinical_reasoning', max: 5 }, { code: 'professionalism', max: 5 }],
+      },
+      update: { organizationId: northTowerHosp.id, nameAr: `استمارة ${nameEn}`, nameEn, formType, isActive: true },
+    }));
+  }
 
+  await prisma.evaluation.deleteMany({ where: { evaluateeId: createdUserMap['trainee'].userAccount.id } });
   await prisma.evaluation.create({
     data: {
       organizationId: northTowerHosp.id,
-      formId: evalForm.id,
+      formId: evalForms[0].id,
       rotationId: activeRotation.id,
       evaluatorId: createdUserMap['trainer'].userAccount.id,
       evaluateeId: createdUserMap['trainee'].userAccount.id,
-      evaluationType: 'clinical_performance',
+      evaluationType: 'mini_cex',
       scores: {
         professionalism: 5,
         communication: 5,
@@ -604,6 +672,38 @@ async function main() {
       submittedAt: new Date(),
     },
   });
+
+  await prisma.task.deleteMany({ where: { organizationId: northTowerHosp.id } });
+  await prisma.task.createMany({
+    data: [
+      { organizationId: northTowerHosp.id, assignedToId: createdUserMap['trainee'].userAccount.id, assignedById: createdUserMap['trainer'].userAccount.id, titleAr: 'إكمال مرفق ECG للحالة السريرية', description: 'رفع صورة ECG وتقرير PDF للحالة المسجلة', dueDate: endDate, priority: 'high', referenceType: 'ClinicalCaseLog', referenceId: caseLog.id },
+      { organizationId: northTowerHosp.id, assignedToId: createdUserMap['trainer'].userAccount.id, assignedById: createdUserMap['training_supervisor'].userAccount.id, titleAr: 'مراجعة طلب تصحيح الحضور', description: 'اعتماد أو رفض طلب التصحيح المرسل من المتدرب', dueDate: endDate, priority: 'normal', referenceType: 'Attendance' },
+    ],
+  });
+
+  await prisma.notification.deleteMany({ where: { organizationId: northTowerHosp.id } });
+  await prisma.notification.createMany({
+    data: [
+      { organizationId: northTowerHosp.id, userId: createdUserMap['trainee'].userAccount.id, titleAr: 'تم تعيين مهمة تدريبية', bodyAr: 'يرجى رفع مرفقات الحالة السريرية.', type: 'task', referenceType: 'Task', sentVia: 'in_app' },
+      { organizationId: northTowerHosp.id, userId: createdUserMap['trainer'].userAccount.id, titleAr: 'طلب تصحيح حضور بانتظارك', bodyAr: 'يوجد طلب تصحيح حضور يحتاج مراجعة.', type: 'attendance', referenceType: 'Attendance', sentVia: 'in_app' },
+      { organizationId: northTowerHosp.id, userId: createdUserMap['hospital_administrator'].userAccount.id, titleAr: 'تقرير شهري جاهز للمراجعة', bodyAr: 'تم تحديث مؤشرات الحضور والتقييمات.', type: 'report', referenceType: 'GeneratedReport', sentVia: 'in_app' },
+    ],
+  });
+
+  const reportDefs = [
+    ['attendance_monthly', 'تقرير الحضور الشهري', 'Monthly Attendance', 'attendance', 'xlsx'],
+    ['competencies_progress', 'تقرير الكفاءات', 'Competencies Progress', 'competencies', 'xlsx'],
+    ['evaluations_summary', 'تقرير التقييمات', 'Evaluations Summary', 'evaluations', 'pdf'],
+    ['logbook_weekly', 'تقرير السجل السريري', 'Clinical Logbook', 'logbook', 'pdf'],
+    ['procedures_required', 'تقرير الإجراءات المطلوبة', 'Required Procedures', 'procedures', 'xlsx'],
+  ];
+  for (const [code, nameAr, nameEn, reportType, defaultFormat] of reportDefs) {
+    await prisma.reportDefinition.upsert({
+      where: { code },
+      create: { organizationId: northTowerHosp.id, code, nameAr, nameEn, reportType, defaultFormat, queryTemplate: {}, isSystem: true, isActive: true },
+      update: { organizationId: northTowerHosp.id, nameAr, nameEn, reportType, defaultFormat, isActive: true },
+    });
+  }
 
   await prisma.auditLog.create({
     data: {

@@ -30,6 +30,7 @@ import { GlobalSearchModule } from './modules/global-search/global-search.module
 import { RolesPermissionsModule } from './modules/roles-permissions/roles-permissions.module';
 import { LogbookModule } from './modules/logbook/logbook.module';
 import { TrainingRequestsModule } from './modules/training-requests/training-requests.module';
+import { OperationsModule } from './modules/operations/operations.module';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { TrainingRequestsModule } from './modules/training-requests/training-req
     RolesPermissionsModule,
     LogbookModule,
     TrainingRequestsModule,
+    OperationsModule,
   ],
   providers: [
     {
@@ -90,4 +92,3 @@ import { TrainingRequestsModule } from './modules/training-requests/training-req
   ],
 })
 export class AppModule {}
-

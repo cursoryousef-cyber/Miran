@@ -31,27 +31,22 @@ export class TraineesController {
 
     if (!profile) return { message: 'لا يوجد ملف متدرب لهذا الحساب' };
 
-    // جلب الشهادات والمهارات والسجل التدريبي ونسبة الإنجاز
-    const certifications = [
-      { id: '1', titleAr: 'شهادة إنعاش القلبي الرئوي (BLS)', titleEn: 'Basic Life Support (BLS)', issuer: 'جمعية القلب السعودية', issueDate: '2025-01-10', status: 'valid' },
-      { id: '2', titleAr: 'شهادة دعم الحياة المتقدم (ACLS)', titleEn: 'Advanced Cardiac Life Support', issuer: 'AHA', issueDate: '2024-11-15', status: 'valid' },
-    ];
-
-    const skills = [
-      { nameAr: 'خياطة الجروح المعقدة', level: 90, category: 'جراحة' },
-      { nameAr: 'تركيب أنبوب القصبة الهوائية', level: 85, category: 'طوارئ' },
-      { nameAr: 'تخطيط القلب الكهربائي ECG', level: 95, category: 'باطنية' },
-      { nameAr: 'سحب الدم الشرياني', level: 92, category: 'عناية مركزة' },
-    ];
-
     const totalObjectives = await this.prisma.objectiveProgress.count({ where: { traineeProfileId: profile.id } });
     const completedObjectives = await this.prisma.objectiveProgress.count({ where: { traineeProfileId: profile.id, status: 'completed' } });
-    const completionPercentage = totalObjectives > 0 ? Math.round((completedObjectives / totalObjectives) * 100) : 88;
+    const completionPercentage = totalObjectives > 0 ? Math.round((completedObjectives / totalObjectives) * 100) : 0;
+    const competencies = await this.prisma.competencyProgress.findMany({
+      where: { traineeProfileId: profile.id },
+      include: { procedure: true },
+    });
 
     return {
       ...profile,
-      certifications,
-      skills,
+      certifications: [],
+      skills: competencies.map((c) => ({
+        nameAr: c.procedure.titleAr,
+        level: c.requiredCount > 0 ? Math.min(100, Math.round((c.completedCount / c.requiredCount) * 100)) : 0,
+        category: c.procedure.category,
+      })),
       completionPercentage,
       qrCodeData: `MIRAN-DIGITAL-ID-${profile.traineeNumber}-${profile.cardUuid || profile.id}`,
     };
@@ -65,9 +60,6 @@ export class TraineesController {
     let profile = await this.prisma.traineeProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
     });
-    if (!profile) {
-      profile = await this.prisma.traineeProfile.findFirst();
-    }
     if (!profile) return { message: 'لا يوجد ملف متدرب' };
 
     // الروتيشن الحالي و الأيام المتبقية
@@ -82,27 +74,18 @@ export class TraineesController {
       const end = new Date(activeRotation.endDate);
       const diffTime = end.getTime() - now.getTime();
       remainingDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-    } else {
-      remainingDays = 14;
     }
 
     // الوردية الحالية / اليوم
     const todayShift = await this.prisma.shift.findFirst({
-      where: { traineeProfileId: profile.id },
+      where: { traineeProfileId: profile.id, date: new Date() },
       include: { department: true },
     });
-
-    // الحدث القادم
-    const upcomingEvent = {
-      titleAr: 'مرور سريري مع استشاري الباطنية',
-      time: '08:00 ص',
-      location: 'جناح ٣ — غرفة الاجتماعات',
-    };
 
     // نسبة إنجاز الأهداف
     const totalObjs = await this.prisma.objectiveProgress.count({ where: { traineeProfileId: profile.id } });
     const completedObjs = await this.prisma.objectiveProgress.count({ where: { traineeProfileId: profile.id, status: 'completed' } });
-    const objectivePercentage = totalObjs > 0 ? Math.round((completedObjs / totalObjs) * 100) : 85;
+    const objectivePercentage = totalObjs > 0 ? Math.round((completedObjs / totalObjs) * 100) : 0;
 
     // حضور الأسبوع
     const attendanceRecords = await this.prisma.attendance.findMany({
@@ -111,7 +94,7 @@ export class TraineesController {
       orderBy: { date: 'desc' },
     });
     const presentCount = attendanceRecords.filter(a => a.status === 'present').length;
-    const weeklyAttendanceRate = attendanceRecords.length > 0 ? Math.round((presentCount / attendanceRecords.length) * 100) : 100;
+    const weeklyAttendanceRate = attendanceRecords.length > 0 ? Math.round((presentCount / attendanceRecords.length) * 100) : 0;
 
     // آخر تقييم
     const lastEvaluation = await this.prisma.evaluation.findFirst({
@@ -134,45 +117,26 @@ export class TraineesController {
         startDate: activeRotation.startDate,
         endDate: activeRotation.endDate,
         progressPercentage: Math.min(100, Math.max(10, 100 - Math.round((remainingDays / 30) * 100))),
-      } : {
-        departmentName: 'قسم الباطنية العام',
-        trainerName: 'د. سالم العتيبي',
-        startDate: new Date().toISOString(),
-        endDate: new Date(Date.now() + 14 * 86400000).toISOString(),
-        progressPercentage: 65,
-      },
+      } : null,
       currentShift: todayShift ? {
         shiftType: todayShift.shiftType,
         departmentName: todayShift.department.nameAr,
-        startTime: todayShift.startTime || '07:30 ص',
-        endTime: todayShift.endTime || '03:30 م',
-      } : {
-        shiftType: 'صباحي',
-        departmentName: 'قسم الباطنية العام',
-        startTime: '07:30 ص',
-        endTime: '03:30 م',
-      },
-      upcomingEvent,
+        startTime: todayShift.startTime,
+        endTime: todayShift.endTime,
+      } : null,
+      upcomingEvent: null,
       objectivePercentage,
       weeklyAttendanceRate,
       lastEvaluation: lastEvaluation ? {
         score: lastEvaluation.totalScore,
         comments: lastEvaluation.comments,
         submittedAt: lastEvaluation.submittedAt,
-      } : {
-        score: 4.8,
-        comments: 'أداء ممتاز والتزام عالي بالتعليمات السريرية',
-        submittedAt: new Date().toISOString(),
-      },
+      } : null,
       lastNotification: lastNotification ? {
         titleAr: lastNotification.titleAr,
         bodyAr: lastNotification.bodyAr,
         createdAt: lastNotification.createdAt,
-      } : {
-        titleAr: 'تم تحديث جدول الروتيشن',
-        bodyAr: 'تمت إضافة جدول المرور السريري للأسبوع القادم',
-        createdAt: new Date().toISOString(),
-      },
+      } : null,
     };
   }
 
@@ -185,15 +149,11 @@ export class TraineesController {
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
     });
     if (!profile) {
-      profile = await this.prisma.traineeProfile.findFirst();
-    }
-
-    if (!profile) {
       return {
-        commitmentRate: 96,
-        attendanceRate: 98,
-        callResponseSpeedMinutes: 4.2,
-        averageEvaluation: 4.85,
+        commitmentRate: 0,
+        attendanceRate: 0,
+        callResponseSpeedMinutes: 0,
+        averageEvaluation: 0,
       };
     }
 
@@ -205,8 +165,8 @@ export class TraineesController {
     const presentCount = attendances.filter(a => a.status === 'present').length;
     const onTimeCount = attendances.filter(a => a.status === 'present' && !a.isLate).length;
 
-    const attendanceRate = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 98;
-    const commitmentRate = totalCount > 0 ? Math.round((onTimeCount / totalCount) * 100) : 96;
+    const attendanceRate = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
+    const commitmentRate = totalCount > 0 ? Math.round((onTimeCount / totalCount) * 100) : 0;
 
     // 2. سرعة الاستجابة للنداءات
     const callParticipations = await this.prisma.callParticipant.findMany({
@@ -222,11 +182,11 @@ export class TraineesController {
         countResponded++;
       }
     }
-    const callResponseSpeedMinutes = countResponded > 0 ? parseFloat((totalDiffMinutes / countResponded).toFixed(1)) : 3.5;
+    const callResponseSpeedMinutes = countResponded > 0 ? parseFloat((totalDiffMinutes / countResponded).toFixed(1)) : 0;
 
     // 3. متوسط التقييمات
     const userAcc = await this.prisma.userAccount.findFirst({ where: { personId: profile.personId } });
-    let averageEvaluation = 4.8;
+    let averageEvaluation = 0;
     if (userAcc) {
       const evals = await this.prisma.evaluation.findMany({ where: { evaluateeId: userAcc.id } });
       if (evals.length > 0) {
@@ -251,10 +211,6 @@ export class TraineesController {
     let profile = await this.prisma.traineeProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
     });
-    if (!profile) {
-      profile = await this.prisma.traineeProfile.findFirst();
-    }
-
     const events: any[] = [];
 
     if (profile) {
@@ -315,15 +271,6 @@ export class TraineesController {
           });
         }
       }
-    }
-
-    // إضافة أحداث افتراضية إن كانت القائمة فارغة
-    if (events.length === 0) {
-      events.push(
-        { id: '1', type: 'certification', titleAr: 'شهادة BLS معتمدة', subtitleAr: 'جمعية القلب السعودية', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), icon: 'doc.plaintext.fill' },
-        { id: '2', type: 'objective', titleAr: 'إكمال هدف خياطة الجروح المعقدة', subtitleAr: 'قسم الجراحة العامة', timestamp: new Date(Date.now() - 86400000 * 4).toISOString(), icon: 'checkmark.seal.fill' },
-        { id: '3', type: 'call', titleAr: 'استجابة لنداء غرفة العمليات', subtitleAr: 'تمت الوصول خلال ٣ دقائق', timestamp: new Date(Date.now() - 86400000 * 5).toISOString(), icon: 'bell.fill' },
-      );
     }
 
     events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
