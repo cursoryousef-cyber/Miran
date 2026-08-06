@@ -21,6 +21,7 @@ import {
   ClipboardList,
   FileSignature,
   Network,
+  RotateCcw,
 } from 'lucide-react';
 
 // ─── Navigation definitions per role ───────────────────────────────────────
@@ -47,6 +48,7 @@ const universityNav: NavItem[] = [
   { name: 'لوحة الجامعة', path: '/', icon: GraduationCap },
   { name: 'البرامج والدفعات الأكاديمية', path: '/intakes', icon: ClipboardList },
   { name: 'طلبات التدريب للتجمعات', path: '/affiliations', icon: FolderGit2 },
+  { name: 'تصحيحات المتدربين المُعادة', path: '/corrections', icon: RotateCcw },
   { name: 'أعضاء الجامعة والطلاب', path: '/org-members', icon: Users },
 ];
 

@@ -111,6 +111,9 @@ model Organization {
   notifications      Notification[]
   caseLogs           ClinicalCaseLog[]
   auditLogs          AuditLog[]
+  trainingRequestTraineesAsUniversity TrainingRequestTrainee[] @relation("TRTUniversity")
+  trainingRequestTraineesAsCollege    TrainingRequestTrainee[] @relation("TRTCollege")
+  trainingRequestTraineesAsHospital   TrainingRequestTrainee[] @relation("TRTHospital")
   orgSettings        Setting[]       @relation("OrgSettings")
   objectives         Objective[]
   improvementPlans   ImprovementPlan[]
@@ -256,6 +259,7 @@ model Person {
   userAccounts   UserAccount[]
   traineeProfile TraineeProfile?
   trainerProfile TrainerProfile?
+  trainingRequestRows TrainingRequestTrainee[]
 
   @@index([nationalId])
   @@map("persons")
@@ -582,6 +586,7 @@ model Department {
   commonMistakes     DepartmentCommonMistake[]
   trainerCalls       TrainerCall[]
   caseLogs           ClinicalCaseLog[]
+  trainingRequestTrainees TrainingRequestTrainee[]
 
   @@index([organizationId])
   @@map("departments")
@@ -692,10 +697,74 @@ model TrainingRequest {
   targetOrg      Organization    @relation("TrainingReqTargetOrg", fields: [targetOrgId], references: [id])
   program        Program?        @relation(fields: [programId], references: [id])
   academicIntake AcademicIntake? @relation(fields: [academicIntakeId], references: [id])
+  trainees       TrainingRequestTrainee[]
 
   @@index([sourceOrgId])
   @@index([targetOrgId])
   @@map("training_requests")
+}
+
+/// صف المتدرب داخل دفعة طلب التدريب — سجل مرشّح قابل للمراجعة والتعديل
+/// والدمج والتقسيم والرفض قبل أن يتحول إلى حساب حقيقي (TraineeProfile).
+/// الترقية إلى حساب فعلي تتم فقط عند بلوغ الحالة cluster_approved.
+model TrainingRequestTrainee {
+  id                          String    @id @default(uuid()) @db.Uuid
+  trainingRequestId           String    @map("training_request_id") @db.Uuid
+  personId                    String?   @map("person_id") @db.Uuid
+  traineeProfileId            String?   @unique @map("trainee_profile_id") @db.Uuid
+  academicNumber              String    @map("academic_number") @db.VarChar(50)
+  nationalId                  String    @map("national_id") @db.VarChar(20)
+  nameAr                      String    @map("name_ar") @db.VarChar(200)
+  nameEn                      String?   @map("name_en") @db.VarChar(200)
+  gender                      String?   @db.VarChar(10)
+  universityOrgId             String?   @map("university_org_id") @db.Uuid
+  collegeOrgId                String?   @map("college_org_id") @db.Uuid
+  internshipProgram           String?   @map("internship_program") @db.VarChar(200)
+  specialty                   String?   @db.VarChar(200)
+  gpa                         Decimal?  @db.Decimal(4, 2)
+  mobile                      String?   @db.VarChar(20)
+  email                       String?   @db.VarChar(200)
+  trainingPeriod              String?   @map("training_period") @db.VarChar(50)
+  startDate                   DateTime? @map("start_date") @db.Date
+  endDate                     DateTime? @map("end_date") @db.Date
+  priority                    String    @default("normal") @db.VarChar(20)
+  status                      String    @default("draft") @db.VarChar(30)
+  validationErrors            Json      @default("[]") @map("validation_errors") @db.JsonB
+  clusterInternalNotes        String?   @map("cluster_internal_notes") @db.Text
+  officialComments            String?   @map("official_comments") @db.Text
+  returnReason                String?   @map("return_reason") @db.Text
+  requiredDocuments           Json      @default("[]") @map("required_documents") @db.JsonB
+  correctionDeadline          DateTime? @map("correction_deadline") @db.Date
+  assignedHospitalId          String?   @map("assigned_hospital_id") @db.Uuid
+  assignedDepartmentId        String?   @map("assigned_department_id") @db.Uuid
+  assignedTrainerProfileId    String?   @map("assigned_trainer_profile_id") @db.Uuid
+  assignedSupervisorAccountId String?   @map("assigned_supervisor_account_id") @db.Uuid
+  mergedIntoId                String?   @map("merged_into_id") @db.Uuid
+  splitFromId                 String?   @map("split_from_id") @db.Uuid
+  createdById                 String?   @map("created_by") @db.Uuid
+  updatedById                 String?   @map("updated_by") @db.Uuid
+  createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  trainingRequest    TrainingRequest @relation(fields: [trainingRequestId], references: [id])
+  person             Person?         @relation(fields: [personId], references: [id])
+  traineeProfile     TraineeProfile? @relation(fields: [traineeProfileId], references: [id])
+  university         Organization?   @relation("TRTUniversity", fields: [universityOrgId], references: [id])
+  college            Organization?   @relation("TRTCollege", fields: [collegeOrgId], references: [id])
+  assignedHospital   Organization?   @relation("TRTHospital", fields: [assignedHospitalId], references: [id])
+  assignedDepartment Department?     @relation(fields: [assignedDepartmentId], references: [id])
+  assignedTrainer    TrainerProfile? @relation(fields: [assignedTrainerProfileId], references: [id])
+  mergedInto         TrainingRequestTrainee?  @relation("TRTMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom         TrainingRequestTrainee[] @relation("TRTMerge")
+  splitFrom          TrainingRequestTrainee?  @relation("TRTSplit", fields: [splitFromId], references: [id])
+  splitInto          TrainingRequestTrainee[] @relation("TRTSplit")
+  documents          Document[]
+
+  @@index([trainingRequestId])
+  @@index([nationalId])
+  @@index([academicNumber])
+  @@index([status])
+  @@map("training_request_trainees")
 }
 
 model TraineeProfile {
@@ -746,6 +815,8 @@ model TraineeProfile {
   improvementPlans    ImprovementPlan[]
   caseLogs            ClinicalCaseLog[]
   competencies        CompetencyProgress[]
+  documents           Document[]
+  trainingRequestRow  TrainingRequestTrainee?
 
   @@index([organizationId])
   @@index([applicationStatus])
@@ -774,6 +845,7 @@ model TrainerProfile {
   rotations    Rotation[]
   trainerCalls TrainerCall[]
   caseLogs     ClinicalCaseLog[]
+  trainingRequestTrainees TrainingRequestTrainee[]
 
   @@map("trainer_profiles")
 }
@@ -954,7 +1026,10 @@ model Evaluation {
 model Document {
   id             String    @id @default(uuid()) @db.Uuid
   organizationId String    @map("organization_id") @db.Uuid
-  userId         String    @map("user_id") @db.Uuid
+  /// Null while the document belongs to a staging row that has no account yet
+  userId         String?   @map("user_id") @db.Uuid
+  traineeProfileId         String? @map("trainee_profile_id") @db.Uuid
+  trainingRequestTraineeId String? @map("training_request_trainee_id") @db.Uuid
   documentType   String    @map("document_type") @db.VarChar(50)
   titleAr        String    @map("title_ar") @db.VarChar(200)
   titleEn        String?   @map("title_en") @db.VarChar(200)
@@ -978,12 +1053,16 @@ model Document {
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz
 
   organization Organization @relation(fields: [organizationId], references: [id])
-  user         UserAccount  @relation("DocumentOwner", fields: [userId], references: [id])
+  user         UserAccount? @relation("DocumentOwner", fields: [userId], references: [id])
   reviewedBy   UserAccount? @relation("DocumentReviewer", fields: [reviewedById], references: [id])
+  traineeProfile         TraineeProfile?         @relation(fields: [traineeProfileId], references: [id])
+  trainingRequestTrainee TrainingRequestTrainee? @relation(fields: [trainingRequestTraineeId], references: [id])
 
   @@index([organizationId])
   @@index([userId])
   @@index([expiryDate])
+  @@index([traineeProfileId])
+  @@index([trainingRequestTraineeId])
   @@map("documents")
 }
 

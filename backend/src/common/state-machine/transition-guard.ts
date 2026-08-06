@@ -50,6 +50,9 @@ export const TRAINING_REQUEST_TRANSITIONS: TransitionTable = {
   resubmitted: ['under_cluster_review'],
   rejected: [],
   auto_allocated: ['manually_reallocated', 'approved', 'returned_to_university', 'rejected'],
+  // Legacy status present in existing rows (pre-state-machine). Treated as an
+  // alias of auto_allocated so historical requests are not stranded.
+  allocated: ['manually_reallocated', 'approved', 'returned_to_university', 'rejected'],
   manually_reallocated: ['approved', 'auto_allocated'],
   approved: ['hospital_administrator_accepted', 'hospital_accepted'],
   // legacy alias kept during migration from the old 4-step chain

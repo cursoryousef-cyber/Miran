@@ -30,6 +30,7 @@ import { GlobalSearchModule } from './modules/global-search/global-search.module
 import { RolesPermissionsModule } from './modules/roles-permissions/roles-permissions.module';
 import { LogbookModule } from './modules/logbook/logbook.module';
 import { TrainingRequestsModule } from './modules/training-requests/training-requests.module';
+import { TraineeDocumentsModule } from './modules/trainee-documents/trainee-documents.module';
 import { OperationsModule } from './modules/operations/operations.module';
 
 @Module({
@@ -82,6 +83,7 @@ import { OperationsModule } from './modules/operations/operations.module';
     RolesPermissionsModule,
     LogbookModule,
     TrainingRequestsModule,
+    TraineeDocumentsModule,
     OperationsModule,
   ],
   providers: [

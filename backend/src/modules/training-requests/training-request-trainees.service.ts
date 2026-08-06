@@ -1,0 +1,559 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { IAuthenticatedUser } from '../../common/interfaces';
+import { NotificationService } from '../notifications/notification.service';
+import { ValidationEngineService } from './validation-engine.service';
+import {
+  assertValidTransition,
+  TRAINING_REQUEST_TRAINEE_TRANSITIONS,
+} from '../../common/state-machine/transition-guard';
+import { TRAINEE_ROW_STATUS, TRAINEE_PROFILE_STATUS } from '../../common/status-constants';
+import {
+  MergeTraineesDto,
+  RejectTraineeDto,
+  ReturnTraineeDto,
+  SplitTraineeDto,
+  TraineeRowDto,
+  UpdateTraineeRowDto,
+} from './dto/training-request-trainee.dto';
+
+/**
+ * إدارة صفوف المتدربين داخل دفعة طلب التدريب (المراحل 1–3).
+ * الصف سجل مرشّح فقط — لا يتحول إلى حساب حقيقي إلا عند اعتماد التجمع.
+ */
+@Injectable()
+export class TrainingRequestTraineesService {
+  constructor(
+    private prisma: PrismaService,
+    private notificationService: NotificationService,
+    private validationEngine: ValidationEngineService,
+  ) {}
+
+  // ─── القراءة ──────────────────────────────────────────────────────────────
+  async findByRequest(trainingRequestId: string) {
+    const data = await this.prisma.trainingRequestTrainee.findMany({
+      where: { trainingRequestId },
+      include: { documents: true, university: true, college: true, assignedHospital: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return { data };
+  }
+
+  /** الصفوف المُعادة للجامعة — تغذّي لوحة تصحيحات الجامعة (المرحلة 3) */
+  async findReturnedForUniversity(universityOrgId: string) {
+    const data = await this.prisma.trainingRequestTrainee.findMany({
+      where: {
+        status: TRAINEE_ROW_STATUS.RETURNED_TO_UNIVERSITY,
+        OR: [{ universityOrgId }, { trainingRequest: { sourceOrgId: universityOrgId } }],
+      },
+      include: {
+        documents: true,
+        trainingRequest: { select: { id: true, requestNumber: true, targetOrgId: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return { data };
+  }
+
+  // ─── الاستيراد والإرسال (المرحلة 1) ───────────────────────────────────────
+  async importTrainees(trainingRequestId: string, rows: TraineeRowDto[], user: IAuthenticatedUser) {
+    const request = await this.prisma.trainingRequest.findUnique({ where: { id: trainingRequestId } });
+    if (!request) throw new NotFoundException('طلب التدريب غير موجود');
+    if (!rows?.length) throw new BadRequestException('لا توجد صفوف متدربين للاستيراد');
+
+    const created = await this.prisma.$transaction(
+      rows.map((row) =>
+        this.prisma.trainingRequestTrainee.create({
+          data: {
+            ...this.mapRow(row),
+            trainingRequestId,
+            universityOrgId: row.universityOrgId || request.sourceOrgId,
+            status: TRAINEE_ROW_STATUS.DRAFT,
+            createdById: user?.accountId,
+          },
+        }),
+      ),
+    );
+
+    await this.audit(user, request.sourceOrgId, 'import_training_request_trainees', trainingRequestId, null, {
+      importedCount: created.length,
+    });
+
+    return { data: created, success: true, message: `تم استيراد ${created.length} متدرب كمسودة` };
+  }
+
+  /** إرسال الدفعة للتجمع الصحي، ثم تشغيل محرك التحقق مباشرة */
+  async submitBatch(trainingRequestId: string, user: IAuthenticatedUser) {
+    const rows = await this.prisma.trainingRequestTrainee.findMany({
+      where: { trainingRequestId, status: TRAINEE_ROW_STATUS.DRAFT },
+    });
+    if (!rows.length) throw new BadRequestException('لا توجد صفوف بحالة مسودة لإرسالها');
+
+    for (const row of rows) {
+      assertValidTransition('صف المتدرب', row.status, TRAINEE_ROW_STATUS.SUBMITTED, TRAINING_REQUEST_TRAINEE_TRANSITIONS);
+    }
+
+    await this.prisma.trainingRequestTrainee.updateMany({
+      where: { trainingRequestId, status: TRAINEE_ROW_STATUS.DRAFT },
+      data: { status: TRAINEE_ROW_STATUS.SUBMITTED, updatedById: user?.accountId },
+    });
+
+    const validation = await this.validationEngine.validateTrainees(trainingRequestId);
+
+    const request = await this.prisma.trainingRequest.findUnique({ where: { id: trainingRequestId } });
+    if (request) {
+      await this.notificationService.notifyOrgUsers(request.targetOrgId, 'cluster_administrator', {
+        titleAr: `دفعة متدربين جديدة بانتظار المراجعة (${request.requestNumber})`,
+        bodyAr: `تم إرسال ${rows.length} متدرب للمراجعة من الجامعة.`,
+        type: 'training_request_batch_submitted',
+        referenceType: 'TrainingRequest',
+        referenceId: trainingRequestId,
+        channels: ['in_app', 'email'],
+      });
+    }
+
+    return {
+      success: true,
+      submittedCount: rows.length,
+      validation,
+      message: `تم إرسال ${rows.length} متدرب إلى التجمع الصحي`,
+    };
+  }
+
+  async runValidation(trainingRequestId: string) {
+    const results = await this.validationEngine.validateTrainees(trainingRequestId);
+    const invalidCount = results.filter((r) => r.errors.length > 0).length;
+    return {
+      data: results,
+      summary: { total: results.length, valid: results.length - invalidCount, invalid: invalidCount },
+    };
+  }
+
+  // ─── التعديل مع سجل الإصدارات (المرحلة 2/3) ───────────────────────────────
+  async editTrainee(rowId: string, dto: UpdateTraineeRowDto, user: IAuthenticatedUser) {
+    const existing = await this.requireRow(rowId);
+
+    const updated = await this.prisma.trainingRequestTrainee.update({
+      where: { id: rowId },
+      data: {
+        ...this.mapRow(dto),
+        clusterInternalNotes: dto.clusterInternalNotes ?? existing.clusterInternalNotes,
+        officialComments: dto.officialComments ?? existing.officialComments,
+        updatedById: user?.accountId,
+      },
+    });
+
+    await this.audit(
+      user,
+      existing.universityOrgId,
+      'edit_training_request_trainee',
+      rowId,
+      this.snapshot(existing),
+      this.snapshot(updated),
+    );
+
+    return { data: updated, success: true, message: 'تم حفظ التعديلات وتوثيقها في سجل الإصدارات' };
+  }
+
+  async mergeTrainees(primaryRowId: string, dto: MergeTraineesDto, user: IAuthenticatedUser) {
+    const primary = await this.requireRow(primaryRowId);
+    if (dto.duplicateRowIds.includes(primaryRowId)) {
+      throw new BadRequestException('لا يمكن دمج الصف الأساسي مع نفسه');
+    }
+
+    const duplicates = await this.prisma.trainingRequestTrainee.findMany({
+      where: { id: { in: dto.duplicateRowIds } },
+    });
+    if (duplicates.length !== dto.duplicateRowIds.length) {
+      throw new NotFoundException('بعض الصفوف المطلوب دمجها غير موجودة');
+    }
+    for (const dup of duplicates) {
+      assertValidTransition('صف المتدرب', dup.status, TRAINEE_ROW_STATUS.MERGED, TRAINING_REQUEST_TRAINEE_TRANSITIONS);
+    }
+
+    await this.prisma.$transaction([
+      // نقل مستندات الصفوف المكررة إلى الصف الأساسي حتى لا تُفقد
+      this.prisma.document.updateMany({
+        where: { trainingRequestTraineeId: { in: dto.duplicateRowIds } },
+        data: { trainingRequestTraineeId: primaryRowId },
+      }),
+      this.prisma.trainingRequestTrainee.updateMany({
+        where: { id: { in: dto.duplicateRowIds } },
+        data: { status: TRAINEE_ROW_STATUS.MERGED, mergedIntoId: primaryRowId, updatedById: user?.accountId },
+      }),
+    ]);
+
+    await this.audit(user, primary.universityOrgId, 'merge_training_request_trainees', primaryRowId, null, {
+      mergedRowIds: dto.duplicateRowIds,
+    });
+
+    // إعادة التحقق بعد إزالة التكرار
+    await this.validationEngine.validateTrainees(primary.trainingRequestId);
+
+    return { success: true, mergedCount: duplicates.length, message: `تم دمج ${duplicates.length} صف مكرر` };
+  }
+
+  async splitTrainee(rowId: string, dto: SplitTraineeDto, user: IAuthenticatedUser) {
+    const existing = await this.requireRow(rowId);
+    if (!dto.rows?.length || dto.rows.length < 2) {
+      throw new BadRequestException('التقسيم يتطلب صفين جديدين على الأقل');
+    }
+    assertValidTransition('صف المتدرب', existing.status, TRAINEE_ROW_STATUS.SPLIT, TRAINING_REQUEST_TRAINEE_TRANSITIONS);
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const newRows: { id: string }[] = [];
+      for (const row of dto.rows) {
+        newRows.push(
+          await tx.trainingRequestTrainee.create({
+            data: {
+              ...this.mapRow(row),
+              trainingRequestId: existing.trainingRequestId,
+              universityOrgId: row.universityOrgId || existing.universityOrgId,
+              status: TRAINEE_ROW_STATUS.SUBMITTED,
+              splitFromId: rowId,
+              createdById: user?.accountId,
+            },
+          }),
+        );
+      }
+      await tx.trainingRequestTrainee.update({
+        where: { id: rowId },
+        data: { status: TRAINEE_ROW_STATUS.SPLIT, updatedById: user?.accountId },
+      });
+      return newRows;
+    });
+
+    await this.audit(user, existing.universityOrgId, 'split_training_request_trainee', rowId, this.snapshot(existing), {
+      newRowIds: created.map((r) => r.id),
+    });
+
+    return { data: created, success: true, message: `تم تقسيم الصف إلى ${created.length} صفوف` };
+  }
+
+  // ─── قرارات التجمع (المرحلة 2) ────────────────────────────────────────────
+  /** الاعتماد + الترقية إلى Person/UserAccount/TraineeProfile حقيقي */
+  async approveTrainee(rowId: string, user: IAuthenticatedUser) {
+    const row = await this.requireRow(rowId);
+    assertValidTransition(
+      'صف المتدرب',
+      row.status,
+      TRAINEE_ROW_STATUS.CLUSTER_APPROVED,
+      TRAINING_REQUEST_TRAINEE_TRANSITIONS,
+    );
+
+    const errors = (row.validationErrors as unknown as { messageAr: string }[]) || [];
+    if (errors.length > 0) {
+      throw new BadRequestException(
+        `تعذر اعتماد المتدرب بسبب أخطاء تحقق لم تُعالج:\n${errors.map((e) => `- ${e.messageAr}`).join('\n')}`,
+      );
+    }
+
+    const request = await this.prisma.trainingRequest.findUnique({
+      where: { id: row.trainingRequestId },
+      select: { targetOrgId: true, academicIntakeId: true, programId: true },
+    });
+    if (!request) throw new NotFoundException('طلب التدريب غير موجود');
+
+    const { profile, activationToken, accountEmail, accountId } = await this.promoteToTrainee(row, request, user);
+
+    await this.audit(user, request.targetOrgId, 'approve_training_request_trainee', rowId, this.snapshot(row), {
+      status: TRAINEE_ROW_STATUS.CLUSTER_APPROVED,
+      traineeProfileId: profile.id,
+    });
+
+    // دعوة تفعيل حقيقية بدل كلمة مرور ثابتة
+    await this.notificationService.create({
+      organizationId: request.targetOrgId,
+      userId: accountId,
+      titleAr: 'تم اعتماد تسجيلك في برنامج الامتياز',
+      bodyAr: `تم اعتماد ملفك. يرجى تفعيل حسابك (${accountEmail}) عبر رابط التفعيل المرسل لبريدك.`,
+      type: 'trainee_approved',
+      referenceType: 'TraineeProfile',
+      referenceId: profile.id,
+      channels: ['in_app', 'email'],
+    });
+
+    return {
+      data: { rowId, traineeProfileId: profile.id, activationTokenIssued: Boolean(activationToken) },
+      success: true,
+      message: 'تم اعتماد المتدرب وإنشاء ملفه التدريبي',
+    };
+  }
+
+  async rejectTrainee(rowId: string, dto: RejectTraineeDto, user: IAuthenticatedUser) {
+    const row = await this.requireRow(rowId);
+    assertValidTransition('صف المتدرب', row.status, TRAINEE_ROW_STATUS.REJECTED, TRAINING_REQUEST_TRAINEE_TRANSITIONS);
+
+    const updated = await this.prisma.trainingRequestTrainee.update({
+      where: { id: rowId },
+      data: { status: TRAINEE_ROW_STATUS.REJECTED, returnReason: dto.reason, updatedById: user?.accountId },
+    });
+
+    await this.audit(user, row.universityOrgId, 'reject_training_request_trainee', rowId, this.snapshot(row), {
+      status: TRAINEE_ROW_STATUS.REJECTED,
+      reason: dto.reason,
+    });
+
+    await this.notifyUniversity(row, 'تم رفض متدرب من الدفعة', `${row.nameAr}: ${dto.reason}`);
+
+    return { data: updated, success: true, message: 'تم رفض المتدرب' };
+  }
+
+  async returnTraineeToUniversity(rowId: string, dto: ReturnTraineeDto, user: IAuthenticatedUser) {
+    const row = await this.requireRow(rowId);
+    assertValidTransition(
+      'صف المتدرب',
+      row.status,
+      TRAINEE_ROW_STATUS.RETURNED_TO_UNIVERSITY,
+      TRAINING_REQUEST_TRAINEE_TRANSITIONS,
+    );
+
+    const updated = await this.prisma.trainingRequestTrainee.update({
+      where: { id: rowId },
+      data: {
+        status: TRAINEE_ROW_STATUS.RETURNED_TO_UNIVERSITY,
+        returnReason: dto.reason,
+        officialComments: dto.officialComments ?? row.officialComments,
+        requiredDocuments: (dto.requiredDocuments || []) as unknown as object[],
+        correctionDeadline: dto.correctionDeadline ? new Date(dto.correctionDeadline) : null,
+        updatedById: user?.accountId,
+      },
+    });
+
+    await this.audit(user, row.universityOrgId, 'return_trainee_to_university', rowId, this.snapshot(row), {
+      status: TRAINEE_ROW_STATUS.RETURNED_TO_UNIVERSITY,
+      reason: dto.reason,
+      requiredDocuments: dto.requiredDocuments,
+      correctionDeadline: dto.correctionDeadline,
+    });
+
+    await this.notifyUniversity(
+      row,
+      'إعادة متدرب للتصحيح',
+      `${row.nameAr}: ${dto.reason}${dto.correctionDeadline ? ` — آخر موعد للتعديل: ${dto.correctionDeadline}` : ''}`,
+    );
+
+    return { data: updated, success: true, message: 'تمت إعادة المتدرب إلى الجامعة للتصحيح' };
+  }
+
+  // ─── تصحيح الجامعة (المرحلة 3) ────────────────────────────────────────────
+  async resubmitTrainee(rowId: string, dto: UpdateTraineeRowDto, user: IAuthenticatedUser) {
+    const row = await this.requireRow(rowId);
+    assertValidTransition('صف المتدرب', row.status, TRAINEE_ROW_STATUS.SUBMITTED, TRAINING_REQUEST_TRAINEE_TRANSITIONS);
+
+    const updated = await this.prisma.trainingRequestTrainee.update({
+      where: { id: rowId },
+      data: {
+        ...this.mapRow(dto),
+        status: TRAINEE_ROW_STATUS.SUBMITTED,
+        returnReason: null,
+        updatedById: user?.accountId,
+      },
+    });
+
+    await this.audit(user, row.universityOrgId, 'resubmit_training_request_trainee', rowId, this.snapshot(row), this.snapshot(updated));
+
+    await this.validationEngine.validateTrainees(row.trainingRequestId);
+
+    const request = await this.prisma.trainingRequest.findUnique({
+      where: { id: row.trainingRequestId },
+      select: { targetOrgId: true, requestNumber: true },
+    });
+    if (request) {
+      await this.notificationService.notifyOrgUsers(request.targetOrgId, 'cluster_administrator', {
+        titleAr: 'تم تصحيح بيانات متدرب وإعادة إرسالها',
+        bodyAr: `${updated.nameAr} — الطلب ${request.requestNumber}`,
+        type: 'trainee_resubmitted',
+        referenceType: 'TrainingRequestTrainee',
+        referenceId: rowId,
+        channels: ['in_app'],
+      });
+    }
+
+    return { data: updated, success: true, message: 'تم إعادة إرسال المتدرب بعد التصحيح' };
+  }
+
+  // ─── مساعدات داخلية ───────────────────────────────────────────────────────
+  private async promoteToTrainee(
+    row: Prisma.TrainingRequestTraineeGetPayload<Record<string, never>>,
+    request: { targetOrgId: string; academicIntakeId: string | null; programId: string | null },
+    user: IAuthenticatedUser,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const person = await tx.person.upsert({
+        where: { nationalId: row.nationalId },
+        create: {
+          nationalId: row.nationalId,
+          nameAr: row.nameAr,
+          nameEn: row.nameEn,
+          gender: row.gender,
+          phone: row.mobile,
+          email: row.email,
+          createdById: user?.accountId,
+        },
+        update: { nameAr: row.nameAr, nameEn: row.nameEn, gender: row.gender, phone: row.mobile },
+      });
+
+      // حساب بكلمة مرور عشوائية غير معروفة لأحد + رمز تفعيل يرسله المتدرب بنفسه
+      const activationToken = randomUUID();
+      const accountEmail = row.email || `${row.academicNumber}@no-email.local`;
+      const existingAccount = await tx.userAccount.findUnique({ where: { email: accountEmail } });
+
+      if (!existingAccount) {
+        await tx.userAccount.create({
+          data: {
+            personId: person.id,
+            email: accountEmail,
+            passwordHash: await bcrypt.hash(randomUUID(), 10),
+            isActive: false,
+            activationToken,
+            createdById: user?.accountId,
+          },
+        });
+      }
+
+      const account = existingAccount || (await tx.userAccount.findUnique({ where: { email: accountEmail } }))!;
+
+      const traineeRole = await tx.role.findUnique({ where: { code: 'trainee' } });
+      if (traineeRole) {
+        await tx.userRole.upsert({
+          where: {
+            userAccountId_roleId_organizationId: {
+              userAccountId: account.id,
+              roleId: traineeRole.id,
+              organizationId: request.targetOrgId,
+            },
+          },
+          create: {
+            userAccountId: account.id,
+            roleId: traineeRole.id,
+            organizationId: request.targetOrgId,
+          },
+          update: {},
+        });
+      }
+
+      const profile = await tx.traineeProfile.upsert({
+        where: { personId: person.id },
+        create: {
+          personId: person.id,
+          organizationId: row.assignedHospitalId || request.targetOrgId,
+          sponsorOrganizationId: row.universityOrgId,
+          traineeNumber: row.academicNumber,
+          level: 'intern',
+          specialtyEn: row.specialty,
+          programId: request.programId,
+          academicIntakeId: request.academicIntakeId,
+          applicationStatus: TRAINEE_PROFILE_STATUS.DRAFT,
+          accessStartDate: row.startDate,
+          accessEndDate: row.endDate,
+          createdById: user?.accountId,
+        },
+        update: { organizationId: row.assignedHospitalId || request.targetOrgId },
+      });
+
+      // ربط المستندات المرفوعة على الصف بالملف التدريبي الجديد
+      await tx.document.updateMany({
+        where: { trainingRequestTraineeId: row.id },
+        data: { traineeProfileId: profile.id, userId: account.id },
+      });
+
+      await tx.trainingRequestTrainee.update({
+        where: { id: row.id },
+        data: {
+          status: TRAINEE_ROW_STATUS.CLUSTER_APPROVED,
+          personId: person.id,
+          traineeProfileId: profile.id,
+          updatedById: user?.accountId,
+        },
+      });
+
+      return { profile, activationToken, accountEmail, accountId: account.id };
+    });
+  }
+
+  private async requireRow(rowId: string) {
+    const row = await this.prisma.trainingRequestTrainee.findUnique({ where: { id: rowId } });
+    if (!row) throw new NotFoundException('صف المتدرب غير موجود');
+    return row;
+  }
+
+  private mapRow(row: TraineeRowDto) {
+    return {
+      academicNumber: row.academicNumber,
+      nationalId: row.nationalId,
+      nameAr: row.nameAr,
+      nameEn: row.nameEn,
+      gender: row.gender,
+      collegeOrgId: row.collegeOrgId,
+      internshipProgram: row.internshipProgram,
+      specialty: row.specialty,
+      gpa: row.gpa !== undefined ? new Prisma.Decimal(row.gpa) : undefined,
+      mobile: row.mobile,
+      email: row.email,
+      trainingPeriod: row.trainingPeriod,
+      startDate: row.startDate ? new Date(row.startDate) : undefined,
+      endDate: row.endDate ? new Date(row.endDate) : undefined,
+      priority: row.priority || 'normal',
+    };
+  }
+
+  /** لقطة الحقول التي يُتتبع تغيّرها في سجل الإصدارات */
+  private snapshot(row: Record<string, unknown>) {
+    const fields = [
+      'academicNumber', 'nationalId', 'nameAr', 'nameEn', 'gender', 'specialty',
+      'internshipProgram', 'gpa', 'mobile', 'email', 'trainingPeriod',
+      'startDate', 'endDate', 'priority', 'status',
+    ];
+    return Object.fromEntries(fields.map((f) => [f, row[f] ?? null]));
+  }
+
+  private async audit(
+    user: IAuthenticatedUser,
+    organizationId: string | null,
+    action: string,
+    entityId: string,
+    oldValues: object | null,
+    newValues: object | null,
+  ) {
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: organizationId || undefined,
+        actorId: user?.accountId,
+        action,
+        entityType: 'TrainingRequestTrainee',
+        entityId,
+        oldValues: oldValues as Prisma.InputJsonValue,
+        newValues: newValues as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  private async notifyUniversity(
+    row: { universityOrgId: string | null; trainingRequestId: string; id: string },
+    titleAr: string,
+    bodyAr: string,
+  ) {
+    let orgId = row.universityOrgId;
+    if (!orgId) {
+      const req = await this.prisma.trainingRequest.findUnique({
+        where: { id: row.trainingRequestId },
+        select: { sourceOrgId: true },
+      });
+      orgId = req?.sourceOrgId ?? null;
+    }
+    if (!orgId) return;
+
+    await this.notificationService.notifyOrgUsers(orgId, 'university_administrator', {
+      titleAr,
+      bodyAr,
+      type: 'trainee_review_decision',
+      referenceType: 'TrainingRequestTrainee',
+      referenceId: row.id,
+      channels: ['in_app', 'email'],
+    });
+  }
+}
