@@ -34,6 +34,8 @@ import { HospitalReview } from './pages/HospitalReview';
 import { AcceptanceChain } from './pages/AcceptanceChain';
 import { Incidents } from './pages/Incidents';
 import { Graduation } from './pages/Graduation';
+import { TrainerReassignment } from './pages/TrainerReassignment';
+import { TrainerLeaveManagement } from './pages/TrainerLeaveManagement';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -115,6 +117,8 @@ export const App: React.FC = () => {
 
                   {/* Hospital + Trainer */}
                   <Route path="org-members" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...UNIVERSITY]}><OrgMembersPage /></RoleRoute>} />
+                  <Route path="trainer-reassignment" element={<RoleRoute allowedRoles={[...HOSPITAL, ...PLATFORM]}><TrainerReassignment /></RoleRoute>} />
+                  <Route path="trainer-leaves" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...PLATFORM]}><TrainerLeaveManagement /></RoleRoute>} />
 
                   {/* Trainer + Trainee */}
                   <Route path="logbook" element={<RoleRoute allowedRoles={[...TRAINER, ...TRAINEE, ...HOSPITAL]}><LogbookPage /></RoleRoute>} />

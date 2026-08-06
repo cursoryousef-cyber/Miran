@@ -25,6 +25,8 @@ import {
   BedDouble,
   AlertTriangle,
   CheckSquare,
+  ArrowRightLeft,
+  Calendar,
 } from 'lucide-react';
 
 // ─── Navigation definitions per role ───────────────────────────────────────
@@ -72,6 +74,8 @@ const hospitalNav: NavItem[] = [
   { name: 'مراجعة المتدربين الواردين', path: '/hospital-review', icon: ShieldCheck },
   { name: 'الروتيشنات والأقسام', path: '/intakes', icon: ClipboardList },
   { name: 'المتدربون والمدربون', path: '/org-members', icon: UserCog },
+  { name: 'إعادة إسناد المدربين', path: '/trainer-reassignment', icon: ArrowRightLeft },
+  { name: 'إجازات المدربين', path: '/trainer-leaves', icon: Calendar },
   { name: 'السجل السريري (Logbook)', path: '/logbook', icon: BookOpen },
   { name: 'البلاغات والحوادث', path: '/incidents', icon: AlertTriangle },
   { name: 'إدارة التخرج', path: '/graduation', icon: GraduationCap },
