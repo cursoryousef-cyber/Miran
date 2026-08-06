@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto, SwitchOrgDto, RefreshTokenDto, ActivateAccountDto } from './dto/auth.dto';
 import { IAuthenticatedUser } from '../../common/interfaces';
+import { OrganizationAssignmentService } from '../organization-assignments/organization-assignment.service';
 
 @Injectable()
 export class AuthService {
@@ -17,6 +18,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private orgAssignments: OrganizationAssignmentService,
   ) {}
 
   // ── Helper: جلب أدوار وصلاحيات المستخدم لجهة محددة ──────────────────────
@@ -56,13 +58,7 @@ export class AuthService {
   async login(dto: LoginDto) {
     const account = await this.prisma.userAccount.findUnique({
       where: { email: dto.email.toLowerCase() },
-      include: {
-        person: true,
-        organizations: {
-          where: { isActive: true },
-          include: { organization: true },
-        },
-      },
+      include: { person: true },
     });
 
     if (!account) {
@@ -95,18 +91,20 @@ export class AuthService {
       data: { loginAttempts: 0, lockedUntil: null, lastLoginAt: new Date() },
     });
 
-    // Multi-Org Resolution: Prioritize account's primary organization (isPrimary: true)
-    let primaryOrg = account.organizations.find((uo) => uo.isPrimary) || account.organizations[0];
+    // Multi-Org Resolution: OrganizationAssignment is the source of truth;
+    // UserOrganization remains the fallback for users with no assignments.
+    const orgContext = await this.orgAssignments.resolveOrgContext(account.id, { activeOnly: true });
+    const primaryOrg = orgContext.active;
 
     if (!primaryOrg) {
       throw new ForbiddenException('المستخدم غير مرتبط بأي جهة تابعة للنظام');
     }
 
     // جلب الأدوار والصلاحيات للجهة الأساسية
-    const { roles, permissions } = await this.getRolesAndPermissions(account.id, primaryOrg.organizationId);
+    const { roles, permissions } = await this.getRolesAndPermissions(account.id, primaryOrg.organization.id);
 
     const tokens = await this.generateTokens(
-      account.id, account.personId, primaryOrg.organizationId, account.email, roles, permissions,
+      account.id, account.personId, primaryOrg.organization.id, account.email, roles, permissions,
     );
 
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
@@ -132,12 +130,12 @@ export class AuthService {
           nameAr: primaryOrg.organization.nameAr,
           nameEn: primaryOrg.organization.nameEn,
         },
-        availableOrganizations: account.organizations.map((uo) => ({
-          id: uo.organization.id,
-          code: uo.organization.code,
-          nameAr: uo.organization.nameAr,
-          nameEn: uo.organization.nameEn,
-          isPrimary: uo.isPrimary,
+        availableOrganizations: orgContext.available.map((entry) => ({
+          id: entry.organization.id,
+          code: entry.organization.code,
+          nameAr: entry.organization.nameAr,
+          nameEn: entry.organization.nameEn,
+          isPrimary: entry.isPrimary,
         })),
       },
       tokens,
@@ -145,33 +143,29 @@ export class AuthService {
   }
 
   async switchOrganization(user: IAuthenticatedUser, dto: SwitchOrgDto) {
-    const userOrg = await this.prisma.userOrganization.findUnique({
-      where: {
-        userAccountId_organizationId: {
-          userAccountId: user.accountId,
-          organizationId: dto.organizationId,
-        },
-      },
-      include: { organization: true },
-    });
+    // Access decided by OrganizationAssignment, with UserOrganization as fallback.
+    const allowed = await this.orgAssignments.canAccessOrg(user.accountId, dto.organizationId);
+    const organization = allowed
+      ? await this.prisma.organization.findUnique({ where: { id: dto.organizationId } })
+      : null;
 
-    if (!userOrg || !userOrg.isActive || !userOrg.organization.status) {
+    if (!allowed || !organization || !organization.status) {
       throw new ForbiddenException('ليس لديك صلاحية الوصول لهذه الجهة');
     }
 
     // إعادة حساب الأدوار للجهة الجديدة
-    const { roles, permissions } = await this.getRolesAndPermissions(user.accountId, userOrg.organizationId);
+    const { roles, permissions } = await this.getRolesAndPermissions(user.accountId, organization.id);
 
     const tokens = await this.generateTokens(
-      user.accountId, user.personId, userOrg.organizationId, user.email, roles, permissions,
+      user.accountId, user.personId, organization.id, user.email, roles, permissions,
     );
 
     return {
       activeOrganization: {
-        id: userOrg.organization.id,
-        code: userOrg.organization.code,
-        nameAr: userOrg.organization.nameAr,
-        nameEn: userOrg.organization.nameEn,
+        id: organization.id,
+        code: organization.code,
+        nameAr: organization.nameAr,
+        nameEn: organization.nameEn,
       },
       roles,
       permissions,
@@ -217,12 +211,7 @@ export class AuthService {
   async getProfile(user: IAuthenticatedUser) {
     const account = await this.prisma.userAccount.findUnique({
       where: { id: user.accountId },
-      include: {
-        person: true,
-        organizations: {
-          include: { organization: { include: { organizationType: true } } },
-        },
-      },
+      include: { person: true },
     });
 
     if (!account) {
@@ -232,16 +221,19 @@ export class AuthService {
     const activeOrgId = user.organizationId;
     const { roles, permissions } = await this.getRolesAndPermissions(account.id, activeOrgId);
 
-    const activeUserOrg = account.organizations.find((uo) => uo.organizationId === activeOrgId)
-      || account.organizations[0];
+    // Historical memberships included, matching the legacy unfiltered join.
+    const orgContext = await this.orgAssignments.resolveOrgContext(account.id, { activeOnly: false });
 
-    const availableOrganizations = account.organizations.map((uo) => ({
-      id: uo.organization.id,
-      code: uo.organization.code,
-      nameAr: uo.organization.nameAr,
-      nameEn: uo.organization.nameEn,
-      type: uo.organization.organizationType?.code || 'hospital',
-      logoUrl: uo.organization.logoUrl,
+    const activeEntry =
+      orgContext.available.find((e) => e.organization.id === activeOrgId) ?? orgContext.available[0];
+
+    const availableOrganizations = orgContext.available.map((entry) => ({
+      id: entry.organization.id,
+      code: entry.organization.code,
+      nameAr: entry.organization.nameAr,
+      nameEn: entry.organization.nameEn,
+      type: entry.organization.organizationType?.code || 'hospital',
+      logoUrl: entry.organization.logoUrl,
     }));
 
     return {
@@ -254,13 +246,13 @@ export class AuthService {
         primaryRole: roles[0] || 'trainee',
         roles,
         permissions,
-        activeOrganization: activeUserOrg ? {
-          id: activeUserOrg.organization.id,
-          code: activeUserOrg.organization.code,
-          nameAr: activeUserOrg.organization.nameAr,
-          nameEn: activeUserOrg.organization.nameEn,
-          type: activeUserOrg.organization.organizationType?.code || 'hospital',
-          logoUrl: activeUserOrg.organization.logoUrl,
+        activeOrganization: activeEntry ? {
+          id: activeEntry.organization.id,
+          code: activeEntry.organization.code,
+          nameAr: activeEntry.organization.nameAr,
+          nameEn: activeEntry.organization.nameEn,
+          type: activeEntry.organization.organizationType?.code || 'hospital',
+          logoUrl: activeEntry.organization.logoUrl,
         } : null,
         availableOrganizations,
       },

@@ -1,6 +1,20 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
+/**
+ * Assignment sources that confer *account membership* in an organization —
+ * i.e. the right to sign in against it and switch into it.
+ *
+ * Profile-derived assignments (trainer_profile / trainee_profile) are
+ * deliberately excluded: holding a clinical profile at a hospital records where
+ * a person trains or teaches, not that their account is a member of that org.
+ * Those rows stay in the table for the hospital/trainer queries that legitimately
+ * ask "who works here", but they must not widen the auth surface — the legacy
+ * model resolved membership from UserOrganization alone, and this keeps the
+ * resolved membership identical to it.
+ */
+const MEMBERSHIP_SOURCES = ['user_organization', 'user_role', 'manual'];
+
 @Injectable()
 export class OrganizationAssignmentService {
   private readonly logger = new Logger(OrganizationAssignmentService.name);
@@ -27,6 +41,91 @@ export class OrganizationAssignmentService {
       select: { organizationId: true },
     });
     return uo?.organizationId ?? null;
+  }
+
+  /**
+   * Resolves a user's organization context — the active org plus every org they
+   * can reach — from OrganizationAssignment, falling back to UserOrganization
+   * when the user has no assignment rows at all.
+   *
+   * The source decision is all-or-nothing per user so a caller never sees a list
+   * half-built from each model. Returned organizations are full records, so
+   * callers can shape responses exactly as they did against the legacy join.
+   *
+   * @param activeOnly restrict to currently-active memberships (login) or
+   *                   include historical ones (profile), matching legacy scoping.
+   */
+  async resolveOrgContext(
+    userAccountId: string,
+    opts: { activeOnly: boolean },
+  ): Promise<{
+    active: { organization: any; isPrimary: boolean } | null;
+    available: Array<{ organization: any; isPrimary: boolean }>;
+    source: 'assignment' | 'legacy';
+  }> {
+    const orgInclude = { include: { organizationType: true } } as const;
+
+    const assignments = await this.prisma.organizationAssignment.findMany({
+      where: {
+        userAccountId,
+        sourceType: { in: MEMBERSHIP_SOURCES },
+        ...(opts.activeOnly ? { isActive: true } : {}),
+      },
+      include: { organization: orgInclude },
+      orderBy: [{ isPrimary: 'desc' }, { startDate: 'asc' }],
+    });
+
+    if (assignments.length > 0) {
+      // A user may hold several assignments in one org over time; collapse to one
+      // entry per org, preferring the primary.
+      const byOrg = new Map<string, { organization: any; isPrimary: boolean }>();
+      for (const a of assignments) {
+        const existing = byOrg.get(a.organizationId);
+        if (!existing || (a.isPrimary && !existing.isPrimary)) {
+          byOrg.set(a.organizationId, { organization: a.organization, isPrimary: a.isPrimary });
+        }
+      }
+      const available = [...byOrg.values()];
+      const active = available.find((e) => e.isPrimary) ?? available[0] ?? null;
+      return { active, available, source: 'assignment' };
+    }
+
+    // Legacy fallback — mirrors the original UserOrganization resolution exactly.
+    const userOrgs = await this.prisma.userOrganization.findMany({
+      where: { userAccountId, ...(opts.activeOnly ? { isActive: true } : {}) },
+      include: { organization: orgInclude },
+    });
+    const available = userOrgs.map((uo) => ({
+      organization: uo.organization,
+      isPrimary: uo.isPrimary,
+    }));
+    const active = available.find((e) => e.isPrimary) ?? available[0] ?? null;
+    return { active, available, source: 'legacy' };
+  }
+
+  /**
+   * Whether a user may act within an organization — assignment first, legacy
+   * fallback. Used to authorize organization switching.
+   */
+  async canAccessOrg(userAccountId: string, organizationId: string): Promise<boolean> {
+    const assignment = await this.prisma.organizationAssignment.findFirst({
+      where: { userAccountId, organizationId, isActive: true, sourceType: { in: MEMBERSHIP_SOURCES } },
+      select: { id: true },
+    });
+    if (assignment) return true;
+
+    const anyAssignment = await this.prisma.organizationAssignment.findFirst({
+      where: { userAccountId, sourceType: { in: MEMBERSHIP_SOURCES } },
+      select: { id: true },
+    });
+    // Only consult the legacy model for users with no assignments at all.
+    if (anyAssignment) return false;
+
+    const uo = await this.prisma.userOrganization.findUnique({
+      where: { userAccountId_organizationId: { userAccountId, organizationId } },
+      select: { isActive: true },
+    });
+    return !!uo?.isActive;
   }
 
   /**
