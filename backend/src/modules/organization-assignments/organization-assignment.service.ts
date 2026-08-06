@@ -144,6 +144,141 @@ export class OrganizationAssignmentService {
   }
 
   /**
+   * Member accounts of an organization, resolved from OrganizationAssignment
+   * with a UserOrganization fallback for orgs that have no assignment rows yet.
+   *
+   * A user may hold several assignments in one org over time, so rows are
+   * collapsed to one per account (preferring an active/primary row) before
+   * paging — otherwise history would show up as duplicate members.
+   *
+   * Returns the same fields the legacy UserOrganization join exposed, so callers
+   * can build byte-identical responses.
+   */
+  async findMembershipsInOrg(
+    organizationId: string,
+    opts: { skip?: number; take?: number } = {},
+  ): Promise<{
+    members: Array<{ userAccountId: string; isActive: boolean; isPrimary: boolean; userAccount: any }>;
+    total: number;
+  }> {
+    const userAccountInclude = {
+      include: {
+        person: true,
+        userRoles: { where: { organizationId }, include: { role: true } },
+      },
+    } as const;
+
+    const assignments = await this.prisma.organizationAssignment.findMany({
+      where: { organizationId, sourceType: { in: MEMBERSHIP_SOURCES } },
+      include: { userAccount: userAccountInclude },
+      orderBy: [{ isPrimary: 'desc' }, { startDate: 'asc' }],
+    });
+
+    let rows: Array<{ userAccountId: string; isActive: boolean; isPrimary: boolean; userAccount: any }>;
+
+    if (assignments.length > 0) {
+      const byAccount = new Map<string, { userAccountId: string; isActive: boolean; isPrimary: boolean; userAccount: any }>();
+      for (const a of assignments) {
+        const existing = byAccount.get(a.userAccountId);
+        if (!existing || (a.isActive && !existing.isActive) || (a.isPrimary && !existing.isPrimary)) {
+          byAccount.set(a.userAccountId, {
+            userAccountId: a.userAccountId,
+            isActive: a.isActive,
+            isPrimary: a.isPrimary,
+            userAccount: a.userAccount,
+          });
+        }
+      }
+      rows = [...byAccount.values()];
+    } else {
+      const userOrgs = await this.prisma.userOrganization.findMany({
+        where: { organizationId },
+        include: { userAccount: userAccountInclude },
+      });
+      rows = userOrgs.map((uo) => ({
+        userAccountId: uo.userAccountId,
+        isActive: uo.isActive,
+        isPrimary: uo.isPrimary,
+        userAccount: uo.userAccount,
+      }));
+    }
+
+    // Stable ordering so paging is deterministic (the legacy query had none).
+    rows.sort((a, b) => a.userAccountId.localeCompare(b.userAccountId));
+    const total = rows.length;
+    const skip = opts.skip ?? 0;
+    const take = opts.take ?? rows.length;
+    return { members: rows.slice(skip, skip + take), total };
+  }
+
+  /**
+   * Mirrors a membership write into OrganizationAssignment so the new model
+   * stays in step with the legacy row the caller also writes. Never removes or
+   * rewrites legacy data.
+   */
+  async upsertMembership(params: {
+    userAccountId: string;
+    organizationId: string;
+    isPrimary?: boolean;
+    roleId?: string | null;
+    departmentId?: string | null;
+    createdById?: string;
+  }) {
+    const existing = await this.prisma.organizationAssignment.findFirst({
+      where: {
+        userAccountId: params.userAccountId,
+        organizationId: params.organizationId,
+        sourceType: { in: MEMBERSHIP_SOURCES },
+      },
+      orderBy: [{ isPrimary: 'desc' }, { startDate: 'asc' }],
+    });
+
+    if (existing) {
+      return this.prisma.organizationAssignment.update({
+        where: { id: existing.id },
+        data: {
+          isActive: true,
+          ...(params.roleId !== undefined && params.roleId !== null ? { roleId: params.roleId } : {}),
+          ...(params.departmentId !== undefined ? { departmentId: params.departmentId } : {}),
+          updatedById: params.createdById ?? null,
+        },
+      });
+    }
+
+    if (params.isPrimary) {
+      await this.prisma.organizationAssignment.updateMany({
+        where: { userAccountId: params.userAccountId, isPrimary: true, isActive: true },
+        data: { isPrimary: false },
+      });
+    }
+
+    return this.prisma.organizationAssignment.create({
+      data: {
+        userAccountId: params.userAccountId,
+        organizationId: params.organizationId,
+        departmentId: params.departmentId ?? null,
+        roleId: params.roleId ?? null,
+        assignmentType: 'permanent',
+        isPrimary: params.isPrimary ?? false,
+        isActive: true,
+        sourceType: 'user_organization',
+        createdById: params.createdById ?? null,
+      },
+    });
+  }
+
+  /**
+   * Activates or deactivates a user's membership assignments in an organization,
+   * mirroring the legacy UserOrganization.isActive flag.
+   */
+  async setMembershipActive(userAccountId: string, organizationId: string, isActive: boolean) {
+    return this.prisma.organizationAssignment.updateMany({
+      where: { userAccountId, organizationId, sourceType: { in: MEMBERSHIP_SOURCES } },
+      data: { isActive, ...(isActive ? {} : { isPrimary: false }) },
+    });
+  }
+
+  /**
    * Returns all users with an active assignment in an organization,
    * optionally filtered by role code.
    */

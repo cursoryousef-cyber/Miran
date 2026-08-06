@@ -4,6 +4,7 @@ import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrganizationAssignmentService } from '../organization-assignments/organization-assignment.service';
 import * as bcrypt from 'bcrypt';
 
 @ApiTags('Org Members (إدارة أعضاء الجهة)')
@@ -11,7 +12,10 @@ import * as bcrypt from 'bcrypt';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth('JWT-auth')
 export class OrgMembersController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private orgAssignments: OrganizationAssignmentService,
+  ) {}
 
   // ─── قائمة أعضاء الجهة ───────────────────────────────────────────────────
   @Get()
@@ -23,47 +27,28 @@ export class OrgMembersController {
     @Query('status') status?: string,
     @Query('page') page?: string,
   ) {
-    const isActiveFilter = status === 'inactive' ? false : status === 'all' ? undefined : undefined;
-    const userOrgs = await this.prisma.userOrganization.findMany({
-      where: {
-        organizationId: user.organizationId,
-        ...(isActiveFilter !== undefined ? { isActive: isActiveFilter } : {}),
-      },
-      include: {
-        userAccount: {
-          include: {
-            person: true,
-            userRoles: {
-              where: { organizationId: user.organizationId },
-              include: { role: true },
-            },
-          },
-        },
-      },
-      skip: page ? (parseInt(page) - 1) * 20 : 0,
-      take: 50,
-    });
+    // Membership resolved from OrganizationAssignment (UserOrganization fallback).
+    const { members: rows, total } = await this.orgAssignments.findMembershipsInOrg(
+      user.organizationId,
+      { skip: page ? (parseInt(page) - 1) * 20 : 0, take: 50 },
+    );
 
-    let members = userOrgs.map((uo) => ({
-      id: uo.userAccountId,
-      email: uo.userAccount.email,
-      username: uo.userAccount.username,
-      isActive: uo.isActive && uo.userAccount.isActive,
-      nameAr: uo.userAccount.person?.nameAr,
-      nameEn: uo.userAccount.person?.nameEn,
-      nationalId: uo.userAccount.person?.nationalId,
-      phone: uo.userAccount.person?.phone,
-      roles: uo.userAccount.userRoles.map((ur) => ({ code: ur.role.code, nameAr: ur.role.nameAr, id: ur.role.id })),
-      isPrimary: uo.isPrimary,
+    let members = rows.map((m) => ({
+      id: m.userAccountId,
+      email: m.userAccount.email,
+      username: m.userAccount.username,
+      isActive: m.isActive && m.userAccount.isActive,
+      nameAr: m.userAccount.person?.nameAr,
+      nameEn: m.userAccount.person?.nameEn,
+      nationalId: m.userAccount.person?.nationalId,
+      phone: m.userAccount.person?.phone,
+      roles: m.userAccount.userRoles.map((ur) => ({ code: ur.role.code, nameAr: ur.role.nameAr, id: ur.role.id })),
+      isPrimary: m.isPrimary,
     }));
 
     if (roleCode) {
       members = members.filter((m) => m.roles.some((r) => r.code === roleCode));
     }
-
-    const total = await this.prisma.userOrganization.count({
-      where: { organizationId: user.organizationId },
-    });
 
     return { data: members, meta: { total, page: parseInt(page || '1'), limit: 50 } };
   }
@@ -103,11 +88,17 @@ export class OrgMembersController {
       });
     }
 
-    // ربط بالجهة
+    // ربط بالجهة — يُكتب في النموذجين للحفاظ على التوافق
     await this.prisma.userOrganization.upsert({
       where: { userAccountId_organizationId: { userAccountId: account.id, organizationId: user.organizationId } },
       create: { userAccountId: account.id, organizationId: user.organizationId, isPrimary: true },
       update: { isActive: true },
+    });
+    await this.orgAssignments.upsertMembership({
+      userAccountId: account.id,
+      organizationId: user.organizationId,
+      isPrimary: true,
+      createdById: user.accountId,
     });
 
     // تعيين الدور
@@ -210,6 +201,7 @@ export class OrgMembersController {
       where: { userAccountId_organizationId: { userAccountId: accountId, organizationId: user.organizationId } },
       data: { isActive: false },
     });
+    await this.orgAssignments.setMembershipActive(accountId, user.organizationId, false);
     return { success: true, message: 'تم تعطيل الحساب من الجهة' };
   }
 
@@ -222,6 +214,7 @@ export class OrgMembersController {
       where: { userAccountId_organizationId: { userAccountId: accountId, organizationId: user.organizationId } },
       data: { isActive: true },
     });
+    await this.orgAssignments.setMembershipActive(accountId, user.organizationId, true);
     return { success: true, message: 'تم إعادة تفعيل الحساب' };
   }
 
