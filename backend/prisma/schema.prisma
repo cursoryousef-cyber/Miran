@@ -315,6 +315,7 @@ model UserAccount {
   tasksCreated          Task[]           @relation("TaskCreator")
   incidentsReported     Incident[]       @relation("IncidentReporter")
   incidentsResolved     Incident[]       @relation("IncidentResolver")
+  graduationApprovals   GraduationApproval[] @relation("GraduationApprover")
   improvementSupervised ImprovementPlan[] @relation("PlanSupervisor")
   improvementCreated    ImprovementPlan[] @relation("PlanCreator")
   objectivesVerified    ObjectiveProgress[] @relation("ObjectiveVerifier")
@@ -798,6 +799,8 @@ model TraineeProfile {
   photoApprovedById     String?   @map("photo_approved_by") @db.Uuid
   photoApprovedAt       DateTime? @map("photo_approved_at") @db.Timestamptz
   graduatedAt           DateTime? @map("graduated_at") @db.Timestamptz
+  isLocked              Boolean   @default(false) @map("is_locked")
+  archivedAt            DateTime? @map("archived_at") @db.Timestamptz
   createdById           String?   @map("created_by") @db.Uuid
   updatedById           String?   @map("updated_by") @db.Uuid
   deletedById           String?   @map("deleted_by") @db.Uuid
@@ -824,10 +827,26 @@ model TraineeProfile {
   competencies        CompetencyProgress[]
   documents           Document[]
   trainingRequestRow  TrainingRequestTrainee?
+  graduationApprovals GraduationApproval[]
 
   @@index([organizationId])
   @@index([applicationStatus])
   @@map("trainee_profiles")
+}
+
+model GraduationApproval {
+  id               String    @id @default(uuid()) @db.Uuid
+  traineeProfileId String    @map("trainee_profile_id") @db.Uuid
+  approverRole     String    @map("approver_role") @db.VarChar(50) // trainer, training_supervisor, hospital_administrator, university_administrator
+  approvedById     String    @map("approved_by") @db.Uuid
+  approvedAt       DateTime  @default(now()) @map("approved_at") @db.Timestamptz
+  notes            String?   @db.Text
+
+  traineeProfile TraineeProfile @relation(fields: [traineeProfileId], references: [id])
+  approvedBy     UserAccount    @relation("GraduationApprover", fields: [approvedById], references: [id])
+
+  @@unique([traineeProfileId, approverRole])
+  @@map("graduation_approvals")
 }
 
 model TrainerProfile {

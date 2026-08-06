@@ -11,6 +11,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TrainingRequestsService } from './training-requests.service';
 import { TrainingRequestTraineesService } from './training-request-trainees.service';
+import { GraduationService } from './graduation.service';
 import { CreateTrainingRequestDto, UpdateTrainingRequestDto } from './dto/training-request.dto';
 import {
   ChangeAssignmentDto,
@@ -42,6 +43,7 @@ export class TrainingRequestsController {
   constructor(
     private trainingRequestsService: TrainingRequestsService,
     private traineesService: TrainingRequestTraineesService,
+    private graduationService: GraduationService,
   ) {}
 
   @Get()
@@ -430,5 +432,23 @@ export class TrainingRequestsController {
     @CurrentUser() user?: IAuthenticatedUser,
   ) {
     return this.trainingRequestsService.advanceAcceptanceChain(id, 'return_to_cluster', notes, user);
+  }
+
+  // ─── Phase 8: Graduation ─────────────────────────────────────────────────
+  @Get('trainees/:profileId/graduation/eligibility')
+  @ApiOperation({ summary: 'التحقق من استيفاء متطلبات التخرج' })
+  async checkGraduationEligibility(@Param('profileId') profileId: string) {
+    return this.graduationService.checkEligibility(profileId);
+  }
+
+  @Post('trainees/:profileId/graduation/approve')
+  @RequireRoles('trainer', 'training_supervisor', ...HOSPITAL_ROLES, 'university_administrator')
+  @ApiOperation({ summary: 'تقديم موافقة الجهة على تخرج المتدرب' })
+  async submitGraduationApproval(
+    @Param('profileId') profileId: string,
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body('notes') notes?: string,
+  ) {
+    return this.graduationService.submitApproval(profileId, user, notes);
   }
 }
