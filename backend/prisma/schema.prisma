@@ -68,6 +68,8 @@ model Organization {
   contactPhone       String?   @map("contact_phone") @db.VarChar(20)
   website            String?   @db.VarChar(300)
   address            String?   @db.Text
+  geoLat             Decimal?  @map("geo_lat") @db.Decimal(10, 7)
+  geoLng             Decimal?  @map("geo_lng") @db.Decimal(10, 7)
   settings           Json      @default("{}") @db.JsonB
   trainingYear       String?   @map("training_year") @db.VarChar(20)
   capacity           Int       @default(0)

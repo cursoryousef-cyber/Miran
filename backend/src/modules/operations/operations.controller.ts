@@ -1,10 +1,19 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
+
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const φ1 = (lat1 * Math.PI) / 180, φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 @ApiTags('Production Operations')
 @ApiBearerAuth('JWT-auth')
@@ -93,13 +102,40 @@ export class OperationsController {
   @Post('attendance/gps')
   @RequireRoles('trainee')
   async gpsAttendance(@CurrentUser() user: IAuthenticatedUser, @Body() dto: { lat: number; lng: number; shiftId?: string }) {
+    // Geofencing: validate trainee is within allowed radius of their assigned hospital
+    const profile = await this.prisma.traineeProfile.findFirst({
+      where: { personId: user.personId },
+      include: { organization: true },
+    });
+    if (profile?.organization?.geoLat && profile?.organization?.geoLng) {
+      const orgLat = Number(profile.organization.geoLat);
+      const orgLng = Number(profile.organization.geoLng);
+      const radiusSetting = await this.prisma.setting.findFirst({
+        where: { organizationId: profile.organizationId, key: 'gps_attendance_radius_meters' },
+      });
+      const allowedRadius = radiusSetting ? Number((radiusSetting.value as any)) : 500;
+      const distance = haversineMeters(dto.lat, dto.lng, orgLat, orgLng);
+      if (distance > allowedRadius) {
+        throw new BadRequestException(`أنت خارج نطاق تسجيل الحضور. المسافة: ${Math.round(distance)} متر، الحد الأقصى: ${allowedRadius} متر`);
+      }
+    }
     return this.createAttendance(user, { method: 'gps', geoLat: dto.lat, geoLng: dto.lng, shiftId: dto.shiftId });
   }
 
   @Post('attendance/qr')
   @RequireRoles('trainee')
   async qrAttendance(@CurrentUser() user: IAuthenticatedUser, @Body() dto: { qrCode: string; shiftId?: string }) {
-    return this.createAttendance(user, { method: 'qr', shiftId: dto.shiftId, excuseReason: dto.qrCode });
+    // Validate scanned QR matches trainee's issued card QR payload
+    const profile = await this.prisma.traineeProfile.findFirst({ where: { personId: user.personId } });
+    if (profile?.cardUuid) {
+      // Accept either the raw cardUuid or a JSON payload containing it
+      const isValid = dto.qrCode === profile.cardUuid ||
+        (() => { try { return JSON.parse(dto.qrCode)?.uuid === profile.cardUuid; } catch { return false; } })();
+      if (!isValid) {
+        throw new BadRequestException('رمز QR غير صحيح أو لا يطابق بطاقتك');
+      }
+    }
+    return this.createAttendance(user, { method: 'qr', shiftId: dto.shiftId });
   }
 
   @Patch('attendance/:id/check-out')

@@ -32,6 +32,7 @@ import { LogbookModule } from './modules/logbook/logbook.module';
 import { TrainingRequestsModule } from './modules/training-requests/training-requests.module';
 import { TraineeDocumentsModule } from './modules/trainee-documents/trainee-documents.module';
 import { OperationsModule } from './modules/operations/operations.module';
+import { IncidentsModule } from './modules/incidents/incidents.module';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { OperationsModule } from './modules/operations/operations.module';
     TrainingRequestsModule,
     TraineeDocumentsModule,
     OperationsModule,
+    IncidentsModule,
   ],
   providers: [
     {
