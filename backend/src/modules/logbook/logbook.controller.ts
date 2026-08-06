@@ -163,13 +163,21 @@ export class LogbookController {
   }
 
   @Get('cases')
-  @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner', 'training_supervisor', 'hospital_administrator', 'department_head', 'trainee')
   async getCases(@CurrentUser() user: IAuthenticatedUser) {
-    const trainer = await this.prisma.trainerProfile.findFirst({
+    const isTrainee = user.roles?.includes('trainee');
+    const trainer = isTrainee ? null : await this.prisma.trainerProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
     });
+    const traineeProfile = isTrainee ? await this.prisma.traineeProfile.findFirst({
+      where: { person: { userAccounts: { some: { id: user.accountId } } } },
+    }) : null;
     const logs = await this.prisma.clinicalCaseLog.findMany({
-      where: { organizationId: user.organizationId, ...(trainer ? { trainerProfileId: trainer.id } : {}) },
+      where: {
+        organizationId: user.organizationId,
+        ...(trainer ? { trainerProfileId: trainer.id } : {}),
+        ...(traineeProfile ? { traineeProfileId: traineeProfile.id } : {}),
+      },
       include: {
         traineeProfile: { include: { person: true } },
         procedure: true,
