@@ -5,6 +5,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 import { NotificationService } from '../notifications/notification.service';
 import { CapacityService } from '../organizations/capacity.service';
 import { AllocationEngineService } from './allocation-engine.service';
+import { ActivationService } from './activation.service';
 import {
   assertValidTransition,
   TRAINING_REQUEST_TRANSITIONS,
@@ -18,6 +19,7 @@ export class TrainingRequestsService {
     private notificationService: NotificationService,
     private capacityService: CapacityService,
     private allocationEngine: AllocationEngineService,
+    private activationService: ActivationService,
   ) {}
 
   async findAll(orgId?: string, page = 1, limit = 20) {
@@ -773,7 +775,8 @@ export class TrainingRequestsService {
           channels: ['in_app', 'email', 'push'],
         });
       } else if (action === 'approve' && nextStatus === 'active') {
-        // Notify university + trainee
+        // Trigger full internship activation (rotations, competencies, profile status)
+        await this.activationService.activateRequest(id, user?.accountId);
         await this.notificationService.notifyOrgUsers(req.sourceOrgId, 'university_administrator', {
           titleAr: `تم تفعيل التدريب — ${req.requestNumber}`,
           bodyAr: `اكتملت جميع خطوات القبول وتم تفعيل برنامج التدريب بنجاح`,
