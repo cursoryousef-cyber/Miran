@@ -54,14 +54,13 @@ export const TRAINING_REQUEST_TRANSITIONS: TransitionTable = {
   // alias of auto_allocated so historical requests are not stranded.
   allocated: ['manually_reallocated', 'approved', 'returned_to_university', 'rejected'],
   manually_reallocated: ['approved', 'auto_allocated'],
-  approved: ['hospital_administrator_accepted', 'hospital_accepted'],
-  // legacy alias kept during migration from the old 4-step chain
-  hospital_accepted: ['supervisor_accepted', 'hospital_returned_to_cluster'],
-  hospital_administrator_accepted: ['training_supervisor_accepted', 'hospital_returned_to_cluster'],
+  approved: ['hospital_administrator_accepted', 'hospital_accepted', 'hospital_returned_to_cluster', 'rejected'],
+  hospital_accepted: ['supervisor_accepted', 'hospital_returned_to_cluster', 'rejected'],
+  hospital_administrator_accepted: ['training_supervisor_accepted', 'hospital_returned_to_cluster', 'rejected'],
   hospital_returned_to_cluster: ['auto_allocated', 'manually_reallocated'],
-  supervisor_accepted: ['trainer_accepted'],
-  training_supervisor_accepted: ['trainer_accepted'],
-  trainer_accepted: ['active'],
+  supervisor_accepted: ['trainer_accepted', 'hospital_returned_to_cluster', 'rejected'],
+  training_supervisor_accepted: ['trainer_accepted', 'hospital_returned_to_cluster', 'rejected'],
+  trainer_accepted: ['active', 'hospital_returned_to_cluster', 'rejected'],
   active: ['graduated'],
   graduated: [],
 };

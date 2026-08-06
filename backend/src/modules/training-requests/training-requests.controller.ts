@@ -60,6 +60,13 @@ export class TrainingRequestsController {
     return this.trainingRequestsService.findAll(overrideOrgId || orgId, +page, +limit);
   }
 
+  @Get('hospital-review')
+  @RequireRoles(...HOSPITAL_ROLES, ...CLUSTER_ROLES)
+  @ApiOperation({ summary: 'قائمة المتدربين الموزَّعين على المستشفى لمراجعتها' })
+  async findForHospitalReview(@OrgContext() orgId: string) {
+    return this.traineesService.findForHospitalReview(orgId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'تفاصيل طلب تدريب محدد' })
   async findOne(@Param('id') id: string) {
@@ -108,14 +115,18 @@ export class TrainingRequestsController {
   }
 
   @Post(':id/reject')
-  @RequireRoles(...CLUSTER_ROLES)
-  @ApiOperation({ summary: 'رفض طلب التدريب' })
+  @RequireRoles(...CLUSTER_ROLES, ...HOSPITAL_ROLES, 'trainer', 'training_supervisor')
+  @ApiOperation({ summary: 'رفض طلب التدريب — من التجمع (نهائي) أو من سلسلة القبول' })
   async reject(
     @Param('id') id: string,
-    @Body() body: { reason?: string },
+    @Body() body: { reason?: string; notes?: string },
     @CurrentUser() user: IAuthenticatedUser,
   ) {
-    return this.trainingRequestsService.reject(id, body.reason, user);
+    const isCluster = user.roles?.some((r) => (CLUSTER_ROLES as readonly string[]).includes(r));
+    if (isCluster) {
+      return this.trainingRequestsService.reject(id, body.reason, user);
+    }
+    return this.trainingRequestsService.advanceAcceptanceChain(id, 'reject', body.notes ?? body.reason, user);
   }
 
   @Post(':id/return-to-university')
@@ -313,13 +324,6 @@ export class TrainingRequestsController {
 
   // ─── Phase 4: Stage 6 — Hospital Review Actions ───────────────────────────
 
-  @Get('hospital-review')
-  @RequireRoles(...HOSPITAL_ROLES, ...CLUSTER_ROLES)
-  @ApiOperation({ summary: 'قائمة المتدربين الموزَّعين على المستشفى لمراجعتها' })
-  async findForHospitalReview(@OrgContext() orgId: string) {
-    return this.traineesService.findForHospitalReview(orgId);
-  }
-
   @Post('trainees/:rowId/hospital-review/start')
   @RequireRoles(...HOSPITAL_ROLES)
   @ApiOperation({ summary: 'بدء مراجعة المستشفى للمتدرب (allocated → hospital_review)' })
@@ -410,17 +414,6 @@ export class TrainingRequestsController {
     @CurrentUser() user?: IAuthenticatedUser,
   ) {
     return this.trainingRequestsService.advanceAcceptanceChain(id, 'approve', notes, user);
-  }
-
-  @Post(':id/reject')
-  @RequireRoles(...HOSPITAL_ROLES, 'trainer', 'training_supervisor')
-  @ApiOperation({ summary: 'رفض الطلب في مرحلة القبول الحالية' })
-  async rejectRequest(
-    @Param('id') id: string,
-    @Body('notes') notes?: string,
-    @CurrentUser() user?: IAuthenticatedUser,
-  ) {
-    return this.trainingRequestsService.advanceAcceptanceChain(id, 'reject', notes, user);
   }
 
   @Post(':id/return-to-cluster')
