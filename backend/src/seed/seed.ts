@@ -705,6 +705,55 @@ async function main() {
     });
   }
 
+  // --------------------------------------------------------------------------
+  // LOOKUP TABLES — controlled specialty list (used by validation + capacity)
+  // --------------------------------------------------------------------------
+  console.log('📚 Seeding Specialty Lookup...');
+
+  const specialties = [
+    ['internal_medicine', 'الباطنية', 'Internal Medicine'],
+    ['emergency_medicine', 'طب الطوارئ', 'Emergency Medicine'],
+    ['pediatrics', 'الأطفال', 'Pediatrics'],
+    ['surgery', 'الجراحة', 'Surgery'],
+    ['orthopedics', 'جراحة العظام', 'Orthopedics'],
+    ['icu', 'العناية المركزة', 'Intensive Care Unit'],
+    ['obgyn', 'النساء والولادة', 'Obstetrics & Gynecology'],
+    ['dentistry', 'طب الأسنان', 'Dentistry'],
+    ['pharmacy', 'الصيدلة', 'Pharmacy'],
+    ['nursing', 'التمريض', 'Nursing'],
+    ['laboratory', 'المختبرات', 'Laboratory Medicine'],
+    ['radiology', 'الأشعة', 'Radiology'],
+    ['physiotherapy', 'العلاج الطبيعي', 'Physiotherapy'],
+  ];
+  for (const [index, [code, nameAr, nameEn]] of specialties.entries()) {
+    await prisma.lookupTable.upsert({
+      where: { category_code: { category: 'specialty', code } },
+      create: { category: 'specialty', code, nameAr, nameEn, sortOrder: index + 1, isActive: true },
+      update: { nameAr, nameEn, sortOrder: index + 1, isActive: true },
+    });
+  }
+
+  // Document types required for internship submission (Stages 1/2/6)
+  const documentTypes = [
+    ['national_id', 'الهوية الوطنية', 'National ID'],
+    ['internship_letter', 'خطاب الامتياز', 'Internship Letter'],
+    ['academic_transcript', 'السجل الأكاديمي', 'Academic Transcript'],
+    ['medical_examination', 'الفحص الطبي', 'Medical Examination'],
+    ['vaccination_record', 'سجل التطعيمات', 'Vaccination Record'],
+    ['cpr_certificate', 'شهادة الإنعاش القلبي CPR', 'CPR Certificate'],
+    ['bls', 'شهادة BLS', 'Basic Life Support'],
+    ['acls', 'شهادة ACLS', 'Advanced Cardiac Life Support'],
+    ['license', 'الرخصة المهنية', 'Professional License'],
+    ['additional', 'مرفقات إضافية', 'Additional Documents'],
+  ];
+  for (const [index, [code, nameAr, nameEn]] of documentTypes.entries()) {
+    await prisma.lookupTable.upsert({
+      where: { category_code: { category: 'document_type', code } },
+      create: { category: 'document_type', code, nameAr, nameEn, sortOrder: index + 1, isActive: true },
+      update: { nameAr, nameEn, sortOrder: index + 1, isActive: true },
+    });
+  }
+
   await prisma.auditLog.create({
     data: {
       organizationId: northTowerHosp.id,

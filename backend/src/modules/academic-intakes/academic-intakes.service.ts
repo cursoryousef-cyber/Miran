@@ -7,19 +7,21 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 export class AcademicIntakesService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(orgId: string, page = 1, limit = 20, academicYear?: string) {
+  async findAll(orgId?: string, page = 1, limit = 50, academicYear?: string) {
     const skip = (page - 1) * limit;
-    const where: any = {
-      OR: [
+    const where: any = {};
+
+    if (orgId) {
+      where.OR = [
         { organizationId: orgId },
         { traineeProfiles: { some: { OR: [{ organizationId: orgId }, { rotations: { some: { organizationId: orgId } } }] } } },
-        { trainingRequests: { some: { targetOrgId: orgId } } },
-      ],
-    };
+        { trainingRequests: { some: { OR: [{ sourceOrgId: orgId }, { targetOrgId: orgId }] } } },
+      ];
+    }
 
     if (academicYear) where.academicYear = academicYear;
 
-    const [total, data] = await Promise.all([
+    const [total, rawData] = await Promise.all([
       this.prisma.academicIntake.count({ where }),
       this.prisma.academicIntake.findMany({
         where,
@@ -27,13 +29,39 @@ export class AcademicIntakesService {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          organization: { select: { id: true, nameAr: true, nameEn: true } },
+          organization: { select: { id: true, nameAr: true, nameEn: true, code: true } },
           program: true,
           coordinator: { include: { person: true } },
+          trainingRequests: {
+            include: {
+              sourceOrg: { select: { id: true, nameAr: true, nameEn: true } },
+              targetOrg: { select: { id: true, nameAr: true, nameEn: true } },
+            },
+          },
           _count: { select: { traineeProfiles: true } },
         },
       }),
     ]);
+
+    const data = await Promise.all(
+      rawData.map(async (intake) => {
+        const totalTrainees = intake._count?.traineeProfiles || intake.capacity || 0;
+        const allocatedCount = await this.prisma.traineeProfile.count({
+          where: {
+            academicIntakeId: intake.id,
+            rotations: { some: { status: 'active' } },
+          },
+        });
+        const remainingCount = Math.max(0, totalTrainees - allocatedCount);
+
+        return {
+          ...intake,
+          requestedCount: totalTrainees,
+          allocatedCount,
+          remainingCount,
+        };
+      }),
+    );
 
     return {
       data,

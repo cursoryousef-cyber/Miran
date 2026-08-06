@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OrganizationHierarchyService } from './organization-hierarchy.service';
+import { CapacityService } from './capacity.service';
 import { CreateOrganizationDto, UpdateOrganizationDto } from './dto/organization.dto';
 import { IAuthenticatedUser } from '../../common/interfaces';
 
@@ -9,6 +10,7 @@ export class OrganizationsService {
   constructor(
     private prisma: PrismaService,
     private hierarchyService: OrganizationHierarchyService,
+    private capacityService: CapacityService,
   ) {}
 
   async findAll(page = 1, limit = 20, search?: string, typeId?: string, parentId?: string) {
@@ -170,5 +172,56 @@ export class OrganizationsService {
     return this.prisma.organizationType.findMany({
       orderBy: { sortOrder: 'asc' },
     });
+  }
+
+  async getHospitalCardsMetrics(clusterId?: string) {
+    const where: any = { deletedAt: null };
+    if (clusterId) {
+      where.OR = [{ id: clusterId }, { parentId: clusterId }];
+    }
+
+    const hospitals = await this.prisma.organization.findMany({
+      where,
+      include: {
+        organizationType: true,
+        departments: { where: { isActive: true } },
+        trainerProfiles: { where: { isActive: true }, include: { person: true } },
+        _count: {
+          select: {
+            traineeProfiles: true,
+            userOrganizations: true,
+          },
+        },
+      },
+      orderBy: { nameAr: 'asc' },
+    });
+
+    return Promise.all(
+      hospitals.map(async (hosp) => {
+        const { capacity, occupied, available, occupancyPercentage } =
+          await this.capacityService.getHospitalOccupancy(hosp.id);
+
+        const trainerCount = hosp.trainerProfiles.length;
+        const supervisorCount = hosp._count.userOrganizations;
+
+        return {
+          id: hosp.id,
+          code: hosp.code,
+          nameAr: hosp.nameAr,
+          nameEn: hosp.nameEn,
+          cityAr: hosp.cityAr || 'طريف',
+          cityEn: hosp.cityEn || 'Turaif',
+          status: hosp.status,
+          capacity,
+          occupied,
+          available,
+          occupancyPercentage,
+          departmentsCount: hosp.departments.length,
+          departments: hosp.departments.map((d) => ({ id: d.id, nameAr: d.nameAr, capacity: d.capacity })),
+          trainerCount,
+          supervisorCount,
+        };
+      }),
+    );
   }
 }

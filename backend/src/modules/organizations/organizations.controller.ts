@@ -51,6 +51,12 @@ export class OrganizationsController {
     return this.organizationsService.getTypes();
   }
 
+  @Get('hospitals-cards')
+  @ApiOperation({ summary: 'بطاقات بطاقات المستشفيات مع إحصائيات الطاقة الاستيعابية والنسب المباشرة' })
+  async getHospitalCards(@Query('clusterId') clusterId?: string) {
+    return this.organizationsService.getHospitalCardsMetrics(clusterId);
+  }
+
   @Get('tree')
   @ApiOperation({ summary: 'الهيكل التنظيمي الكامل كشجرة ديناميكية' })
   @RequirePermissions('view_organizations')

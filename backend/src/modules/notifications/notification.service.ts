@@ -1,5 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EmailChannelService } from './channels/email-channel.service';
+import { PushChannelService } from './channels/push-channel.service';
+import { NotificationChannel } from './channels/notification-channel.interface';
+
+export type NotificationChannelName = 'in_app' | 'email' | 'push';
 
 export interface CreateNotificationPayload {
   organizationId: string;
@@ -12,14 +17,21 @@ export interface CreateNotificationPayload {
   referenceType?: string;
   referenceId?: string;
   sentVia?: string;
+  channels?: NotificationChannelName[];
 }
 
 @Injectable()
 export class NotificationService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(NotificationService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private emailChannel: EmailChannelService,
+    private pushChannel: PushChannelService,
+  ) {}
 
   async create(payload: CreateNotificationPayload) {
-    return this.prisma.notification.create({
+    const notification = await this.prisma.notification.create({
       data: {
         organizationId: payload.organizationId,
         userId: payload.userId,
@@ -30,9 +42,47 @@ export class NotificationService {
         type: payload.type,
         referenceType: payload.referenceType,
         referenceId: payload.referenceId,
-        sentVia: payload.sentVia || 'in_app',
+        sentVia: payload.channels?.join(',') || payload.sentVia || 'in_app',
       },
     });
+
+    await this.fanOut(payload);
+    return notification;
+  }
+
+  /**
+   * Delivers to the external channels requested by the caller. Never throws —
+   * a failed email/push must not roll back the in-app notification or the
+   * workflow transition that triggered it.
+   */
+  private async fanOut(payload: CreateNotificationPayload) {
+    const requested = payload.channels || [];
+    const externals: NotificationChannel[] = [];
+    if (requested.includes('email')) externals.push(this.emailChannel);
+    if (requested.includes('push')) externals.push(this.pushChannel);
+    if (externals.length === 0) return;
+
+    const account = await this.prisma.userAccount.findUnique({
+      where: { id: payload.userId },
+      select: { email: true },
+    });
+
+    for (const channel of externals) {
+      if (!channel.isConfigured()) continue;
+      try {
+        await channel.send({
+          userId: payload.userId,
+          email: account?.email,
+          title: payload.titleAr,
+          body: payload.bodyAr,
+          data: payload.referenceId
+            ? { referenceType: payload.referenceType || '', referenceId: payload.referenceId }
+            : undefined,
+        });
+      } catch (e) {
+        this.logger.warn(`تعذر الإرسال عبر قناة ${channel.name}: ${(e as Error).message}`);
+      }
+    }
   }
 
   async createBulk(payloads: CreateNotificationPayload[]) {

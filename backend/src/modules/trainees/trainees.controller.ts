@@ -5,13 +5,17 @@ import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationService } from '../notifications/notification.service';
 
 @ApiTags('Trainees (المتدربون)')
 @Controller('trainees')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class TraineesController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationService: NotificationService,
+  ) {}
 
   // ─── بيانات المتدرب الخاصة ────────────────────────────────────────────────
   @Get('me')
@@ -279,19 +283,227 @@ export class TraineesController {
 
   // ─── قائمة المتدربين الواردين للتجمع الصحي ────────────────────────────────
   @Get('incoming')
-  @RequireRoles('cluster_administrator', 'training_director', 'platform_owner', 'hospital_administrator', 'hospital_supervisor')
+  @RequireRoles('cluster_administrator', 'training_director', 'platform_owner', 'hospital_administrator', 'training_supervisor')
   @ApiOperation({ summary: 'قائمة متدربي الامتياز الواردين للتجمع الصحي' })
   async getIncomingTrainees(@CurrentUser() user: IAuthenticatedUser) {
     const trainees = await this.prisma.traineeProfile.findMany({
       include: {
         person: true,
         organization: true,
+        sponsorOrganization: true,
         program: true,
         academicIntake: true,
+        rotations: {
+          orderBy: { startDate: 'desc' },
+          include: {
+            department: true,
+            trainerProfile: { include: { person: true } },
+          },
+        },
+        competencies: { include: { procedure: true } },
+        caseLogs: { take: 10, orderBy: { createdAt: 'desc' } },
       },
       orderBy: { createdAt: 'desc' },
     });
     return { data: trainees };
+  }
+
+  // ─── تعديل توجيه وتوزيع المتدرب (Reallocate Trainee) ─────────────────────
+  @Post('reallocate')
+  @RequireRoles('cluster_administrator', 'training_director', 'platform_owner', 'hospital_administrator')
+  @ApiOperation({ summary: 'إعادة توزيع وتوجيه طبيب الامتياز لمستشفى/قسم/مدرب جديد لنقل الأعمال المستمرة' })
+  async reallocateTrainee(
+    @Body() body: {
+      traineeProfileId: string;
+      targetHospitalId: string;
+      departmentId?: string;
+      trainerProfileId?: string;
+      startDate?: string;
+      endDate?: string;
+      reason?: string;
+      notes?: string;
+    },
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    const { traineeProfileId, targetHospitalId, departmentId, trainerProfileId, startDate, endDate, reason, notes } = body;
+
+    const trainee = await this.prisma.traineeProfile.findUnique({
+      where: { id: traineeProfileId },
+      include: {
+        person: { include: { userAccounts: true } },
+        organization: true,
+        rotations: { where: { status: 'active' }, include: { department: true, trainerProfile: { include: { person: true } } } },
+      },
+    });
+
+    if (!trainee) throw new Error('ملف المتدرب غير موجود');
+
+    const targetHospital = await this.prisma.organization.findUnique({
+      where: { id: targetHospitalId },
+      include: { departments: true },
+    });
+
+    if (!targetHospital) throw new Error('المستشفى الجديد غير موجود');
+
+    const oldHospital = trainee.organization;
+    const oldRotation = trainee.rotations[0];
+    const oldTrainerName = oldRotation?.trainerProfile?.person?.nameAr || 'غير محدد';
+    const selectedDeptId = departmentId || targetHospital.departments[0]?.id || oldRotation?.departmentId;
+
+    let targetTrainerId = trainerProfileId;
+    if (!targetTrainerId) {
+      const defaultTrainer = await this.prisma.trainerProfile.findFirst({
+        where: { organizationId: targetHospitalId, isActive: true },
+      });
+      targetTrainerId = defaultTrainer?.id || oldRotation?.trainerProfileId;
+    }
+
+    // Execute transactional transfer
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Update Trainee Profile Organization
+      const updatedProfile = await tx.traineeProfile.update({
+        where: { id: traineeProfileId },
+        data: { organizationId: targetHospitalId },
+        include: { person: true, organization: true },
+      });
+
+      // 2. Mark previous rotation as transferred
+      if (oldRotation) {
+        await tx.rotation.update({
+          where: { id: oldRotation.id },
+          data: { status: 'transferred', completionNotes: `تم نقل المتدرب إلى ${targetHospital.nameAr}. السبب: ${reason || 'إعادة توزيع'}` },
+        });
+      }
+
+      // 3. Create new active rotation under target hospital
+      let newRotation: any = null;
+      if (selectedDeptId && targetTrainerId) {
+        newRotation = await tx.rotation.create({
+          data: {
+            organizationId: targetHospitalId,
+            traineeProfileId,
+            departmentId: selectedDeptId,
+            trainerProfileId: targetTrainerId,
+            startDate: startDate ? new Date(startDate) : new Date(),
+            endDate: endDate ? new Date(endDate) : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+            status: 'active',
+          },
+          include: { department: true, trainerProfile: { include: { person: true } } },
+        });
+      }
+
+      // 4. Transfer pending work to target hospital
+      await tx.attendance.updateMany({
+        where: { traineeProfileId },
+        data: { organizationId: targetHospitalId },
+      });
+
+      await tx.shift.updateMany({
+        where: { traineeProfileId },
+        data: { organizationId: targetHospitalId },
+      });
+
+      await tx.clinicalCaseLog.updateMany({
+        where: { traineeProfileId, status: { not: 'completed' } },
+        data: { organizationId: targetHospitalId },
+      });
+
+      const userAccountId = trainee.person.userAccounts[0]?.id;
+      if (userAccountId) {
+        await tx.evaluation.updateMany({
+          where: { evaluateeId: userAccountId },
+          data: { organizationId: targetHospitalId },
+        });
+        await tx.notification.updateMany({
+          where: { userId: userAccountId },
+          data: { organizationId: targetHospitalId },
+        });
+      }
+
+      // 5. Create Audit Trail Entry
+      await tx.auditLog.create({
+        data: {
+          organizationId: targetHospitalId,
+          actorId: user?.accountId,
+          action: 'reallocate_trainee',
+          entityType: 'TraineeProfile',
+          entityId: traineeProfileId,
+          oldValues: {
+            hospitalId: oldHospital.id,
+            hospitalName: oldHospital.nameAr,
+            departmentId: oldRotation?.departmentId,
+            departmentName: oldRotation?.department?.nameAr,
+            trainerId: oldRotation?.trainerProfileId,
+            trainerName: oldTrainerName,
+          },
+          newValues: {
+            hospitalId: targetHospital.id,
+            hospitalName: targetHospital.nameAr,
+            departmentId: selectedDeptId,
+            trainerProfileId: targetTrainerId,
+            reason: reason || 'تعديل النقل والتوزيع',
+            notes: notes || '',
+            transferDate: new Date().toISOString(),
+          },
+        },
+      });
+
+      return { updatedProfile, newRotation };
+    });
+
+    // Send notifications to stakeholders
+    try {
+      // Notify receiving hospital director
+      await this.notificationService.notifyOrgUsers(
+        targetHospitalId,
+        'hospital_administrator',
+        {
+          titleAr: 'تم استقبال طبيب امتياز محوّل جديد',
+          titleEn: 'New Transferred Trainee Received',
+          bodyAr: `تم إعادة توزيع المتدرب ${trainee.person.nameAr} من (${oldHospital.nameAr}) إلى مستشفاكم.`,
+          type: 'trainee_reallocated',
+          referenceType: 'TraineeProfile',
+          referenceId: traineeProfileId,
+        },
+      );
+
+      // Notify previous hospital director
+      await this.notificationService.notifyOrgUsers(
+        oldHospital.id,
+        'hospital_administrator',
+        {
+          titleAr: 'تحديث نقل طبيب امتياز',
+          titleEn: 'Trainee Transfer Complete',
+          bodyAr: `تم نقل المتدرب ${trainee.person.nameAr} إلى (${targetHospital.nameAr}). أصبح مستشفى الجهة المحولة هو المالك للحساب.`,
+          type: 'trainee_reallocated',
+          referenceType: 'TraineeProfile',
+          referenceId: traineeProfileId,
+        },
+      );
+
+      // Notify trainee
+      const traineeUserId = trainee.person.userAccounts[0]?.id;
+      if (traineeUserId) {
+        await this.notificationService.create({
+          organizationId: targetHospitalId,
+          userId: traineeUserId,
+          titleAr: 'تم تحديث المستشفى وقسم التدريب الموجه إليه',
+          titleEn: 'Hospital Assignment Updated',
+          bodyAr: `أهلاً بك، تم إعادة توجيهك إلى (${targetHospital.nameAr}) - القسم: ${result.newRotation?.department?.nameAr || 'العموم'}.`,
+          type: 'reallocation_notice',
+          referenceType: 'TraineeProfile',
+          referenceId: traineeProfileId,
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to dispatch reallocation notifications:', err);
+    }
+
+    return {
+      success: true,
+      message: `تم إعادة توجيه المتدرب (${trainee.person.nameAr}) بنجاح إلى ${targetHospital.nameAr} ونقل كافة المهام والأعمال المعلقة.`,
+      data: result,
+    };
   }
 
   // ─── استيراد جماعي لمتدربي الامتياز من ملف Excel ────────────────────────
