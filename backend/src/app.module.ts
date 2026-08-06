@@ -33,6 +33,7 @@ import { TrainingRequestsModule } from './modules/training-requests/training-req
 import { TraineeDocumentsModule } from './modules/trainee-documents/trainee-documents.module';
 import { OperationsModule } from './modules/operations/operations.module';
 import { IncidentsModule } from './modules/incidents/incidents.module';
+import { OrganizationAssignmentModule } from './modules/organization-assignments/organization-assignment.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { IncidentsModule } from './modules/incidents/incidents.module';
     ReportsModule,
     FeatureFlagsModule,
     LicensesModule,
+    OrganizationAssignmentModule,
     SettingsModule,
     DeclarationsModule,
 
