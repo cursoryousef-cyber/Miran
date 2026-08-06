@@ -114,6 +114,7 @@ model Organization {
   trainingRequestTraineesAsUniversity TrainingRequestTrainee[] @relation("TRTUniversity")
   trainingRequestTraineesAsCollege    TrainingRequestTrainee[] @relation("TRTCollege")
   trainingRequestTraineesAsHospital   TrainingRequestTrainee[] @relation("TRTHospital")
+  capacityAllocations                 CapacityAllocation[]
   orgSettings        Setting[]       @relation("OrgSettings")
   objectives         Objective[]
   improvementPlans   ImprovementPlan[]
@@ -324,6 +325,7 @@ model UserAccount {
   intakeCoordinated     AcademicIntake[]   @relation("IntakeCoordinator")
   reportsGenerated      GeneratedReport[]  @relation("ReportGenerator")
   logbookSignoffs       LogbookSignoff[]
+  supervisedRotations   Rotation[]         @relation("RotationSupervisor")
 
   @@index([personId])
   @@map("user_accounts")
@@ -569,6 +571,9 @@ model Department {
   contactExtension     String?   @map("contact_extension") @db.VarChar(20)
   firstDayExpectations String?   @map("first_day_expectations") @db.Text
   settings             Json      @default("{}") @db.JsonB
+  maxTrainers          Int?      @map("max_trainers")
+  maxSupervisors       Int?      @map("max_supervisors")
+  maxActiveInterns     Int?      @map("max_active_interns")
   isActive             Boolean   @default(true) @map("is_active")
   createdById          String?   @map("created_by") @db.Uuid
   updatedById          String?   @map("updated_by") @db.Uuid
@@ -856,6 +861,7 @@ model Rotation {
   traineeProfileId     String    @map("trainee_profile_id") @db.Uuid
   departmentId         String    @map("department_id") @db.Uuid
   trainerProfileId     String    @map("trainer_profile_id") @db.Uuid
+  supervisorAccountId  String?   @map("supervisor_account_id") @db.Uuid
   programId            String?   @map("program_id") @db.Uuid
   startDate            DateTime  @map("start_date") @db.Date
   endDate              DateTime  @map("end_date") @db.Date
@@ -873,6 +879,7 @@ model Rotation {
   traineeProfile TraineeProfile @relation(fields: [traineeProfileId], references: [id])
   department     Department     @relation(fields: [departmentId], references: [id])
   trainerProfile TrainerProfile @relation(fields: [trainerProfileId], references: [id])
+  supervisorAccount UserAccount? @relation("RotationSupervisor", fields: [supervisorAccountId], references: [id])
   program        Program?       @relation(fields: [programId], references: [id])
   evaluations       Evaluation[]
   objectiveProgress ObjectiveProgress[]
@@ -1289,6 +1296,37 @@ model Setting {
 
   @@unique([organizationId, key])
   @@map("settings")
+}
+
+/// طاقة استيعابية دقيقة يحدّدها المستشفى نفسه — لا يجوز للتجمع تعديلها مباشرة.
+/// scopeId/specialtyCode/gender/trainingPeriod تستخدم '' (وليس NULL) كقيمة
+/// "أي/غير محدد" حتى يعمل قيد @@unique بشكل صحيح (Postgres يعامل NULL كقيم
+/// متمايزة دائماً، فلا يمنع التكرار لو كانت هذه الحقول nullable).
+model CapacityAllocation {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  /// 'hospital' | 'department' | 'specialty' | 'trainer' | 'supervisor'
+  scopeType      String    @map("scope_type") @db.VarChar(20)
+  /// معرف القسم/المدرب/المشرف حسب scopeType، أو '' لسعة المستشفى الكلية
+  scopeId        String    @default("") @map("scope_id") @db.VarChar(64)
+  /// رمز التخصص من LookupTable، أو '' لعدم التقييد بتخصص
+  specialtyCode  String    @default("") @map("specialty_code") @db.VarChar(100)
+  /// 'male' | 'female' أو '' لعدم التقييد بالجنس
+  gender         String    @default("") @db.VarChar(10)
+  /// فترة التدريب (عادة academicYear الدفعة)، أو '' لعدم التقييد بفترة
+  trainingPeriod String    @default("") @map("training_period") @db.VarChar(50)
+  totalCapacity  Int       @default(0) @map("total_capacity")
+  notes          String?   @db.Text
+  createdById    String?   @map("created_by") @db.Uuid
+  updatedById    String?   @map("updated_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, scopeType, scopeId, specialtyCode, gender, trainingPeriod])
+  @@index([organizationId, scopeType])
+  @@map("capacity_allocations")
 }
 
 model LookupTable {

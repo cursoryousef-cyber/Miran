@@ -6,15 +6,17 @@ import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationService } from '../notifications/notification.service';
+import { CapacityService } from '../organizations/capacity.service';
 
 @ApiTags('Trainees (المتدربون)')
 @Controller('trainees')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth('JWT-auth')
 export class TraineesController {
   constructor(
     private prisma: PrismaService,
     private notificationService: NotificationService,
+    private capacityService: CapacityService,
   ) {}
 
   // ─── بيانات المتدرب الخاصة ────────────────────────────────────────────────
@@ -358,8 +360,10 @@ export class TraineesController {
       targetTrainerId = defaultTrainer?.id || oldRotation?.trainerProfileId;
     }
 
-    // Execute transactional transfer
-    const result = await this.prisma.$transaction(async (tx) => {
+    // Execute transactional transfer — wrapped so a DB-level capacity trigger
+    // failure (target hospital/department/trainer at capacity) surfaces as a
+    // clean 400 instead of a raw Postgres error.
+    const result = await this.capacityService.runGuarded(() => this.prisma.$transaction(async (tx) => {
       // 1. Update Trainee Profile Organization
       const updatedProfile = await tx.traineeProfile.update({
         where: { id: traineeProfileId },
@@ -449,7 +453,7 @@ export class TraineesController {
       });
 
       return { updatedProfile, newRotation };
-    });
+    }));
 
     // Send notifications to stakeholders
     try {

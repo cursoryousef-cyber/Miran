@@ -23,6 +23,9 @@ Miran_Recording.mp4
 .env
 *.env
 !.env.example
+*firebase-adminsdk*.json
+*service-account*.json
+backend/appsyousef-*.json
 
 # Node / Dependencies / Builds
 node_modules/

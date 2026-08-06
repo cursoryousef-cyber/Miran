@@ -4,17 +4,20 @@ import { OrganizationHierarchyService } from './organization-hierarchy.service';
 import { OrganizationProvisioningService } from './organization-provisioning.service';
 import { OrganizationAffiliationsService } from './organization-affiliations.service';
 import { CapacityService } from './capacity.service';
+import { HospitalCapacityService } from './hospital-capacity.service';
 import { OrganizationsController } from './organizations.controller';
 import { OrganizationAffiliationsController } from './organization-affiliations.controller';
+import { HospitalCapacityController } from './hospital-capacity.controller';
 
 @Module({
-  controllers: [OrganizationsController, OrganizationAffiliationsController],
+  controllers: [OrganizationsController, OrganizationAffiliationsController, HospitalCapacityController],
   providers: [
     OrganizationsService,
     OrganizationHierarchyService,
     OrganizationProvisioningService,
     OrganizationAffiliationsService,
     CapacityService,
+    HospitalCapacityService,
   ],
   exports: [
     OrganizationsService,
@@ -22,6 +25,7 @@ import { OrganizationAffiliationsController } from './organization-affiliations.
     OrganizationProvisioningService,
     OrganizationAffiliationsService,
     CapacityService,
+    HospitalCapacityService,
   ],
 })
 export class OrganizationsModule {}

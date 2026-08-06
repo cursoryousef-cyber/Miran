@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type CapacityScopeType = 'hospital' | 'department' | 'specialty' | 'trainer' | 'supervisor';
@@ -8,6 +8,8 @@ export interface CapacityScope {
   organizationId: string; // hospital org id (the anchor for department/specialty/trainer/supervisor scopes too)
   scopeId?: string; // departmentId | trainerProfileId | supervisorAccountId
   specialtyCode?: string;
+  gender?: string;
+  trainingPeriod?: string;
 }
 
 export interface OccupancyResult {
@@ -25,9 +27,10 @@ const DEFAULT_HOSPITAL_CAPACITY_FALLBACK = 50;
  * OrganizationsService.getHospitalCardsMetrics, TrainingRequestsService.autoAllocate,
  * and TrainingRequestsService.validateCapacity.
  *
- * 'specialty' and 'supervisor' scopes depend on the CapacityAllocation model
- * and Rotation.supervisorAccountId, both introduced by the Phase 2 migration —
- * until then they resolve via getSpecialtyOccupancy/getSupervisorOccupancy stubs.
+ * Mirrors the DB-level triggers in the Phase 2 migration
+ * (enforce_trainee_capacity / enforce_rotation_capacity) — this service is
+ * the application-layer check used to give early, friendly errors; the
+ * triggers are the last line of defense regardless of code path.
  */
 @Injectable()
 export class CapacityService {
@@ -42,9 +45,13 @@ export class CapacityService {
       case 'trainer':
         return this.getTrainerOccupancy(scope.scopeId!);
       case 'specialty':
+        return this.getSpecialtyOccupancy(scope.organizationId, {
+          specialtyCode: scope.specialtyCode,
+          gender: scope.gender,
+          trainingPeriod: scope.trainingPeriod,
+        });
       case 'supervisor':
-        // Implemented in Phase 2 once CapacityAllocation/Rotation.supervisorAccountId exist.
-        return { capacity: 0, occupied: 0, available: 0, occupancyPercentage: 0 };
+        return this.getSupervisorOccupancy(scope.scopeId!);
       default:
         return { capacity: 0, occupied: 0, available: 0, occupancyPercentage: 0 };
     }
@@ -95,7 +102,87 @@ export class CapacityService {
     return this.toResult(trainer.maxTrainees, occupied);
   }
 
-  // ─── Phase 2 will implement these against the new CapacityAllocation model
-  // and Rotation.supervisorAccountId; getOccupancy() short-circuits to zero
-  // for these scope types until then. ──────────────────────────────────────
+  /**
+   * Specialty (optionally further scoped by gender / training period)
+   * capacity, sourced from CapacityAllocation. '' sentinel means unrestricted
+   * on that dimension — mirrors the SQL trigger's matching logic exactly.
+   */
+  async getSpecialtyOccupancy(
+    organizationId: string,
+    filter: { specialtyCode?: string; gender?: string; trainingPeriod?: string },
+  ): Promise<OccupancyResult> {
+    const specialtyCode = filter.specialtyCode || '';
+    const gender = filter.gender || '';
+    const trainingPeriod = filter.trainingPeriod || '';
+
+    const allocation = await this.prisma.capacityAllocation.findUnique({
+      where: {
+        organizationId_scopeType_scopeId_specialtyCode_gender_trainingPeriod: {
+          organizationId,
+          scopeType: 'specialty',
+          scopeId: '',
+          specialtyCode,
+          gender,
+          trainingPeriod,
+        },
+      },
+    });
+    if (!allocation) return { capacity: 0, occupied: 0, available: 0, occupancyPercentage: 0 };
+
+    const rows = await this.prisma.traineeProfile.findMany({
+      where: { organizationId, deletedAt: null },
+      select: { specialtyEn: true, specialtyAr: true, person: { select: { gender: true } }, academicIntake: { select: { academicYear: true } } },
+    });
+    const occupied = rows.filter((r) => {
+      const spec = r.specialtyEn || r.specialtyAr || '';
+      return (
+        (specialtyCode === '' || spec === specialtyCode) &&
+        (gender === '' || (r.person?.gender || '') === gender) &&
+        (trainingPeriod === '' || (r.academicIntake?.academicYear || '') === trainingPeriod)
+      );
+    }).length;
+
+    const safeCapacity = allocation.totalCapacity;
+    const available = Math.max(0, safeCapacity - occupied);
+    const occupancyPercentage = safeCapacity > 0 ? Math.min(100, Math.round((occupied / safeCapacity) * 100)) : 0;
+    return { capacity: safeCapacity, occupied, available, occupancyPercentage };
+  }
+
+  async getSupervisorOccupancy(supervisorAccountId: string): Promise<OccupancyResult> {
+    const allocation = await this.prisma.capacityAllocation.findFirst({
+      where: { scopeType: 'supervisor', scopeId: supervisorAccountId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!allocation) return { capacity: 0, occupied: 0, available: 0, occupancyPercentage: 0 };
+
+    const occupied = await this.prisma.rotation.count({
+      where: { supervisorAccountId, status: 'active' },
+    });
+    const safeCapacity = allocation.totalCapacity;
+    const available = Math.max(0, safeCapacity - occupied);
+    const occupancyPercentage = safeCapacity > 0 ? Math.min(100, Math.round((occupied / safeCapacity) * 100)) : 0;
+    return { capacity: safeCapacity, occupied, available, occupancyPercentage };
+  }
+
+  /**
+   * Translates the DB trigger's raised exception (prefixed CAPACITY_EXCEEDED:)
+   * into a clean BadRequestException. Call sites that write to trainee_profiles
+   * or rotations should wrap the write with this so callers get a proper 400
+   * instead of a raw Postgres/Prisma error leaking through.
+   */
+  async runGuarded<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (e) {
+      const message = (e as Error)?.message || '';
+      // Postgres's debug-formatted error struct puts the whole thing on one
+      // "line" with no real newline, so bound the capture at the closing
+      // quote of the message field (our text never contains a literal ").
+      const match = message.match(/CAPACITY_EXCEEDED:\s*([^"\n]+)/);
+      if (match) {
+        throw new BadRequestException(match[1].trim());
+      }
+      throw e;
+    }
+  }
 }

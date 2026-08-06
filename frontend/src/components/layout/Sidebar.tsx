@@ -22,6 +22,7 @@ import {
   FileSignature,
   Network,
   RotateCcw,
+  BedDouble,
 } from 'lucide-react';
 
 // ─── Navigation definitions per role ───────────────────────────────────────
@@ -64,6 +65,7 @@ const clusterNav: NavItem[] = [
 // Hospital Supervisor / Director
 const hospitalNav: NavItem[] = [
   { name: 'لوحة المستشفى', path: '/', icon: Stethoscope },
+  { name: 'الطاقة الاستيعابية', path: '/hospital-capacity', icon: BedDouble },
   { name: 'الروتيشنات والأقسام', path: '/intakes', icon: ClipboardList },
   { name: 'المتدربون والمدربون', path: '/org-members', icon: UserCog },
   { name: 'السجل السريري (Logbook)', path: '/logbook', icon: BookOpen },

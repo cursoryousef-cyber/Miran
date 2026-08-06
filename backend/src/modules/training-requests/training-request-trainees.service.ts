@@ -6,6 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { NotificationService } from '../notifications/notification.service';
 import { ValidationEngineService } from './validation-engine.service';
+import { CapacityService } from '../organizations/capacity.service';
 import {
   assertValidTransition,
   TRAINING_REQUEST_TRAINEE_TRANSITIONS,
@@ -30,6 +31,7 @@ export class TrainingRequestTraineesService {
     private prisma: PrismaService,
     private notificationService: NotificationService,
     private validationEngine: ValidationEngineService,
+    private capacityService: CapacityService,
   ) {}
 
   // ─── القراءة ──────────────────────────────────────────────────────────────
@@ -257,7 +259,9 @@ export class TrainingRequestTraineesService {
     });
     if (!request) throw new NotFoundException('طلب التدريب غير موجود');
 
-    const { profile, activationToken, accountEmail, accountId } = await this.promoteToTrainee(row, request, user);
+    const { profile, activationToken, accountEmail, accountId } = await this.capacityService.runGuarded(() =>
+      this.promoteToTrainee(row, request, user),
+    );
 
     await this.audit(user, request.targetOrgId, 'approve_training_request_trainee', rowId, this.snapshot(row), {
       status: TRAINEE_ROW_STATUS.CLUSTER_APPROVED,

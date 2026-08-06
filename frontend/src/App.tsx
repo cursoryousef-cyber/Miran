@@ -17,6 +17,7 @@ import { Affiliations } from './pages/Affiliations';
 import { ClusterTrainees } from './pages/ClusterTrainees';
 import { AcademicIntakes } from './pages/AcademicIntakes';
 import { UniversityCorrections } from './pages/UniversityCorrections';
+import { HospitalCapacity } from './pages/HospitalCapacity';
 import { UsersPage } from './pages/Users';
 import { Declarations } from './pages/Declarations';
 import { Workflows } from './pages/Workflows';
@@ -102,6 +103,7 @@ export const App: React.FC = () => {
                   <Route path="cluster-trainees" element={<RoleRoute allowedRoles={[...CLUSTER, ...PLATFORM]}><ClusterTrainees /></RoleRoute>} />
                   <Route path="intakes" element={<RoleRoute allowedRoles={[...UNIVERSITY, ...CLUSTER, ...HOSPITAL, ...ACADEMIC]}><AcademicIntakes /></RoleRoute>} />
                   <Route path="corrections" element={<RoleRoute allowedRoles={UNIVERSITY}><UniversityCorrections /></RoleRoute>} />
+                  <Route path="hospital-capacity" element={<RoleRoute allowedRoles={['hospital_administrator', ...PLATFORM]}><HospitalCapacity /></RoleRoute>} />
 
                   {/* Hospital + Trainer */}
                   <Route path="org-members" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...UNIVERSITY]}><OrgMembersPage /></RoleRoute>} />
