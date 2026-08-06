@@ -66,6 +66,7 @@ const clusterNav: NavItem[] = [
 const hospitalNav: NavItem[] = [
   { name: 'لوحة المستشفى', path: '/', icon: Stethoscope },
   { name: 'الطاقة الاستيعابية', path: '/hospital-capacity', icon: BedDouble },
+  { name: 'مراجعة المتدربين الواردين', path: '/hospital-review', icon: ShieldCheck },
   { name: 'الروتيشنات والأقسام', path: '/intakes', icon: ClipboardList },
   { name: 'المتدربون والمدربون', path: '/org-members', icon: UserCog },
   { name: 'السجل السريري (Logbook)', path: '/logbook', icon: BookOpen },

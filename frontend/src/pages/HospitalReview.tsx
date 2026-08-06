@@ -1,0 +1,386 @@
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import {
+  CheckCircle2, XCircle, ArrowRightLeft, FileText, Edit3, PauseCircle, PlayCircle, AlertTriangle,
+} from 'lucide-react';
+import {
+  Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+  Chip, Dialog, DialogTitle, DialogContent, DialogActions, Alert, CircularProgress,
+  TextField, MenuItem, Select, FormControl, InputLabel, Tooltip,
+} from '@mui/material';
+
+const STATUS_LABELS: Record<string, { label: string; color: 'success' | 'warning' | 'error' | 'info' | 'default' }> = {
+  allocated: { label: 'موزَّع — بانتظار المراجعة', color: 'info' },
+  hospital_review: { label: 'قيد مراجعة المستشفى', color: 'warning' },
+  on_hold: { label: 'موقوف مؤقتاً', color: 'default' },
+  hospital_returned_to_cluster: { label: 'مُعاد للتجمع', color: 'error' },
+  rejected: { label: 'مرفوض', color: 'error' },
+  active: { label: 'نشط', color: 'success' },
+};
+
+const DOCUMENT_TYPES = [
+  'national_id', 'internship_letter', 'academic_transcript', 'medical_examination',
+  'vaccination_record', 'cpr_certificate', 'bls', 'acls', 'license', 'additional',
+];
+
+export const HospitalReview: React.FC = () => {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  const [selectedRow, setSelectedRow] = useState<any>(null);
+  const [dialog, setDialog] = useState<string | null>(null); // 'reject'|'return'|'docs'|'correction'|'assign'|'hold'
+  const [reason, setReason] = useState('');
+  const [notes, setNotes] = useState('');
+  const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
+  const [correctionFields, setCorrectionFields] = useState('');
+  const [newDeptId, setNewDeptId] = useState('');
+  const [newTrainerId, setNewTrainerId] = useState('');
+  const [newStartDate, setNewStartDate] = useState('');
+  const [newEndDate, setNewEndDate] = useState('');
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const orgId = user?.activeOrganization?.id;
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['hospital-review-trainees', orgId],
+    queryFn: async () => {
+      const res = await apiClient.get('/training-requests/hospital-review');
+      return res.data;
+    },
+    enabled: !!orgId,
+  });
+
+  const rows: any[] = data?.data || [];
+
+  const mutate = (action: string, payload: any = {}) =>
+    useMutation({
+      mutationFn: () => apiClient.post(`/training-requests/trainees/${selectedRow?.id}/${action}`, payload),
+      onSuccess: (res: any) => {
+        qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] });
+        setDialog(null);
+        setSelectedRow(null);
+        setSuccessMsg(res.data?.message || 'تمت العملية بنجاح');
+      },
+      onError: (err: any) => setErrorMsg(err.response?.data?.message || err.message),
+    });
+
+  // Individual mutations to avoid hook rule violations
+  const startReviewMut = useMutation({
+    mutationFn: (rowId: string) =>
+      apiClient.post(`/training-requests/trainees/${rowId}/hospital-review/start`),
+    onSuccess: (res: any) => { qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] }); setSuccessMsg(res.data?.message || 'بدأت المراجعة'); },
+    onError: (err: any) => setErrorMsg(err.response?.data?.message || err.message),
+  });
+
+  const rejectMut = useMutation({
+    mutationFn: () => apiClient.post(`/training-requests/trainees/${selectedRow?.id}/hospital-review/reject`, { reason, notes }),
+    onSuccess: (res: any) => { qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] }); setDialog(null); setSuccessMsg(res.data?.message); },
+    onError: (err: any) => setErrorMsg(err.response?.data?.message || err.message),
+  });
+
+  const returnMut = useMutation({
+    mutationFn: () => apiClient.post(`/training-requests/trainees/${selectedRow?.id}/hospital-review/return-to-cluster`, { reason, notes }),
+    onSuccess: (res: any) => { qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] }); setDialog(null); setSuccessMsg(res.data?.message); },
+    onError: (err: any) => setErrorMsg(err.response?.data?.message || err.message),
+  });
+
+  const docsMut = useMutation({
+    mutationFn: () => apiClient.post(`/training-requests/trainees/${selectedRow?.id}/hospital-review/request-documents`, { documentTypes: selectedDocs, notes }),
+    onSuccess: (res: any) => { qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] }); setDialog(null); setSuccessMsg(res.data?.message); },
+    onError: (err: any) => setErrorMsg(err.response?.data?.message || err.message),
+  });
+
+  const correctionMut = useMutation({
+    mutationFn: () => apiClient.post(`/training-requests/trainees/${selectedRow?.id}/hospital-review/request-correction`, { fields: correctionFields.split(',').map((f) => f.trim()).filter(Boolean), notes }),
+    onSuccess: (res: any) => { qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] }); setDialog(null); setSuccessMsg(res.data?.message); },
+    onError: (err: any) => setErrorMsg(err.response?.data?.message || err.message),
+  });
+
+  const assignMut = useMutation({
+    mutationFn: () => apiClient.patch(`/training-requests/trainees/${selectedRow?.id}/hospital-review/assignment`, {
+      departmentId: newDeptId || undefined,
+      trainerProfileId: newTrainerId || undefined,
+      startDate: newStartDate || undefined,
+      endDate: newEndDate || undefined,
+      reason: notes,
+    }),
+    onSuccess: (res: any) => { qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] }); setDialog(null); setSuccessMsg(res.data?.message); },
+    onError: (err: any) => setErrorMsg(err.response?.data?.message || err.message),
+  });
+
+  const holdMut = useMutation({
+    mutationFn: () => apiClient.post(`/training-requests/trainees/${selectedRow?.id}/hospital-review/hold`, { notes }),
+    onSuccess: (res: any) => { qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] }); setDialog(null); setSuccessMsg(res.data?.message); },
+    onError: (err: any) => setErrorMsg(err.response?.data?.message || err.message),
+  });
+
+  const resumeMut = useMutation({
+    mutationFn: (rowId: string) => apiClient.post(`/training-requests/trainees/${rowId}/hospital-review/resume`),
+    onSuccess: (res: any) => { qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] }); setSuccessMsg(res.data?.message); },
+    onError: (err: any) => setErrorMsg(err.response?.data?.message || err.message),
+  });
+
+  const openDialog = (row: any, type: string) => {
+    setSelectedRow(row);
+    setReason('');
+    setNotes('');
+    setSelectedDocs([]);
+    setCorrectionFields('');
+    setNewDeptId('');
+    setNewTrainerId('');
+    setNewStartDate('');
+    setNewEndDate('');
+    setDialog(type);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div>
+        <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+          مراجعة المستشفى للمتدربين الموزَّعين (Stage 6 — Hospital Review)
+        </h1>
+        <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
+          {user?.activeOrganization?.nameAr} — مراجعة المتدربين المُحالين وإتخاذ القرارات
+        </p>
+      </div>
+
+      {successMsg && <Alert severity="success" onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
+      {errorMsg && <Alert severity="error" onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
+
+      <TableContainer component={Paper} className="glass-card">
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المتدرب</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الجامعة / الطلب</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>التخصص</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>القسم / المدرب</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700, textAlign: 'center' }}>الإجراءات</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {isLoading ? (
+              <TableRow><TableCell colSpan={6} align="center"><CircularProgress size={24} /></TableCell></TableRow>
+            ) : rows.length === 0 ? (
+              <TableRow><TableCell colSpan={6} align="center" style={{ color: '#94a3b8', padding: '32px' }}>لا توجد حالات للمراجعة حالياً</TableCell></TableRow>
+            ) : (
+              rows.map((row: any) => {
+                const st = STATUS_LABELS[row.status] || { label: row.status, color: 'default' as const };
+                return (
+                  <TableRow key={row.id}>
+                    <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>
+                      {row.nameAr}
+                      <div style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>{row.nationalId}</div>
+                    </TableCell>
+                    <TableCell style={{ fontSize: '12px', color: '#94a3b8' }}>
+                      {row.trainingRequest?.sourceOrg?.nameAr || '—'}
+                      <div style={{ fontFamily: 'monospace', color: '#06b6d4' }}>{row.trainingRequest?.requestNumber}</div>
+                    </TableCell>
+                    <TableCell style={{ color: '#34d399' }}>{row.specialty || '—'}</TableCell>
+                    <TableCell style={{ fontSize: '12px' }}>
+                      <div style={{ color: '#38bdf8' }}>{row.assignedDepartment?.nameAr || 'غير محدد'}</div>
+                      <div style={{ color: '#10b981' }}>{row.assignedTrainer?.person?.nameAr || 'غير محدد'}</div>
+                    </TableCell>
+                    <TableCell>
+                      <Chip label={st.label} color={st.color} size="small" style={{ fontWeight: 700 }} />
+                    </TableCell>
+                    <TableCell>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        {row.status === 'allocated' && (
+                          <Tooltip title="بدء المراجعة">
+                            <Button size="small" variant="contained" style={{ background: '#0284c7', minWidth: 0, padding: '4px 8px' }}
+                              onClick={() => startReviewMut.mutate(row.id)} disabled={startReviewMut.isPending}>
+                              <PlayCircle size={14} />
+                            </Button>
+                          </Tooltip>
+                        )}
+                        {row.status === 'on_hold' && (
+                          <Tooltip title="استئناف المراجعة">
+                            <Button size="small" variant="contained" style={{ background: '#059669', minWidth: 0, padding: '4px 8px' }}
+                              onClick={() => resumeMut.mutate(row.id)} disabled={resumeMut.isPending}>
+                              <PlayCircle size={14} />
+                            </Button>
+                          </Tooltip>
+                        )}
+                        {['allocated', 'hospital_review'].includes(row.status) && (
+                          <Tooltip title="إيقاف مؤقت">
+                            <Button size="small" variant="outlined" style={{ borderColor: '#94a3b8', color: '#94a3b8', minWidth: 0, padding: '4px 8px' }}
+                              onClick={() => openDialog(row, 'hold')}>
+                              <PauseCircle size={14} />
+                            </Button>
+                          </Tooltip>
+                        )}
+                        {['hospital_review', 'on_hold'].includes(row.status) && (
+                          <>
+                            <Tooltip title="إعادة للتجمع">
+                              <Button size="small" variant="outlined" style={{ borderColor: '#f59e0b', color: '#f59e0b', minWidth: 0, padding: '4px 8px' }}
+                                onClick={() => openDialog(row, 'return')}>
+                                <ArrowRightLeft size={14} />
+                              </Button>
+                            </Tooltip>
+                            <Tooltip title="رفض نهائي">
+                              <Button size="small" variant="outlined" color="error" style={{ minWidth: 0, padding: '4px 8px' }}
+                                onClick={() => openDialog(row, 'reject')}>
+                                <XCircle size={14} />
+                              </Button>
+                            </Tooltip>
+                          </>
+                        )}
+                        {['allocated', 'hospital_review', 'on_hold'].includes(row.status) && (
+                          <>
+                            <Tooltip title="طلب مستندات">
+                              <Button size="small" variant="outlined" style={{ borderColor: '#06b6d4', color: '#06b6d4', minWidth: 0, padding: '4px 8px' }}
+                                onClick={() => openDialog(row, 'docs')}>
+                                <FileText size={14} />
+                              </Button>
+                            </Tooltip>
+                            <Tooltip title="طلب تصحيح بيانات">
+                              <Button size="small" variant="outlined" style={{ borderColor: '#8b5cf6', color: '#8b5cf6', minWidth: 0, padding: '4px 8px' }}
+                                onClick={() => openDialog(row, 'correction')}>
+                                <AlertTriangle size={14} />
+                              </Button>
+                            </Tooltip>
+                            <Tooltip title="تعديل التعيين">
+                              <Button size="small" variant="outlined" style={{ borderColor: '#10b981', color: '#10b981', minWidth: 0, padding: '4px 8px' }}
+                                onClick={() => openDialog(row, 'assign')}>
+                                <Edit3 size={14} />
+                              </Button>
+                            </Tooltip>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* Reject Dialog */}
+      <Dialog open={dialog === 'reject'} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800, color: '#ef4444' }}>رفض المتدرب نهائياً</DialogTitle>
+        <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <Alert severity="warning">المتدرب: <strong>{selectedRow?.nameAr}</strong> — سيتم إخطار الجامعة بالرفض.</Alert>
+          <TextField label="سبب الرفض *" value={reason} onChange={(e) => setReason(e.target.value)} fullWidth required multiline rows={2} size="small" />
+          <TextField label="ملاحظات إضافية" value={notes} onChange={(e) => setNotes(e.target.value)} fullWidth multiline rows={2} size="small" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialog(null)}>إلغاء</Button>
+          <Button variant="contained" color="error" onClick={() => rejectMut.mutate()} disabled={rejectMut.isPending || !reason}>
+            {rejectMut.isPending ? <CircularProgress size={20} /> : 'تأكيد الرفض'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Return to Cluster Dialog */}
+      <Dialog open={dialog === 'return'} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>إعادة المتدرب للتجمع لإعادة التوزيع</DialogTitle>
+        <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <Alert severity="info">المتدرب: <strong>{selectedRow?.nameAr}</strong></Alert>
+          <TextField label="سبب الإعادة للتجمع *" value={reason} onChange={(e) => setReason(e.target.value)} fullWidth required multiline rows={2} size="small" />
+          <TextField label="ملاحظات" value={notes} onChange={(e) => setNotes(e.target.value)} fullWidth multiline rows={2} size="small" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialog(null)}>إلغاء</Button>
+          <Button variant="contained" style={{ background: '#f59e0b' }} onClick={() => returnMut.mutate()} disabled={returnMut.isPending || !reason}>
+            {returnMut.isPending ? <CircularProgress size={20} /> : 'إعادة للتجمع'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Request Missing Documents Dialog */}
+      <Dialog open={dialog === 'docs'} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>طلب مستندات ناقصة</DialogTitle>
+        <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <Alert severity="info">المتدرب: <strong>{selectedRow?.nameAr}</strong></Alert>
+          <FormControl fullWidth size="small">
+            <InputLabel>أنواع المستندات المطلوبة</InputLabel>
+            <Select
+              multiple
+              value={selectedDocs}
+              onChange={(e) => setSelectedDocs(e.target.value as string[])}
+              label="أنواع المستندات المطلوبة"
+              renderValue={(selected) => (selected as string[]).join('، ')}
+            >
+              {DOCUMENT_TYPES.map((t) => (
+                <MenuItem key={t} value={t}>{t}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField label="ملاحظات" value={notes} onChange={(e) => setNotes(e.target.value)} fullWidth multiline rows={2} size="small" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialog(null)}>إلغاء</Button>
+          <Button variant="contained" onClick={() => docsMut.mutate()} disabled={docsMut.isPending || selectedDocs.length === 0}>
+            {docsMut.isPending ? <CircularProgress size={20} /> : 'إرسال الطلب'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Request Data Correction Dialog */}
+      <Dialog open={dialog === 'correction'} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>طلب تصحيح بيانات</DialogTitle>
+        <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <Alert severity="info">المتدرب: <strong>{selectedRow?.nameAr}</strong></Alert>
+          <TextField
+            label="الحقول المطلوب تصحيحها (مفصولة بفاصلة)"
+            value={correctionFields}
+            onChange={(e) => setCorrectionFields(e.target.value)}
+            fullWidth
+            size="small"
+            helperText="مثال: nameAr, email, specialty"
+          />
+          <TextField label="وصف التصحيح المطلوب" value={notes} onChange={(e) => setNotes(e.target.value)} fullWidth multiline rows={2} size="small" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialog(null)}>إلغاء</Button>
+          <Button variant="contained" onClick={() => correctionMut.mutate()} disabled={correctionMut.isPending || !correctionFields}>
+            {correctionMut.isPending ? <CircularProgress size={20} /> : 'إرسال طلب التصحيح'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Change Assignment Dialog */}
+      <Dialog open={dialog === 'assign'} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>تعديل التعيين</DialogTitle>
+        <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <Alert severity="info">المتدرب: <strong>{selectedRow?.nameAr}</strong></Alert>
+          <TextField label="معرف القسم الجديد (UUID)" value={newDeptId} onChange={(e) => setNewDeptId(e.target.value)} fullWidth size="small" />
+          <TextField label="معرف المدرب الجديد (UUID)" value={newTrainerId} onChange={(e) => setNewTrainerId(e.target.value)} fullWidth size="small" />
+          <TextField type="date" label="تاريخ البداية المعدَّل" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} fullWidth size="small" InputLabelProps={{ shrink: true }} />
+          <TextField type="date" label="تاريخ النهاية المعدَّل" value={newEndDate} onChange={(e) => setNewEndDate(e.target.value)} fullWidth size="small" InputLabelProps={{ shrink: true }} />
+          <TextField label="سبب التعديل" value={notes} onChange={(e) => setNotes(e.target.value)} fullWidth size="small" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialog(null)}>إلغاء</Button>
+          <Button variant="contained" style={{ background: '#059669' }} onClick={() => assignMut.mutate()} disabled={assignMut.isPending}>
+            {assignMut.isPending ? <CircularProgress size={20} /> : 'حفظ التعديل'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Put On Hold Dialog */}
+      <Dialog open={dialog === 'hold'} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>إيقاف المراجعة مؤقتاً</DialogTitle>
+        <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <Alert severity="warning">المتدرب: <strong>{selectedRow?.nameAr}</strong> — سيتم تعليق المراجعة.</Alert>
+          <TextField label="سبب الإيقاف المؤقت" value={notes} onChange={(e) => setNotes(e.target.value)} fullWidth multiline rows={2} size="small" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialog(null)}>إلغاء</Button>
+          <Button variant="contained" style={{ background: '#64748b' }} onClick={() => holdMut.mutate()} disabled={holdMut.isPending}>
+            {holdMut.isPending ? <CircularProgress size={20} /> : 'تأكيد الإيقاف المؤقت'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </div>
+  );
+};
+
+export default HospitalReview;

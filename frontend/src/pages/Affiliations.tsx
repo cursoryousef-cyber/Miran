@@ -31,6 +31,7 @@ export const Affiliations: React.FC = () => {
   const [selectedReq, setSelectedReq] = useState<any>(null);
   const [openAllocateModal, setOpenAllocateModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [clusterNotes, setClusterNotes] = useState('تمت المراجعة واعتماد التوزيع على المستشفيات وفق السعة المتاحة');
 
   // Hospital seat allocations — dynamic
@@ -70,8 +71,10 @@ export const Affiliations: React.FC = () => {
           };
         });
 
+      // 'auto_allocated' is the correct transition from 'submitted' per the state machine.
+      // 'allocated' was a legacy status that is NOT reachable from 'submitted'.
       return apiClient.patch(`/training-requests/${selectedReq?.id}`, {
-        status: 'allocated',
+        status: 'auto_allocated',
         notes: clusterNotes,
         allocations: allocationsList,
       });
@@ -85,15 +88,25 @@ export const Affiliations: React.FC = () => {
       const totalAllocated = Object.values(allocations).reduce((s, v) => s + v, 0);
       setSuccessMsg(`تمت مراجعة واعتماد طلب التدريب وتوزيع ${totalAllocated} مقعد على مستشفيات التجمع بنجاح!`);
     },
+    onError: (err: any) => {
+      setErrorMsg(err.response?.data?.message || err.message || 'فشل حفظ التوزيع — يرجى التحقق من حالة الطلب والمحاولة مجدداً');
+    },
   });
 
   const getStatusChip = (status: string) => {
     const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 'error' | 'info' | 'default' }> = {
+      draft: { label: 'مسودة', color: 'default' },
       submitted: { label: 'مرسل', color: 'info' },
+      under_cluster_review: { label: 'قيد المراجعة', color: 'warning' },
       under_review: { label: 'قيد المراجعة', color: 'warning' },
-      approved: { label: 'تمت الموافقة', color: 'success' },
+      returned_to_university: { label: 'مُعاد للجامعة', color: 'warning' },
+      resubmitted: { label: 'مُعاد الإرسال', color: 'info' },
+      auto_allocated: { label: 'موزع (آلي)', color: 'success' },
+      manually_reallocated: { label: 'موزع (يدوي)', color: 'success' },
+      approved: { label: 'مُعتمد', color: 'success' },
       allocated: { label: 'موزع', color: 'success' },
       rejected: { label: 'مرفوض', color: 'error' },
+      active: { label: 'نشط', color: 'success' },
     };
     const s = statusMap[status] || { label: status, color: 'default' as const };
     return <Chip label={s.label} color={s.color} size="small" />;
@@ -131,6 +144,12 @@ export const Affiliations: React.FC = () => {
       {successMsg && (
         <Alert severity="success" onClose={() => setSuccessMsg(null)} style={{ borderRadius: '10px' }}>
           {successMsg}
+        </Alert>
+      )}
+
+      {errorMsg && (
+        <Alert severity="error" onClose={() => setErrorMsg(null)} style={{ borderRadius: '10px' }}>
+          {errorMsg}
         </Alert>
       )}
 
@@ -245,12 +264,18 @@ export const Affiliations: React.FC = () => {
           )}
 
           <TextField label="ملاحظات مدير التجمع الصحي" multiline rows={2} value={clusterNotes} onChange={(e) => setClusterNotes(e.target.value)} fullWidth />
+
+          {allocateMutation.isError && (
+            <Alert severity="error">
+              {(allocateMutation.error as any)?.response?.data?.message || (allocateMutation.error as any)?.message || 'فشل حفظ التوزيع'}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions style={{ padding: '16px 24px' }}>
-          <Button onClick={() => setOpenAllocateModal(false)}>إلغاء</Button>
+          <Button onClick={() => { setOpenAllocateModal(false); allocateMutation.reset(); }}>إلغاء</Button>
           <Button
             variant="contained"
-            onClick={() => allocateMutation.mutate()}
+            onClick={() => { setErrorMsg(null); allocateMutation.mutate(); }}
             disabled={allocateMutation.isPending || totalAllocated === 0}
             style={{ background: '#059669', fontWeight: 700 }}
           >

@@ -13,9 +13,15 @@ import { TrainingRequestsService } from './training-requests.service';
 import { TrainingRequestTraineesService } from './training-request-trainees.service';
 import { CreateTrainingRequestDto, UpdateTrainingRequestDto } from './dto/training-request.dto';
 import {
+  ChangeAssignmentDto,
+  HospitalRejectDto,
+  HospitalReturnDto,
   ImportTraineesDto,
   MergeTraineesDto,
+  PutOnHoldDto,
   RejectTraineeDto,
+  RequestDataCorrectionDto,
+  RequestMissingDocsDto,
   ReturnTraineeDto,
   SplitTraineeDto,
   UpdateTraineeRowDto,
@@ -26,6 +32,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 const CLUSTER_ROLES = ['cluster_administrator', 'training_director', 'platform_owner'] as const;
 const UNIVERSITY_ROLES = ['university_administrator', 'academic_affairs', 'platform_owner'] as const;
+const HOSPITAL_ROLES = ['hospital_administrator', 'department_head', 'training_supervisor', 'platform_owner'] as const;
 
 @ApiTags('Training Requests (طلبات التدريب التشغيلية الواردة للتجمع)')
 @ApiBearerAuth('JWT-auth')
@@ -300,5 +307,94 @@ export class TrainingRequestsController {
     @CurrentUser() user: IAuthenticatedUser,
   ) {
     return this.trainingRequestsService.allocateTraineeRow(rowId, body.hospitalId, user);
+  }
+
+  // ─── Phase 4: Stage 6 — Hospital Review Actions ───────────────────────────
+
+  @Get('hospital-review')
+  @RequireRoles(...HOSPITAL_ROLES, ...CLUSTER_ROLES)
+  @ApiOperation({ summary: 'قائمة المتدربين الموزَّعين على المستشفى لمراجعتها' })
+  async findForHospitalReview(@OrgContext() orgId: string) {
+    return this.traineesService.findForHospitalReview(orgId);
+  }
+
+  @Post('trainees/:rowId/hospital-review/start')
+  @RequireRoles(...HOSPITAL_ROLES)
+  @ApiOperation({ summary: 'بدء مراجعة المستشفى للمتدرب (allocated → hospital_review)' })
+  async startHospitalReview(@Param('rowId') rowId: string, @CurrentUser() user: IAuthenticatedUser) {
+    return this.traineesService.startHospitalReview(rowId, user);
+  }
+
+  @Post('trainees/:rowId/hospital-review/reject')
+  @RequireRoles(...HOSPITAL_ROLES)
+  @ApiOperation({ summary: 'رفض المتدرب نهائياً من قِبَل المستشفى' })
+  async hospitalRejectIntern(
+    @Param('rowId') rowId: string,
+    @Body() dto: HospitalRejectDto,
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    return this.traineesService.hospitalRejectIntern(rowId, dto, user);
+  }
+
+  @Post('trainees/:rowId/hospital-review/return-to-cluster')
+  @RequireRoles(...HOSPITAL_ROLES)
+  @ApiOperation({ summary: 'إعادة المتدرب للتجمع لإعادة التوزيع' })
+  async hospitalReturnToCluster(
+    @Param('rowId') rowId: string,
+    @Body() dto: HospitalReturnDto,
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    return this.traineesService.hospitalReturnToCluster(rowId, dto, user);
+  }
+
+  @Post('trainees/:rowId/hospital-review/request-documents')
+  @RequireRoles(...HOSPITAL_ROLES)
+  @ApiOperation({ summary: 'طلب مستندات ناقصة من الجامعة للمتدرب' })
+  async requestMissingDocuments(
+    @Param('rowId') rowId: string,
+    @Body() dto: RequestMissingDocsDto,
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    return this.traineesService.requestMissingDocuments(rowId, dto, user);
+  }
+
+  @Post('trainees/:rowId/hospital-review/request-correction')
+  @RequireRoles(...HOSPITAL_ROLES)
+  @ApiOperation({ summary: 'طلب تصحيح بيانات المتدرب من الجامعة' })
+  async requestDataCorrection(
+    @Param('rowId') rowId: string,
+    @Body() dto: RequestDataCorrectionDto,
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    return this.traineesService.requestDataCorrection(rowId, dto, user);
+  }
+
+  @Patch('trainees/:rowId/hospital-review/assignment')
+  @RequireRoles(...HOSPITAL_ROLES, ...CLUSTER_ROLES)
+  @ApiOperation({ summary: 'تعديل القسم / المدرب / المشرف / التواريخ مع التحقق من الطاقة' })
+  async changeAssignment(
+    @Param('rowId') rowId: string,
+    @Body() dto: ChangeAssignmentDto,
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    return this.traineesService.changeAssignment(rowId, dto, user);
+  }
+
+  @Post('trainees/:rowId/hospital-review/hold')
+  @RequireRoles(...HOSPITAL_ROLES)
+  @ApiOperation({ summary: 'إيقاف مراجعة المتدرب مؤقتاً (allocated/hospital_review → on_hold)' })
+  async putOnHold(
+    @Param('rowId') rowId: string,
+    @Body() dto: PutOnHoldDto,
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    return this.traineesService.putOnHold(rowId, dto, user);
+  }
+
+  @Post('trainees/:rowId/hospital-review/resume')
+  @RequireRoles(...HOSPITAL_ROLES)
+  @ApiOperation({ summary: 'استئناف مراجعة المتدرب من الإيقاف المؤقت (on_hold → hospital_review)' })
+  async resumeFromHold(@Param('rowId') rowId: string, @CurrentUser() user: IAuthenticatedUser) {
+    return this.traineesService.resumeFromHold(rowId, user);
   }
 }

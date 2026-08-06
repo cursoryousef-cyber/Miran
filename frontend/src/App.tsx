@@ -30,6 +30,7 @@ import { HealthMonitor } from './pages/HealthMonitor';
 import { AuditLogs } from './pages/AuditLogs';
 import { RolesManagement } from './pages/RolesManagement';
 import { LogbookPage } from './pages/Logbook';
+import { HospitalReview } from './pages/HospitalReview';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -104,6 +105,7 @@ export const App: React.FC = () => {
                   <Route path="intakes" element={<RoleRoute allowedRoles={[...UNIVERSITY, ...CLUSTER, ...HOSPITAL, ...ACADEMIC]}><AcademicIntakes /></RoleRoute>} />
                   <Route path="corrections" element={<RoleRoute allowedRoles={UNIVERSITY}><UniversityCorrections /></RoleRoute>} />
                   <Route path="hospital-capacity" element={<RoleRoute allowedRoles={['hospital_administrator', ...PLATFORM]}><HospitalCapacity /></RoleRoute>} />
+                  <Route path="hospital-review" element={<RoleRoute allowedRoles={[...HOSPITAL, ...PLATFORM]}><HospitalReview /></RoleRoute>} />
 
                   {/* Hospital + Trainer */}
                   <Route path="org-members" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...UNIVERSITY]}><OrgMembersPage /></RoleRoute>} />

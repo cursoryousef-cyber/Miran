@@ -13,8 +13,14 @@ import {
 } from '../../common/state-machine/transition-guard';
 import { TRAINEE_ROW_STATUS, TRAINEE_PROFILE_STATUS } from '../../common/status-constants';
 import {
+  ChangeAssignmentDto,
+  HospitalRejectDto,
+  HospitalReturnDto,
   MergeTraineesDto,
+  PutOnHoldDto,
   RejectTraineeDto,
+  RequestDataCorrectionDto,
+  RequestMissingDocsDto,
   ReturnTraineeDto,
   SplitTraineeDto,
   TraineeRowDto,
@@ -559,5 +565,318 @@ export class TrainingRequestTraineesService {
       referenceId: row.id,
       channels: ['in_app', 'email'],
     });
+  }
+
+  private async notifyHospital(
+    hospitalOrgId: string,
+    rowId: string,
+    titleAr: string,
+    bodyAr: string,
+  ) {
+    await this.notificationService.notifyOrgUsers(hospitalOrgId, 'hospital_administrator', {
+      titleAr,
+      bodyAr,
+      type: 'trainee_hospital_review',
+      referenceType: 'TrainingRequestTrainee',
+      referenceId: rowId,
+      channels: ['in_app', 'email'],
+    });
+  }
+
+  private async loadRow(rowId: string) {
+    const row = await this.prisma.trainingRequestTrainee.findUnique({
+      where: { id: rowId },
+      include: {
+        trainingRequest: { select: { targetOrgId: true, sourceOrgId: true, requestNumber: true } },
+        assignedHospital: { select: { id: true, nameAr: true } },
+      },
+    });
+    if (!row) throw new NotFoundException('صف المتدرب غير موجود');
+    return row;
+  }
+
+  // ─── Phase 4: Stage 6 — Hospital Review Full Action Set ──────────────────
+
+  /** المستشفى يبدأ مراجعة المتدرب: allocated → hospital_review */
+  async startHospitalReview(rowId: string, user: IAuthenticatedUser) {
+    const row = await this.loadRow(rowId);
+    assertValidTransition(
+      'صف المتدرب',
+      row.status,
+      'hospital_review',
+      TRAINING_REQUEST_TRAINEE_TRANSITIONS,
+    );
+    const old = this.snapshot(row as any);
+    await this.prisma.trainingRequestTrainee.update({
+      where: { id: rowId },
+      data: { status: 'hospital_review', updatedById: user.accountId },
+    });
+    await this.audit(
+      user,
+      row.trainingRequest.targetOrgId,
+      'hospital_start_review',
+      rowId,
+      old,
+      { status: 'hospital_review' },
+    );
+    return { success: true, message: 'بدأت مراجعة المستشفى للمتدرب' };
+  }
+
+  /** المستشفى يرفض المتدرب نهائياً: hospital_review → rejected */
+  async hospitalRejectIntern(rowId: string, dto: HospitalRejectDto, user: IAuthenticatedUser) {
+    const row = await this.loadRow(rowId);
+    assertValidTransition(
+      'صف المتدرب',
+      row.status,
+      'rejected',
+      TRAINING_REQUEST_TRAINEE_TRANSITIONS,
+    );
+    const old = this.snapshot(row as any);
+    await this.prisma.trainingRequestTrainee.update({
+      where: { id: rowId },
+      data: {
+        status: 'rejected',
+        returnReason: dto.reason,
+        officialComments: dto.notes,
+        updatedById: user.accountId,
+      },
+    });
+    await this.audit(
+      user,
+      row.trainingRequest.targetOrgId,
+      'hospital_reject_intern',
+      rowId,
+      old,
+      { status: 'rejected', reason: dto.reason },
+    );
+    // Notify university
+    await this.notifyUniversity(
+      { universityOrgId: row.universityOrgId, trainingRequestId: row.trainingRequestId, id: rowId },
+      'رفض قبول متدرب من قِبَل المستشفى',
+      `رفضت ${row.assignedHospital?.nameAr || 'المستشفى'} قبول المتدرب ${row.nameAr} — السبب: ${dto.reason}`,
+    );
+    return { success: true, message: `تم رفض المتدرب ${row.nameAr} نهائياً من المستشفى` };
+  }
+
+  /** المستشفى يعيد المتدرب للتجمع لإعادة التوزيع: on_hold/hospital_review → hospital_returned_to_cluster */
+  async hospitalReturnToCluster(rowId: string, dto: HospitalReturnDto, user: IAuthenticatedUser) {
+    const row = await this.loadRow(rowId);
+    assertValidTransition(
+      'صف المتدرب',
+      row.status,
+      'hospital_returned_to_cluster',
+      TRAINING_REQUEST_TRAINEE_TRANSITIONS,
+    );
+    const old = this.snapshot(row as any);
+    await this.prisma.trainingRequestTrainee.update({
+      where: { id: rowId },
+      data: {
+        status: 'hospital_returned_to_cluster',
+        returnReason: dto.reason,
+        officialComments: dto.notes,
+        assignedHospitalId: null,
+        assignedDepartmentId: null,
+        assignedTrainerProfileId: null,
+        assignedSupervisorAccountId: null,
+        updatedById: user.accountId,
+      },
+    });
+    await this.audit(
+      user,
+      row.trainingRequest.targetOrgId,
+      'hospital_return_to_cluster',
+      rowId,
+      old,
+      { status: 'hospital_returned_to_cluster', reason: dto.reason },
+    );
+    // Notify cluster
+    await this.notificationService.notifyOrgUsers(
+      row.trainingRequest.targetOrgId,
+      'cluster_administrator',
+      {
+        titleAr: 'مستشفى أعاد متدرباً للتجمع لإعادة التوزيع',
+        bodyAr: `أعادت ${row.assignedHospital?.nameAr || 'المستشفى'} المتدرب ${row.nameAr} للتجمع — السبب: ${dto.reason}`,
+        type: 'trainee_returned_to_cluster',
+        referenceType: 'TrainingRequestTrainee',
+        referenceId: rowId,
+        channels: ['in_app', 'email'],
+      },
+    );
+    return { success: true, message: 'تمت إعادة المتدرب للتجمع لإعادة التوزيع' };
+  }
+
+  /** طلب مستندات ناقصة: لا يغير الحالة، يُخطر الجامعة */
+  async requestMissingDocuments(rowId: string, dto: RequestMissingDocsDto, user: IAuthenticatedUser) {
+    const row = await this.loadRow(rowId);
+    if (!['allocated', 'hospital_review', 'on_hold'].includes(row.status)) {
+      throw new BadRequestException(
+        `لا يمكن طلب مستندات من صف بحالة "${row.status}"`,
+      );
+    }
+    const deadline = dto.deadline ? new Date(dto.deadline) : null;
+    await this.prisma.trainingRequestTrainee.update({
+      where: { id: rowId },
+      data: {
+        requiredDocuments: dto.documentTypes as any,
+        correctionDeadline: deadline,
+        officialComments: dto.notes,
+        updatedById: user.accountId,
+      },
+    });
+    await this.audit(
+      user,
+      row.trainingRequest.targetOrgId,
+      'hospital_request_missing_docs',
+      rowId,
+      null,
+      { documentTypes: dto.documentTypes, notes: dto.notes, deadline: dto.deadline },
+    );
+    await this.notifyUniversity(
+      { universityOrgId: row.universityOrgId, trainingRequestId: row.trainingRequestId, id: rowId },
+      'طلب مستندات ناقصة من المستشفى',
+      `طلبت ${row.assignedHospital?.nameAr || 'المستشفى'} مستندات ناقصة للمتدرب ${row.nameAr}: ${dto.documentTypes.join('، ')}${dto.deadline ? ` — آخر موعد: ${dto.deadline}` : ''}`,
+    );
+    return { success: true, message: 'تم إرسال طلب المستندات الناقصة للجامعة' };
+  }
+
+  /** طلب تصحيح بيانات: يُخطر الجامعة بالحقول المطلوب تصحيحها */
+  async requestDataCorrection(rowId: string, dto: RequestDataCorrectionDto, user: IAuthenticatedUser) {
+    const row = await this.loadRow(rowId);
+    if (!['allocated', 'hospital_review', 'on_hold'].includes(row.status)) {
+      throw new BadRequestException(`لا يمكن طلب تصحيح بيانات من صف بحالة "${row.status}"`);
+    }
+    await this.audit(
+      user,
+      row.trainingRequest.targetOrgId,
+      'hospital_request_data_correction',
+      rowId,
+      null,
+      { fields: dto.fields, notes: dto.notes },
+    );
+    await this.notifyUniversity(
+      { universityOrgId: row.universityOrgId, trainingRequestId: row.trainingRequestId, id: rowId },
+      'طلب تصحيح بيانات متدرب',
+      `طلبت ${row.assignedHospital?.nameAr || 'المستشفى'} تصحيح بيانات المتدرب ${row.nameAr} — الحقول: ${dto.fields.join('، ')}${dto.notes ? ` — ${dto.notes}` : ''}`,
+    );
+    return { success: true, message: 'تم إرسال طلب تصحيح البيانات للجامعة' };
+  }
+
+  /** تعديل التعيين (قسم / مدرب / مشرف / تواريخ) مع التحقق من الطاقة */
+  async changeAssignment(rowId: string, dto: ChangeAssignmentDto, user: IAuthenticatedUser) {
+    const row = await this.loadRow(rowId);
+    if (!['allocated', 'hospital_review', 'on_hold'].includes(row.status)) {
+      throw new BadRequestException(`لا يمكن تعديل التعيين لصف بحالة "${row.status}"`);
+    }
+    const old = this.snapshot(row as any);
+
+    // Validate new department capacity if changing
+    if (dto.departmentId && dto.departmentId !== row.assignedDepartmentId) {
+      const deptOcc = await this.capacityService.getDepartmentOccupancy(dto.departmentId);
+      if (deptOcc.available <= 0) {
+        throw new BadRequestException(
+          `القسم المحدد ممتلئ (${deptOcc.occupied}/${deptOcc.capacity} مقعد)`,
+        );
+      }
+    }
+
+    // Validate new trainer capacity if changing
+    if (dto.trainerProfileId && dto.trainerProfileId !== row.assignedTrainerProfileId) {
+      const trainerOcc = await this.capacityService.getTrainerOccupancy(dto.trainerProfileId);
+      if (trainerOcc.available <= 0) {
+        throw new BadRequestException(
+          `المدرب المحدد وصل لأقصى عدد متدربين (${trainerOcc.occupied}/${trainerOcc.capacity})`,
+        );
+      }
+    }
+
+    const newValues: Record<string, unknown> = {};
+    if (dto.departmentId !== undefined) newValues.assignedDepartmentId = dto.departmentId;
+    if (dto.trainerProfileId !== undefined) newValues.assignedTrainerProfileId = dto.trainerProfileId;
+    if (dto.supervisorAccountId !== undefined) newValues.assignedSupervisorAccountId = dto.supervisorAccountId;
+    if (dto.startDate !== undefined) newValues.startDate = new Date(dto.startDate);
+    if (dto.endDate !== undefined) newValues.endDate = new Date(dto.endDate);
+
+    await this.prisma.trainingRequestTrainee.update({
+      where: { id: rowId },
+      data: { ...newValues, updatedById: user.accountId } as any,
+    });
+
+    await this.audit(
+      user,
+      row.trainingRequest.targetOrgId,
+      'hospital_change_assignment',
+      rowId,
+      old,
+      { ...newValues, reason: dto.reason },
+    );
+    return { success: true, message: 'تم تحديث التعيين بنجاح' };
+  }
+
+  /** إيقاف مؤقت: allocated/hospital_review → on_hold */
+  async putOnHold(rowId: string, dto: PutOnHoldDto, user: IAuthenticatedUser) {
+    const row = await this.loadRow(rowId);
+    assertValidTransition('صف المتدرب', row.status, 'on_hold', TRAINING_REQUEST_TRAINEE_TRANSITIONS);
+    const old = this.snapshot(row as any);
+    await this.prisma.trainingRequestTrainee.update({
+      where: { id: rowId },
+      data: {
+        status: 'on_hold',
+        officialComments: dto.notes,
+        updatedById: user.accountId,
+      },
+    });
+    await this.audit(
+      user,
+      row.trainingRequest.targetOrgId,
+      'hospital_put_on_hold',
+      rowId,
+      old,
+      { status: 'on_hold', notes: dto.notes },
+    );
+    return { success: true, message: 'تم إيقاف مراجعة المتدرب مؤقتاً' };
+  }
+
+  /** استئناف من الإيقاف: on_hold → hospital_review */
+  async resumeFromHold(rowId: string, user: IAuthenticatedUser) {
+    const row = await this.loadRow(rowId);
+    assertValidTransition('صف المتدرب', row.status, 'hospital_review', TRAINING_REQUEST_TRAINEE_TRANSITIONS);
+    const old = this.snapshot(row as any);
+    await this.prisma.trainingRequestTrainee.update({
+      where: { id: rowId },
+      data: { status: 'hospital_review', updatedById: user.accountId },
+    });
+    await this.audit(
+      user,
+      row.trainingRequest.targetOrgId,
+      'hospital_resume_from_hold',
+      rowId,
+      old,
+      { status: 'hospital_review' },
+    );
+    return { success: true, message: 'تمت استعادة مراجعة المتدرب' };
+  }
+
+  /** قائمة الصفوف بحالة hospital_review/on_hold لوحة مراجعة المستشفى */
+  async findForHospitalReview(hospitalOrgId: string) {
+    const data = await this.prisma.trainingRequestTrainee.findMany({
+      where: {
+        assignedHospitalId: hospitalOrgId,
+        status: { in: ['allocated', 'hospital_review', 'on_hold', 'hospital_returned_to_cluster'] },
+      },
+      include: {
+        documents: true,
+        assignedHospital: { select: { nameAr: true } },
+        assignedDepartment: { select: { nameAr: true } },
+        assignedTrainer: { select: { id: true, person: { select: { nameAr: true } } } },
+        trainingRequest: {
+          select: {
+            requestNumber: true,
+            sourceOrg: { select: { nameAr: true } },
+          },
+        },
+      },
+      orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
+    });
+    return { data };
   }
 }

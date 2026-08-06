@@ -157,3 +157,97 @@ export class SplitTraineeDto {
   @Type(() => TraineeRowDto)
   rows!: TraineeRowDto[];
 }
+
+// ─── Phase 4: Hospital Review DTOs ──────────────────────────────────────────
+
+export class HospitalRejectDto {
+  @ApiProperty({ description: 'سبب الرفض' })
+  @IsString()
+  @IsNotEmpty()
+  reason!: string;
+
+  @ApiPropertyOptional({ description: 'ملاحظات إضافية' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class HospitalReturnDto {
+  @ApiProperty({ description: 'سبب الإعادة للتجمع' })
+  @IsString()
+  @IsNotEmpty()
+  reason!: string;
+
+  @ApiPropertyOptional({ description: 'ملاحظات رسمية' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class RequestMissingDocsDto {
+  @ApiProperty({ description: 'أنواع المستندات المطلوبة من قائمة الأنواع المعتمدة' })
+  @IsArray()
+  @IsString({ each: true })
+  documentTypes!: string[];
+
+  @ApiPropertyOptional({ description: 'ملاحظات للجامعة/المتدرب' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @ApiPropertyOptional({ description: 'آخر موعد لتسليم المستندات' })
+  @IsOptional()
+  @IsDateString()
+  deadline?: string;
+}
+
+export class RequestDataCorrectionDto {
+  @ApiProperty({ description: 'الحقول التي تحتاج تصحيح (أسماء الحقول)' })
+  @IsArray()
+  @IsString({ each: true })
+  fields!: string[];
+
+  @ApiPropertyOptional({ description: 'توصيف التصحيح المطلوب' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class ChangeAssignmentDto {
+  @ApiPropertyOptional({ description: 'معرف القسم الجديد' })
+  @IsOptional()
+  @IsUUID('4')
+  departmentId?: string;
+
+  @ApiPropertyOptional({ description: 'معرف ملف المدرب الجديد' })
+  @IsOptional()
+  @IsUUID('4')
+  trainerProfileId?: string;
+
+  @ApiPropertyOptional({ description: 'معرف حساب المشرف الجديد' })
+  @IsOptional()
+  @IsUUID('4')
+  supervisorAccountId?: string;
+
+  @ApiPropertyOptional({ description: 'تاريخ البداية المعدَّل' })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ description: 'تاريخ النهاية المعدَّل' })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @ApiPropertyOptional({ description: 'سبب التعديل' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class PutOnHoldDto {
+  @ApiPropertyOptional({ description: 'سبب الإيقاف المؤقت' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
