@@ -13,7 +13,30 @@ import { PrismaService } from '../../prisma/prisma.service';
  * model resolved membership from UserOrganization alone, and this keeps the
  * resolved membership identical to it.
  */
-const MEMBERSHIP_SOURCES = ['user_organization', 'user_role', 'manual'];
+export const MEMBERSHIP_SOURCES = ['user_organization', 'user_role', 'manual'];
+
+/**
+ * Prisma `where` fragment selecting UserAccounts that are members of an
+ * organization — assignment first, with a per-account fallback to the legacy
+ * relation for accounts that have no membership assignments yet.
+ */
+export function membershipWhere(organizationId: string) {
+  return {
+    OR: [
+      {
+        orgAssignments: {
+          some: { organizationId, isActive: true, sourceType: { in: MEMBERSHIP_SOURCES } },
+        },
+      },
+      {
+        AND: [
+          { orgAssignments: { none: { sourceType: { in: MEMBERSHIP_SOURCES } } } },
+          { organizations: { some: { organizationId, isActive: true } } },
+        ],
+      },
+    ],
+  };
+}
 
 @Injectable()
 export class OrganizationAssignmentService {

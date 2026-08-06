@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserAccountDto, AddUserToOrgDto, AssignRoleDto } from './dto/user-account.dto';
 import { IAuthenticatedUser } from '../../common/interfaces';
+import { membershipWhere } from '../organization-assignments/organization-assignment.service';
 
 @Injectable()
 export class UserAccountsService {
@@ -17,11 +18,12 @@ export class UserAccountsService {
   async findAll(organizationId: string, page = 1, limit = 20, search?: string) {
     const skip = (page - 1) * limit;
 
+    // Org scoping resolves through OrganizationAssignment, keeping the legacy
+    // relation only as a per-account fallback. Kept under AND so the search
+    // filter below can still use OR without clobbering it.
     const where: Record<string, unknown> = {
       deletedAt: null,
-      organizations: {
-        some: { organizationId, isActive: true },
-      },
+      AND: [membershipWhere(organizationId)],
     };
 
     if (search) {
