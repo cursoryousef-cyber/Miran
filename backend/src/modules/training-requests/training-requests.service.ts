@@ -710,4 +710,91 @@ export class TrainingRequestsService {
 
     return { data: updated, success: true, message: 'تم قبول التدريب وتفعيل الخطة للأطياء المقبولين بنجاح' };
   }
+
+  // ─── Generic acceptance chain (Phase 5) ─────────────────────────────────
+  // Maps current status → { next on approve, next on reject, next on return, notifyRole }
+  private static readonly CHAIN_MAP: Record<string, { approve: string; notifyRole: string; label: string }> = {
+    approved:                         { approve: 'hospital_administrator_accepted', notifyRole: 'hospital_administrator', label: 'مدير المستشفى' },
+    hospital_accepted:                { approve: 'supervisor_accepted',            notifyRole: 'training_supervisor',    label: 'المشرف التدريبي' },
+    hospital_administrator_accepted:  { approve: 'training_supervisor_accepted',   notifyRole: 'training_supervisor',    label: 'المشرف التدريبي' },
+    supervisor_accepted:              { approve: 'trainer_accepted',               notifyRole: 'trainer',                label: 'المدرب السريري' },
+    training_supervisor_accepted:     { approve: 'trainer_accepted',               notifyRole: 'trainer',                label: 'المدرب السريري' },
+    trainer_accepted:                 { approve: 'active',                         notifyRole: 'trainee',                label: 'طبيب الامتياز' },
+  };
+
+  async advanceAcceptanceChain(
+    id: string,
+    action: 'approve' | 'reject' | 'return_to_cluster',
+    notes?: string,
+    user?: IAuthenticatedUser,
+  ) {
+    const req = await this.prisma.trainingRequest.findUnique({
+      where: { id },
+      include: { sourceOrg: true, targetOrg: true },
+    });
+    if (!req) throw new NotFoundException('الطلب غير موجود');
+
+    const step = TrainingRequestsService.CHAIN_MAP[req.status];
+    if (!step) throw new BadRequestException(`الحالة الحالية "${req.status}" ليست ضمن سلسلة القبول`);
+
+    const nextStatus =
+      action === 'approve'           ? step.approve :
+      action === 'reject'            ? 'rejected' :
+      /* return_to_cluster */          'hospital_returned_to_cluster';
+
+    assertValidTransition('طلب التدريب', req.status, nextStatus, TRAINING_REQUEST_TRANSITIONS);
+
+    const updated = await this.prisma.trainingRequest.update({
+      where: { id },
+      data: { status: nextStatus, notes: notes ? `${step.label}: ${notes}` : req.notes, updatedById: user?.accountId },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: req.targetOrgId,
+        actorId: user?.accountId,
+        action: `acceptance_chain_${action}`,
+        entityType: 'TrainingRequest',
+        entityId: id,
+        oldValues: { status: req.status },
+        newValues: { status: nextStatus, notes, actor: step.label },
+      },
+    });
+
+    // Notify next actor if approved
+    try {
+      if (action === 'approve' && nextStatus !== 'active') {
+        await this.notificationService.notifyOrgUsers(req.targetOrgId, step.notifyRole, {
+          titleAr: `طلب تدريب بانتظار موافقتك — ${req.requestNumber}`,
+          bodyAr: `وافق ${step.label} على الطلب وأحاله إليك للمراجعة والموافقة`,
+          type: 'acceptance_chain',
+          referenceType: 'TrainingRequest',
+          referenceId: id,
+          channels: ['in_app', 'email', 'push'],
+        });
+      } else if (action === 'approve' && nextStatus === 'active') {
+        // Notify university + trainee
+        await this.notificationService.notifyOrgUsers(req.sourceOrgId, 'university_administrator', {
+          titleAr: `تم تفعيل التدريب — ${req.requestNumber}`,
+          bodyAr: `اكتملت جميع خطوات القبول وتم تفعيل برنامج التدريب بنجاح`,
+          type: 'training_activated',
+          referenceType: 'TrainingRequest',
+          referenceId: id,
+          channels: ['in_app', 'email', 'push'],
+        });
+      } else if (action === 'reject') {
+        await this.notificationService.notifyOrgUsers(req.sourceOrgId, 'university_administrator', {
+          titleAr: `رُفض طلب التدريب — ${req.requestNumber}`,
+          bodyAr: `رفض ${step.label} طلب التدريب${notes ? ': ' + notes : ''}`,
+          type: 'training_rejected',
+          referenceType: 'TrainingRequest',
+          referenceId: id,
+          channels: ['in_app', 'email', 'push'],
+        });
+      }
+    } catch (e) { console.warn('Notification error:', e); }
+
+    const actionLabel = action === 'approve' ? 'تمت الموافقة' : action === 'reject' ? 'تم الرفض' : 'أُعيد للتجمع';
+    return { data: updated, success: true, message: `${actionLabel} من قِبَل ${step.label}` };
+  }
 }

@@ -397,4 +397,38 @@ export class TrainingRequestsController {
   async resumeFromHold(@Param('rowId') rowId: string, @CurrentUser() user: IAuthenticatedUser) {
     return this.traineesService.resumeFromHold(rowId, user);
   }
+
+  // ─── Phase 5: Multi-level acceptance chain (TrainingRequest level) ────────
+  @Post(':id/accept')
+  @RequireRoles(...HOSPITAL_ROLES, 'trainer', 'training_supervisor')
+  @ApiOperation({ summary: 'الموافقة على الطلب — تقدم سلسلة القبول للخطوة التالية' })
+  async acceptRequest(
+    @Param('id') id: string,
+    @Body('notes') notes?: string,
+    @CurrentUser() user?: IAuthenticatedUser,
+  ) {
+    return this.trainingRequestsService.advanceAcceptanceChain(id, 'approve', notes, user);
+  }
+
+  @Post(':id/reject')
+  @RequireRoles(...HOSPITAL_ROLES, 'trainer', 'training_supervisor')
+  @ApiOperation({ summary: 'رفض الطلب في مرحلة القبول الحالية' })
+  async rejectRequest(
+    @Param('id') id: string,
+    @Body('notes') notes?: string,
+    @CurrentUser() user?: IAuthenticatedUser,
+  ) {
+    return this.trainingRequestsService.advanceAcceptanceChain(id, 'reject', notes, user);
+  }
+
+  @Post(':id/return-to-cluster')
+  @RequireRoles(...HOSPITAL_ROLES, 'trainer', 'training_supervisor')
+  @ApiOperation({ summary: 'إعادة الطلب للتجمع الصحي من مرحلة القبول الحالية' })
+  async returnToCluster(
+    @Param('id') id: string,
+    @Body('notes') notes?: string,
+    @CurrentUser() user?: IAuthenticatedUser,
+  ) {
+    return this.trainingRequestsService.advanceAcceptanceChain(id, 'return_to_cluster', notes, user);
+  }
 }

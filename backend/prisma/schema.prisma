@@ -690,7 +690,7 @@ model TrainingRequest {
   academicIntakeId String?   @map("academic_intake_id") @db.Uuid
   studentCount     Int       @default(0) @map("student_count")
   priority         String    @default("normal") @db.VarChar(20)
-  status           String    @default("submitted") @db.VarChar(30)
+  status           String    @default("submitted") @db.VarChar(50)
   notes            String?   @db.Text
   allocations      Json      @default("[]") @db.JsonB
   createdById      String?   @map("created_by") @db.Uuid
