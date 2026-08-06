@@ -212,6 +212,50 @@ export class OrganizationAssignmentService {
   }
 
   /**
+   * Distinct member-account counts per organization, resolved from
+   * OrganizationAssignment with a UserOrganization fallback per organization.
+   *
+   * Counts distinct accounts rather than assignment rows: a user may hold several
+   * assignments in one org over time, and Prisma's relation `_count` would count
+   * each of them (plus profile-derived rows) — which is not what the legacy
+   * UserOrganization count meant.
+   */
+  async countMembershipsByOrg(organizationIds: string[]): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+    if (organizationIds.length === 0) return counts;
+
+    const rows = await this.prisma.organizationAssignment.findMany({
+      where: { organizationId: { in: organizationIds }, sourceType: { in: MEMBERSHIP_SOURCES } },
+      select: { organizationId: true, userAccountId: true },
+    });
+
+    const distinct = new Map<string, Set<string>>();
+    for (const r of rows) {
+      if (!distinct.has(r.organizationId)) distinct.set(r.organizationId, new Set());
+      distinct.get(r.organizationId)!.add(r.userAccountId);
+    }
+
+    const missing: string[] = [];
+    for (const id of organizationIds) {
+      if (distinct.has(id)) counts.set(id, distinct.get(id)!.size);
+      else missing.push(id);
+    }
+
+    // Legacy fallback only for organizations with no assignment rows at all.
+    if (missing.length > 0) {
+      const legacy = await this.prisma.userOrganization.groupBy({
+        by: ['organizationId'],
+        where: { organizationId: { in: missing } },
+        _count: { userAccountId: true },
+      });
+      for (const id of missing) counts.set(id, 0);
+      for (const g of legacy) counts.set(g.organizationId, g._count.userAccountId);
+    }
+
+    return counts;
+  }
+
+  /**
    * Mirrors a membership write into OrganizationAssignment so the new model
    * stays in step with the legacy row the caller also writes. Never removes or
    * rewrites legacy data.

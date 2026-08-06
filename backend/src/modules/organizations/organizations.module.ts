@@ -8,8 +8,10 @@ import { HospitalCapacityService } from './hospital-capacity.service';
 import { OrganizationsController } from './organizations.controller';
 import { OrganizationAffiliationsController } from './organization-affiliations.controller';
 import { HospitalCapacityController } from './hospital-capacity.controller';
+import { OrganizationAssignmentModule } from '../organization-assignments/organization-assignment.module';
 
 @Module({
+  imports: [OrganizationAssignmentModule],
   controllers: [OrganizationsController, OrganizationAffiliationsController, HospitalCapacityController],
   providers: [
     OrganizationsService,

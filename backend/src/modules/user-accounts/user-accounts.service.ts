@@ -128,12 +128,23 @@ export class UserAccountsService {
         },
       });
 
-      // Add to organization
+      // Add to organization — written to both models to keep them in step
       await tx.userOrganization.create({
         data: {
           userAccountId: account.id,
           organizationId: dto.organizationId,
           isPrimary: true,
+        },
+      });
+      await tx.organizationAssignment.create({
+        data: {
+          userAccountId: account.id,
+          organizationId: dto.organizationId,
+          isPrimary: true,
+          isActive: true,
+          assignmentType: 'permanent',
+          sourceType: 'user_organization',
+          createdById: user?.accountId,
         },
       });
 
@@ -167,14 +178,25 @@ export class UserAccountsService {
   async addUserToOrg(accountId: string, dto: AddUserToOrgDto, user?: IAuthenticatedUser) {
     const account = await this.findOne(accountId);
 
-    const existingOrg = await this.prisma.userOrganization.findUnique({
+    // Membership check reads OrganizationAssignment, falling back to the legacy
+    // row so an account that predates the migration is still detected.
+    const existingAssignment = await this.prisma.organizationAssignment.findFirst({
       where: {
-        userAccountId_organizationId: {
-          userAccountId: accountId,
-          organizationId: dto.organizationId,
-        },
+        userAccountId: accountId,
+        organizationId: dto.organizationId,
+        sourceType: { in: ['user_organization', 'user_role', 'manual'] },
       },
+      select: { id: true },
     });
+    const existingOrg = existingAssignment
+      ?? (await this.prisma.userOrganization.findUnique({
+        where: {
+          userAccountId_organizationId: {
+            userAccountId: accountId,
+            organizationId: dto.organizationId,
+          },
+        },
+      }));
 
     if (existingOrg) {
       throw new BadRequestException('المستخدم مرتبط بهذه الجهة مسبقاً');
@@ -186,6 +208,24 @@ export class UserAccountsService {
           userAccountId: accountId,
           organizationId: dto.organizationId,
           isPrimary: !!dto.isPrimary,
+        },
+      });
+      if (dto.isPrimary) {
+        // Only one assignment per user may be primary.
+        await tx.organizationAssignment.updateMany({
+          where: { userAccountId: accountId, isPrimary: true, isActive: true },
+          data: { isPrimary: false },
+        });
+      }
+      await tx.organizationAssignment.create({
+        data: {
+          userAccountId: accountId,
+          organizationId: dto.organizationId,
+          isPrimary: !!dto.isPrimary,
+          isActive: true,
+          assignmentType: 'permanent',
+          sourceType: 'user_organization',
+          createdById: user?.accountId,
         },
       });
 

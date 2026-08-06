@@ -116,6 +116,30 @@ export class OrganizationProvisioningService {
         },
       });
 
+      // Mirror the membership into OrganizationAssignment (same transaction).
+      const existingAssignment = await tx.organizationAssignment.findFirst({
+        where: { userAccountId: account.id, organizationId: org.id },
+        select: { id: true },
+      });
+      if (existingAssignment) {
+        await tx.organizationAssignment.update({
+          where: { id: existingAssignment.id },
+          data: { isActive: true },
+        });
+      } else {
+        await tx.organizationAssignment.create({
+          data: {
+            userAccountId: account.id,
+            organizationId: org.id,
+            isPrimary: true,
+            isActive: true,
+            assignmentType: 'permanent',
+            sourceType: 'user_organization',
+            createdById: actorUser?.accountId,
+          },
+        });
+      }
+
       // 6. Assign Default Role for OrgType (e.g. cluster_administrator, hospital_administrator)
       const roleCode = orgType.autoCreateRole || 'hospital_administrator';
       const defaultRole = await tx.role.findUnique({

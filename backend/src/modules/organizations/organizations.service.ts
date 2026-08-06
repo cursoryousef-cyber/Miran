@@ -4,6 +4,7 @@ import { OrganizationHierarchyService } from './organization-hierarchy.service';
 import { CapacityService } from './capacity.service';
 import { CreateOrganizationDto, UpdateOrganizationDto } from './dto/organization.dto';
 import { IAuthenticatedUser } from '../../common/interfaces';
+import { OrganizationAssignmentService } from '../organization-assignments/organization-assignment.service';
 
 @Injectable()
 export class OrganizationsService {
@@ -11,6 +12,7 @@ export class OrganizationsService {
     private prisma: PrismaService,
     private hierarchyService: OrganizationHierarchyService,
     private capacityService: CapacityService,
+    private orgAssignments: OrganizationAssignmentService,
   ) {}
 
   async findAll(page = 1, limit = 20, search?: string, typeId?: string, parentId?: string) {
@@ -43,7 +45,6 @@ export class OrganizationsService {
           _count: {
             select: {
               children: true,
-              userOrganizations: true,
               traineeProfiles: true,
               trainerProfiles: true,
               departments: true,
@@ -53,8 +54,16 @@ export class OrganizationsService {
       }),
     ]);
 
+    // Member count now comes from OrganizationAssignment; the response keeps the
+    // original _count.userOrganizations key so callers are unaffected.
+    const memberCounts = await this.orgAssignments.countMembershipsByOrg(data.map((o) => o.id));
+    const withCounts = data.map((o) => ({
+      ...o,
+      _count: { ...o._count, userOrganizations: memberCounts.get(o.id) ?? 0 },
+    }));
+
     return {
-      data,
+      data: withCounts,
       meta: {
         total,
         page,
@@ -80,7 +89,6 @@ export class OrganizationsService {
         affiliationsAsTarget: { include: { sourceOrg: true } },
         _count: {
           select: {
-            userOrganizations: true,
             traineeProfiles: true,
             trainerProfiles: true,
             departments: true,
@@ -94,7 +102,11 @@ export class OrganizationsService {
       throw new NotFoundException('الجهة غير موجودة');
     }
 
-    return org;
+    const memberCounts = await this.orgAssignments.countMembershipsByOrg([org.id]);
+    return {
+      ...org,
+      _count: { ...org._count, userOrganizations: memberCounts.get(org.id) ?? 0 },
+    };
   }
 
   async create(dto: CreateOrganizationDto, user?: IAuthenticatedUser) {
@@ -189,12 +201,13 @@ export class OrganizationsService {
         _count: {
           select: {
             traineeProfiles: true,
-            userOrganizations: true,
           },
         },
       },
       orderBy: { nameAr: 'asc' },
     });
+
+    const memberCounts = await this.orgAssignments.countMembershipsByOrg(hospitals.map((h) => h.id));
 
     return Promise.all(
       hospitals.map(async (hosp) => {
@@ -202,7 +215,7 @@ export class OrganizationsService {
           await this.capacityService.getHospitalOccupancy(hosp.id);
 
         const trainerCount = hosp.trainerProfiles.length;
-        const supervisorCount = hosp._count.userOrganizations;
+        const supervisorCount = memberCounts.get(hosp.id) ?? 0;
 
         return {
           id: hosp.id,
