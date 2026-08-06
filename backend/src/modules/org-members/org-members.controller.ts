@@ -20,10 +20,15 @@ export class OrgMembersController {
   async findAll(
     @CurrentUser() user: IAuthenticatedUser,
     @Query('roleCode') roleCode?: string,
+    @Query('status') status?: string,
     @Query('page') page?: string,
   ) {
+    const isActiveFilter = status === 'inactive' ? false : status === 'all' ? undefined : undefined;
     const userOrgs = await this.prisma.userOrganization.findMany({
-      where: { organizationId: user.organizationId, isActive: true },
+      where: {
+        organizationId: user.organizationId,
+        ...(isActiveFilter !== undefined ? { isActive: isActiveFilter } : {}),
+      },
       include: {
         userAccount: {
           include: {
@@ -36,14 +41,14 @@ export class OrgMembersController {
         },
       },
       skip: page ? (parseInt(page) - 1) * 20 : 0,
-      take: 20,
+      take: 50,
     });
 
     let members = userOrgs.map((uo) => ({
       id: uo.userAccountId,
       email: uo.userAccount.email,
       username: uo.userAccount.username,
-      isActive: uo.userAccount.isActive,
+      isActive: uo.isActive && uo.userAccount.isActive,
       nameAr: uo.userAccount.person?.nameAr,
       nameEn: uo.userAccount.person?.nameEn,
       nationalId: uo.userAccount.person?.nationalId,
@@ -57,10 +62,10 @@ export class OrgMembersController {
     }
 
     const total = await this.prisma.userOrganization.count({
-      where: { organizationId: user.organizationId, isActive: true },
+      where: { organizationId: user.organizationId },
     });
 
-    return { data: members, meta: { total, page: parseInt(page || '1'), limit: 20 } };
+    return { data: members, meta: { total, page: parseInt(page || '1'), limit: 50 } };
   }
 
   // ─── إضافة عضو جديد ──────────────────────────────────────────────────────
@@ -206,6 +211,18 @@ export class OrgMembersController {
       data: { isActive: false },
     });
     return { success: true, message: 'تم تعطيل الحساب من الجهة' };
+  }
+
+  // ─── تفعيل عضو ───────────────────────────────────────────────────────────
+  @Patch(':id/activate')
+  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'hospital_administrator')
+  @ApiOperation({ summary: 'تفعيل حساب عضو' })
+  async activate(@Param('id') accountId: string, @CurrentUser() user: IAuthenticatedUser) {
+    await this.prisma.userOrganization.update({
+      where: { userAccountId_organizationId: { userAccountId: accountId, organizationId: user.organizationId } },
+      data: { isActive: true },
+    });
+    return { success: true, message: 'تم إعادة تفعيل الحساب' };
   }
 
   // ─── إزالة دور من عضو ─────────────────────────────────────────────────────

@@ -231,7 +231,7 @@ export class LogbookController {
 
     const totalRequired = competencies.reduce((acc, curr) => acc + curr.requiredCount, 0);
     const totalCompleted = competencies.reduce((acc, curr) => acc + curr.completedCount, 0);
-    const overallPercentage = totalRequired > 0 ? Math.min(100, Math.round((totalCompleted / totalRequired) * 100)) : 88;
+    const overallPercentage = totalRequired > 0 ? Math.min(100, Math.round((totalCompleted / totalRequired) * 100)) : 0;
 
     return {
       overallPercentage,
@@ -243,31 +243,35 @@ export class LogbookController {
 
   // ─── 5. إحصائيات والتحليلات اللحظية للـ Logbook ──────────────────────────
   @Get('dashboard-stats')
-  @RequireRoles('trainee', 'trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainee', 'trainer', 'academic_supervisor', 'org_manager', 'platform_owner', 'hospital_administrator')
   @ApiOperation({ summary: 'إحصائيات Logbook اللحظية للدشبورد' })
   async getLogbookStats(@CurrentUser() user: IAuthenticatedUser) {
     let profile = await this.prisma.traineeProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
     });
-    if (!profile) profile = await this.prisma.traineeProfile.findFirst();
+    if (!profile && !user.roles.includes('platform_owner') && !user.roles.includes('org_manager') && !user.roles.includes('hospital_administrator')) {
+      profile = await this.prisma.traineeProfile.findFirst();
+    }
+
+    const whereCondition = profile ? { traineeProfileId: profile.id } : { organizationId: user.organizationId };
 
     const totalCases = await this.prisma.clinicalCaseLog.count({
-      where: profile ? { traineeProfileId: profile.id } : {},
+      where: whereCondition,
     });
 
     const approvedCases = await this.prisma.clinicalCaseLog.count({
-      where: profile ? { traineeProfileId: profile.id, status: { in: ['trainer_approved', 'completed'] } } : { status: { in: ['trainer_approved', 'completed'] } },
+      where: { ...whereCondition, status: { in: ['trainer_approved', 'completed'] } },
     });
 
     const pendingApproval = await this.prisma.clinicalCaseLog.count({
-      where: profile ? { traineeProfileId: profile.id, status: 'submitted' } : { status: 'submitted' },
+      where: { ...whereCondition, status: 'submitted' },
     });
 
     return {
-      totalCases: totalCases || 18,
-      approvedCases: approvedCases || 15,
-      pendingApproval: pendingApproval || 3,
-      completionRate: totalCases > 0 ? Math.round((approvedCases / totalCases) * 100) : 83,
+      totalCases,
+      approvedCases,
+      pendingApproval,
+      completionRate: totalCases > 0 ? Math.round((approvedCases / totalCases) * 100) : 0,
     };
   }
 }

@@ -83,6 +83,8 @@ export const OrgMembersPage: React.FC = () => {
     return matchRole && matchSearch;
   });
 
+  const [editMember, setEditMember] = useState<OrgMember | null>(null);
+
   const handleDeactivate = async (id: string) => {
     if (!window.confirm('هل تريد تعطيل هذا الحساب؟')) return;
     try {
@@ -91,6 +93,16 @@ export const OrgMembersPage: React.FC = () => {
       loadData();
     } catch (e: any) {
       setError(e.response?.data?.message || 'فشل التعطيل');
+    }
+  };
+
+  const handleActivate = async (id: string) => {
+    try {
+      await apiClient.patch(`/org-members/${id}/activate`);
+      setSuccessMsg('تم إعادة تفعيل الحساب بنجاح');
+      loadData();
+    } catch (e: any) {
+      setError(e.response?.data?.message || 'فشل التفعيل');
     }
   };
 
@@ -292,12 +304,26 @@ export const OrgMembersPage: React.FC = () => {
                   {/* Actions */}
                   <td style={{ padding: '16px 20px' }}>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      {member.isActive && (
+                      <button onClick={() => setEditMember(member)} style={{
+                        padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(6,182,212,0.3)',
+                        background: 'rgba(6,182,212,0.1)', color: '#22d3ee', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
+                      }}>
+                        تعديل
+                      </button>
+
+                      {member.isActive ? (
                         <button onClick={() => handleDeactivate(member.id)} style={{
                           padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.3)',
                           background: 'rgba(239,68,68,0.1)', color: '#f87171', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
                         }}>
                           تعطيل
+                        </button>
+                      ) : (
+                        <button onClick={() => handleActivate(member.id)} style={{
+                          padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(16,185,129,0.3)',
+                          background: 'rgba(16,185,129,0.1)', color: '#10b981', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
+                        }}>
+                          تفعيل
                         </button>
                       )}
                     </div>
@@ -318,6 +344,94 @@ export const OrgMembersPage: React.FC = () => {
           onSuccess={() => { setShowAddModal(false); setSuccessMsg('تم إضافة العضو بنجاح'); loadData(); }}
         />
       )}
+
+      {/* Edit Member Modal */}
+      {editMember && (
+        <EditMemberModal
+          member={editMember}
+          roles={roles}
+          onClose={() => setEditMember(null)}
+          onSuccess={() => { setEditMember(null); setSuccessMsg('تم تعديل بيانات العضو بنجاح'); loadData(); }}
+        />
+      )}
+    </div>
+  );
+};
+
+// ── Edit Member Modal ──────────────────────────────────────────────────────────
+interface EditMemberModalProps {
+  member: OrgMember;
+  roles: RoleDef[];
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+const EditMemberModal: React.FC<EditMemberModalProps> = ({ member, roles, onClose, onSuccess }) => {
+  const [nameAr, setNameAr] = useState(member.nameAr || '');
+  const [phone, setPhone] = useState(member.phone || '');
+  const [roleCode, setRoleCode] = useState(member.roles[0]?.code || 'trainee');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+    try {
+      await apiClient.patch(`/org-members/${member.id}`, {
+        nameAr,
+        phone,
+        roleCode,
+      });
+      onSuccess();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'فشل تعديل البيانات');
+    }
+    setIsLoading(false);
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.07)',
+    border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px',
+    color: '#f8fafc', fontSize: '14px', outline: 'none', boxSizing: 'border-box',
+    fontFamily: 'inherit',
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+      <div style={{ background: '#0f172a', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.12)', width: '100%', maxWidth: '500px', padding: '28px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#f8fafc' }}>تعديل بيانات العضو</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>البريد الإلكتروني</label>
+            <input style={{ ...inputStyle, opacity: 0.6 }} value={member.email} disabled />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', color: '#10b981', fontWeight: 600, marginBottom: '6px' }}>الاسم بالعربية</label>
+            <input style={inputStyle} value={nameAr} onChange={e => setNameAr(e.target.value)} required />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>رقم الجوال</label>
+            <input style={inputStyle} value={phone} onChange={e => setPhone(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', color: '#a78bfa', fontWeight: 600, marginBottom: '6px' }}>الدور في الجهة</label>
+            <select style={inputStyle} value={roleCode} onChange={e => setRoleCode(e.target.value)}>
+              {roles.map(r => <option key={r.id} value={r.code}>{r.nameAr}</option>)}
+            </select>
+          </div>
+          {error && <div style={{ color: '#f87171', fontSize: '13px' }}>{error}</div>}
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: '#94a3b8', cursor: 'pointer' }}>إلغاء</button>
+            <button type="submit" disabled={isLoading} style={{ flex: 2, padding: '10px', background: 'linear-gradient(135deg,#059669,#06b6d4)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
+              {isLoading ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };

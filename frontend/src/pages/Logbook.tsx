@@ -168,22 +168,22 @@ export const LogbookPage: React.FC = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
         <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>إجمالي الحالات السريرية</div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#f8fafc' }}>{statsData?.totalCases || 18} حالة</div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: '#f8fafc' }}>{statsData?.totalCases ?? 0} حالة</div>
         </div>
 
         <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>الحالات المعتمدة</div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#10b981' }}>{statsData?.approvedCases || 15} معتمدة</div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: '#10b981' }}>{statsData?.approvedCases ?? 0} معتمدة</div>
         </div>
 
         <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>بانتظار اعتماد المشرف</div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#f59e0b' }}>{statsData?.pendingApproval || 3} بانتظار</div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: '#f59e0b' }}>{statsData?.pendingApproval ?? 0} بانتظار</div>
         </div>
 
         <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>نسبة إنجاز المهارات الكلية</div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#06b6d4' }}>{competenciesData?.overallPercentage || 88}%</div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: '#06b6d4' }}>{competenciesData?.overallPercentage ?? statsData?.completionRate ?? 0}%</div>
         </div>
       </div>
 

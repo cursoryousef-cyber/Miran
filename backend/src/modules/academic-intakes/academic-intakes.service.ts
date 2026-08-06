@@ -9,7 +9,13 @@ export class AcademicIntakesService {
 
   async findAll(orgId: string, page = 1, limit = 20, academicYear?: string) {
     const skip = (page - 1) * limit;
-    const where: Record<string, unknown> = { organizationId: orgId };
+    const where: any = {
+      OR: [
+        { organizationId: orgId },
+        { traineeProfiles: { some: { OR: [{ organizationId: orgId }, { rotations: { some: { organizationId: orgId } } }] } } },
+        { trainingRequests: { some: { targetOrgId: orgId } } },
+      ],
+    };
 
     if (academicYear) where.academicYear = academicYear;
 
@@ -21,6 +27,7 @@ export class AcademicIntakesService {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
+          organization: { select: { id: true, nameAr: true, nameEn: true } },
           program: true,
           coordinator: { include: { person: true } },
           _count: { select: { traineeProfiles: true } },

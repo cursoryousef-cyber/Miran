@@ -140,33 +140,57 @@ export const AcademicIntakes: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>اسم الدفعة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الرمز (Code)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>السنة الأكاديمية</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>البرنامج التدريبي</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الطاقة الاستيعابية</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الدفعة (Batch)</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الجامعة (University)</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>البرنامج (Program)</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>تاريخ البداية (Start Date)</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>تاريخ النهاية (End Date)</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>عدد المتدربين (Interns)</TableCell>
+              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة (Status)</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} align="center"><CircularProgress size={24} /></TableCell>
+                <TableCell colSpan={7} align="center"><CircularProgress size={24} /></TableCell>
               </TableRow>
             ) : intakesData?.data?.length > 0 ? (
               intakesData.data.map((intake: any) => (
                 <TableRow key={intake.id}>
-                  <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>{intake.nameAr}</TableCell>
-                  <TableCell style={{ fontFamily: 'monospace', color: '#06b6d4' }}>{intake.code}</TableCell>
-                  <TableCell>{intake.academicYear}</TableCell>
-                  <TableCell style={{ color: '#34d399' }}>{intake.program?.nameAr || 'برنامج امتياز الطب'}</TableCell>
-                  <TableCell style={{ fontWeight: 700 }}>{intake.capacity} متدرب</TableCell>
-                  <TableCell><Chip label="نشطة (Active)" color="success" size="small" /></TableCell>
+                  <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>
+                    {intake.nameAr}
+                    <div style={{ fontFamily: 'monospace', fontSize: '11px', color: '#06b6d4' }}>{intake.code}</div>
+                  </TableCell>
+                  <TableCell style={{ color: '#cbd5e1', fontWeight: 600 }}>
+                    {intake.organization?.nameAr || 'جامعة الحدود الشمالية'}
+                  </TableCell>
+                  <TableCell style={{ color: '#34d399', fontWeight: 600 }}>
+                    {intake.program?.nameAr || 'برنامج امتياز الطب البشري'}
+                  </TableCell>
+                  <TableCell style={{ color: '#94a3b8', fontSize: '13px' }}>
+                    {intake.startDate ? new Date(intake.startDate).toISOString().split('T')[0] : '2026-07-01'}
+                  </TableCell>
+                  <TableCell style={{ color: '#94a3b8', fontSize: '13px' }}>
+                    {intake.endDate ? new Date(intake.endDate).toISOString().split('T')[0] : '2027-06-30'}
+                  </TableCell>
+                  <TableCell style={{ fontWeight: 700, color: '#10b981' }}>
+                    {intake._count?.traineeProfiles || intake.capacity || 50} متدرب
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={intake.status === 'active' || intake.status === 'planned' ? 'نشطة (Active)' : intake.status}
+                      color="success"
+                      size="small"
+                      style={{ fontWeight: 700 }}
+                    />
+                  </TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={6} align="center" style={{ color: '#94a3b8' }}>لا توجد دفعات أكاديمية مسجلة حالياً</TableCell>
+                <TableCell colSpan={7} align="center" style={{ color: '#94a3b8', padding: '32px' }}>
+                  لا توجد دفعات أكاديمية مخصصة لهذا المستشفى حالياً
+                </TableCell>
               </TableRow>
             )}
           </TableBody>
