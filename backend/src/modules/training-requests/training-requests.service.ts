@@ -4,6 +4,7 @@ import { CreateTrainingRequestDto, UpdateTrainingRequestDto } from './dto/traini
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { NotificationService } from '../notifications/notification.service';
 import { CapacityService } from '../organizations/capacity.service';
+import { AllocationEngineService } from './allocation-engine.service';
 import {
   assertValidTransition,
   TRAINING_REQUEST_TRANSITIONS,
@@ -16,6 +17,7 @@ export class TrainingRequestsService {
     private prisma: PrismaService,
     private notificationService: NotificationService,
     private capacityService: CapacityService,
+    private allocationEngine: AllocationEngineService,
   ) {}
 
   async findAll(orgId?: string, page = 1, limit = 20) {
@@ -207,94 +209,116 @@ export class TrainingRequestsService {
     });
     if (!request) throw new NotFoundException('طلب التدريب غير موجود');
 
-    // 1. Fetch hospitals within target cluster
-    const hospitals = await this.prisma.organization.findMany({
-      where: {
-        parentId: request.targetOrgId,
-        status: 'active',
-        deletedAt: null,
-      },
-      include: {
-        departments: { where: { isActive: true } },
-        _count: { select: { traineeProfiles: true } },
-      },
-    });
+    // Run intelligent placement engine across all cluster_approved rows
+    const rowResults = await this.allocationEngine.allocateRequest(
+      id,
+      request.targetOrgId,
+      user?.accountId,
+    );
 
-    if (hospitals.length === 0) {
-      throw new BadRequestException('لا توجد مستشفيات مفعّلة تابعة للتجمع الصحي لتوزيع الطلاب عليها');
-    }
+    const allocated = rowResults.filter((r) => r.allocated).length;
+    const failed = rowResults.filter((r) => !r.allocated).length;
 
-    // 2. Fetch unassigned trainees for this intake/request
-    const trainees = await this.prisma.traineeProfile.findMany({
-      where: {
-        academicIntakeId: request.academicIntakeId || undefined,
-      },
-      include: { person: true },
-    });
+    // Update TrainingRequest status if at least one row was allocated
+    if (allocated > 0) {
+      assertValidTransition(
+        'طلب التدريب',
+        request.status,
+        TRAINING_REQUEST_STATUS.AUTO_ALLOCATED,
+        TRAINING_REQUEST_TRANSITIONS,
+      );
 
-    const totalToAllocate = trainees.length > 0 ? trainees.length : request.studentCount;
-    let remaining = totalToAllocate;
-    const allocations: any[] = [];
+      const allocationSummary = rowResults.map((r) => ({
+        rowId: r.rowId,
+        hospitalId: r.hospitalId,
+        hospitalName: r.hospitalName,
+        departmentId: r.departmentId,
+        allocated: r.allocated,
+        score: r.score,
+        reason: r.reason,
+      }));
 
-    // 3. Allocate evenly or based on capacity
-    for (const hosp of hospitals) {
-      if (remaining <= 0) break;
-      const { capacity: totalCap, occupied: currentOccupied, available: availableSeats } =
-        await this.capacityService.getHospitalOccupancy(hosp.id);
+      await this.prisma.trainingRequest.update({
+        where: { id },
+        data: {
+          allocations: allocationSummary,
+          status: 'auto_allocated',
+          updatedById: user?.accountId,
+        },
+      });
 
-      if (availableSeats <= 0) continue;
-
-      const takeSeats = Math.min(remaining, availableSeats);
-      remaining -= takeSeats;
-
-      allocations.push({
-        hospitalId: hosp.id,
-        hospitalCode: hosp.code,
-        hospitalName: hosp.nameAr,
-        capacity: totalCap,
-        occupied: currentOccupied,
-        available: availableSeats,
-        allocatedSeats: takeSeats,
-        status: 'allocated',
+      await this.prisma.auditLog.create({
+        data: {
+          organizationId: request.targetOrgId,
+          actorId: user?.accountId,
+          action: 'auto_allocate_training_request',
+          entityType: 'TrainingRequest',
+          entityId: id,
+          newValues: {
+            status: 'auto_allocated',
+            allocatedCount: allocated,
+            failedCount: failed,
+            summary: allocationSummary,
+          },
+        },
       });
     }
 
-    if (allocations.length === 0 && totalToAllocate > 0) {
+    if (allocated === 0) {
       throw new BadRequestException(
-        'تعذر التوزيع: لا توجد مقاعد شاغرة في أي مستشفى تابع للتجمع الصحي. يرجى مراجعة الطاقة الاستيعابية المعلنة من المستشفيات.',
+        'تعذر التوزيع: لم يجتز أي متدرب سلسلة التحقق من الطاقة الاستيعابية. يرجى مراجعة الطاقة المعلنة من المستشفيات.',
       );
     }
 
-    assertValidTransition(
-      'طلب التدريب',
-      request.status,
-      TRAINING_REQUEST_STATUS.AUTO_ALLOCATED,
-      TRAINING_REQUEST_TRANSITIONS,
-    );
-
-    const updated = await this.prisma.trainingRequest.update({
+    const updated = await this.prisma.trainingRequest.findUnique({
       where: { id },
-      data: {
-        allocations,
-        status: 'auto_allocated',
-        updatedById: user?.accountId,
-      },
       include: { sourceOrg: true, targetOrg: true, academicIntake: true },
     });
 
-    // Record audit trail
-    await this.prisma.auditLog.create({
-      data: {
-        organizationId: request.targetOrgId,
-        actorId: user?.accountId,
-        action: 'auto_allocate_training_request',
-        entityType: 'TrainingRequest',
-        entityId: id,
-        newValues: { allocations, status: 'auto_allocated' },
-      },
-    });
+    return {
+      data: updated,
+      rowResults,
+      success: true,
+      message: `تم التوزيع الذكي: ${allocated} متدرب مُوزَّع${failed > 0 ? ` — ${failed} لم يُوزَّع (تحتاج مراجعة الطاقة)` : ' بنجاح'}`,
+    };
+  }
 
-    return { data: updated, success: true, message: 'تم التوزيع الذكي للطلاب بنجاح بناءً على الطاقة الاستيعابية للمستشفيات' };
+  // ─── Manual Row Allocation Override ───────────────────────────────────────
+  async allocateTraineeRow(
+    rowId: string,
+    hospitalId: string | undefined,
+    user: IAuthenticatedUser,
+  ) {
+    const row = await this.prisma.trainingRequestTrainee.findUnique({
+      where: { id: rowId },
+    });
+    if (!row) throw new NotFoundException('صف المتدرب غير موجود');
+
+    if (!['cluster_approved', 'allocated'].includes(row.status)) {
+      throw new BadRequestException(
+        `لا يمكن إعادة توزيع صف بحالة "${row.status}". يجب أن يكون بحالة cluster_approved أو allocated`,
+      );
+    }
+
+    const result = await this.allocationEngine.reallocateRow(
+      rowId,
+      user.accountId,
+      hospitalId,
+    );
+
+    if (!result.allocated) {
+      return {
+        success: false,
+        result,
+        message: result.reason,
+      };
+    }
+
+    return {
+      success: true,
+      result,
+      message: `تم تعيين المتدرب إلى ${result.hospitalName} (تقييم: ${result.score?.toFixed(1)})`,
+    };
   }
 
   // ─── Capacity Validation Check ─────────────────────────────────────────────

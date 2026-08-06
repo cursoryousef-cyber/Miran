@@ -286,4 +286,19 @@ export class TrainingRequestsController {
   ) {
     return this.traineesService.resubmitTrainee(rowId, dto, user);
   }
+
+  // ─── التوزيع اليدوي / إعادة التوزيع لصف فردي ─────────────────────────────
+
+  @Patch('trainees/:rowId/allocation')
+  @RequireRoles(...CLUSTER_ROLES)
+  @ApiOperation({
+    summary: 'تعيين أو إعادة تعيين متدرب يدوياً لمستشفى محدد عبر سلسلة التحقق الكاملة',
+  })
+  async allocateRow(
+    @Param('rowId') rowId: string,
+    @Body() body: { hospitalId?: string },
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    return this.trainingRequestsService.allocateTraineeRow(rowId, body.hospitalId, user);
+  }
 }

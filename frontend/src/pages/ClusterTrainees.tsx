@@ -69,6 +69,8 @@ export const ClusterTrainees: React.FC = () => {
 
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [allocationResults, setAllocationResults] = useState<any[] | null>(null);
+  const [openResultsModal, setOpenResultsModal] = useState(false);
 
   // Excel Upload State
   const [parsedRows, setParsedRows] = useState<any[]>([]);
@@ -227,18 +229,30 @@ export const ClusterTrainees: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['hospitals-cards'] });
       queryClient.invalidateQueries({ queryKey: ['training-requests'] });
       setOpenAutoModal(false);
-      setSuccessMsg(res.data?.message || 'تم التوزيع الذكي للطلاب بنجاح بناءً على الطاقة الاستيعابية للأقسام والمستشفيات.');
+      if (res.data?.rowResults) {
+        setAllocationResults(res.data.rowResults);
+        setOpenResultsModal(true);
+      }
+      setSuccessMsg(res.data?.message || 'تم التوزيع الذكي بنجاح');
     },
     onError: (err: any) => {
       setErrorMsg(err.response?.data?.message || err.message || 'فشل التوزيع الآلي');
     },
   });
 
-  // 8. Reallocation Mutation
+  // 8. Reallocation Mutation — uses the new intelligent placement engine endpoint
   const reallocateMutation = useMutation({
     mutationFn: async () => {
+      // For TrainingRequestTrainee rows use the engine endpoint; fall back to legacy for TraineeProfile
+      const rowId = selectedTraineeForRealloc?.rowId || selectedTraineeForRealloc?.id;
+      if (selectedTraineeForRealloc?.rowId) {
+        return apiClient.patch(`/training-requests/trainees/${rowId}/allocation`, {
+          hospitalId: targetHospitalId || undefined,
+        });
+      }
+      // Legacy TraineeProfile reallocation (still works for already-active trainees)
       return apiClient.post('/trainees/reallocate', {
-        traineeProfileId: selectedTraineeForRealloc.id,
+        traineeProfileId: rowId,
         targetHospitalId,
         departmentId: targetDeptId || undefined,
         trainerProfileId: targetTrainerId || undefined,
@@ -250,7 +264,11 @@ export const ClusterTrainees: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['incoming-trainees'] });
       queryClient.invalidateQueries({ queryKey: ['hospitals-cards'] });
       setOpenReallocModal(false);
-      setSuccessMsg(res.data?.message || 'تم إعادة توزيع ونقل المتدرب ونقل الأعمال المعلقة بنجاح');
+      if (res.data?.result?.evaluations) {
+        setAllocationResults([res.data.result]);
+        setOpenResultsModal(true);
+      }
+      setSuccessMsg(res.data?.message || 'تم إعادة توزيع المتدرب بنجاح');
       setSelectedTraineeForRealloc(null);
     },
     onError: (err: any) => {
@@ -597,7 +615,90 @@ export const ClusterTrainees: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Modal 3: Excel Import Preview Modal */}
+      {/* Modal 3: Allocation Results Audit Trail */}
+      <Dialog open={openResultsModal} onClose={() => setOpenResultsModal(false)} maxWidth="lg" fullWidth>
+        <DialogTitle style={{ fontWeight: 800, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>نتائج التوزيع الذكي — سجل التدقيق الكامل</span>
+          <Chip
+            label={`${allocationResults?.filter((r) => r.allocated).length} موزَّع / ${allocationResults?.filter((r) => !r.allocated).length} فاشل`}
+            color={allocationResults?.some((r) => !r.allocated) ? 'warning' : 'success'}
+            style={{ fontWeight: 700 }}
+          />
+        </DialogTitle>
+        <DialogContent style={{ paddingTop: '16px' }}>
+          <TableContainer component={Paper} style={{ maxHeight: '500px' }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell style={{ fontWeight: 700, minWidth: 120 }}>صف المتدرب</TableCell>
+                  <TableCell style={{ fontWeight: 700 }}>الحالة</TableCell>
+                  <TableCell style={{ fontWeight: 700 }}>المستشفى المختار</TableCell>
+                  <TableCell style={{ fontWeight: 700 }}>التقييم</TableCell>
+                  <TableCell style={{ fontWeight: 700 }}>تفاصيل كل مستشفى</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(allocationResults || []).map((row: any) => (
+                  <TableRow key={row.rowId} style={{ backgroundColor: row.allocated ? 'rgba(16,185,129,0.05)' : 'rgba(239,68,68,0.05)' }}>
+                    <TableCell style={{ fontFamily: 'monospace', fontSize: '11px', color: '#94a3b8' }}>
+                      {row.rowId?.slice(0, 8)}…
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={row.allocated ? 'تم التوزيع' : 'فشل التوزيع'}
+                        color={row.allocated ? 'success' : 'error'}
+                        size="small"
+                        style={{ fontWeight: 700 }}
+                      />
+                    </TableCell>
+                    <TableCell style={{ color: '#f59e0b', fontWeight: 700 }}>
+                      {row.hospitalName || '—'}
+                      {row.score !== undefined && (
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>تقييم: {row.score?.toFixed(1)}</div>
+                      )}
+                    </TableCell>
+                    <TableCell style={{ fontSize: '12px', maxWidth: 200 }}>
+                      <span style={{ color: row.allocated ? '#10b981' : '#ef4444' }}>{row.reason}</span>
+                    </TableCell>
+                    <TableCell style={{ maxWidth: 350 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {(row.evaluations || []).map((ev: any, idx: number) => (
+                          <div
+                            key={idx}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              backgroundColor: ev.passed ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                              fontSize: '11px',
+                            }}
+                          >
+                            <span style={{ color: ev.passed ? '#10b981' : '#ef4444', fontWeight: 700 }}>
+                              {ev.passed ? '✓' : '✗'} {ev.hospitalName}
+                            </span>
+                            {ev.passed ? (
+                              <span style={{ color: '#94a3b8' }}>تقييم: {ev.score?.toFixed(1)}</span>
+                            ) : (
+                              <span style={{ color: '#fca5a5', maxWidth: 180, textAlign: 'left' }}>{ev.failureReason}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenResultsModal(false)} variant="contained">إغلاق</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal: Excel Import Preview */}
       <Dialog open={openImportModal} onClose={() => setOpenImportModal(false)} maxWidth="md" fullWidth>
         <DialogTitle style={{ fontWeight: 800 }}>معاينة ونتائج تدقيق ملف Excel (Excel Import Preview)</DialogTitle>
         <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '16px' }}>

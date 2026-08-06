@@ -3,6 +3,7 @@ import { TrainingRequestsController } from './training-requests.controller';
 import { TrainingRequestsService } from './training-requests.service';
 import { TrainingRequestTraineesService } from './training-request-trainees.service';
 import { ValidationEngineService } from './validation-engine.service';
+import { AllocationEngineService } from './allocation-engine.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
@@ -10,7 +11,17 @@ import { OrganizationsModule } from '../organizations/organizations.module';
 @Module({
   imports: [PrismaModule, NotificationsModule, OrganizationsModule],
   controllers: [TrainingRequestsController],
-  providers: [TrainingRequestsService, TrainingRequestTraineesService, ValidationEngineService],
-  exports: [TrainingRequestsService, TrainingRequestTraineesService, ValidationEngineService],
+  providers: [
+    TrainingRequestsService,
+    TrainingRequestTraineesService,
+    ValidationEngineService,
+    AllocationEngineService,
+  ],
+  exports: [
+    TrainingRequestsService,
+    TrainingRequestTraineesService,
+    ValidationEngineService,
+    AllocationEngineService,
+  ],
 })
 export class TrainingRequestsModule {}
