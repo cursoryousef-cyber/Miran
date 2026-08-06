@@ -18,14 +18,18 @@ async function bootstrap() {
   // Security headers
   app.use(helmet());
 
-  // CORS setup
-  const corsOrigins = process.env.CORS_ORIGIN
+  // CORS setup — explicit list; dev includes localhost origins
+  const prodOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
-    : '*';
+    : [];
+  const devOrigins = process.env.NODE_ENV === 'production'
+    ? []
+    : ['http://localhost:5173', 'http://localhost:3001', 'http://127.0.0.1:5173'];
+  const allowedOrigins = [...prodOrigins, ...devOrigins];
 
   app.enableCors({
-    origin: corsOrigins,
-    credentials: true,
+    origin: allowedOrigins.length ? allowedOrigins : '*',
+    credentials: allowedOrigins.length > 0,
   });
 
   // Global Prefix & API Versioning
