@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
-  CheckCircle2, XCircle, ArrowRightLeft, FileText, Edit3, PauseCircle, PlayCircle, AlertTriangle,
+  XCircle, ArrowRightLeft, FileText, Edit3, PauseCircle, PlayCircle, AlertTriangle,
 } from 'lucide-react';
 import {
   Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
@@ -43,6 +43,28 @@ export const HospitalReview: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const orgId = user?.activeOrganization?.id;
+
+  // Load departments and trainers for assignment dialog
+  const { data: deptData } = useQuery({
+    queryKey: ['org-departments', orgId],
+    queryFn: async () => {
+      const res = await apiClient.get('/org-members/departments');
+      return res.data?.data || [];
+    },
+    enabled: !!orgId,
+  });
+
+  const { data: trainerData } = useQuery({
+    queryKey: ['org-trainers', orgId],
+    queryFn: async () => {
+      const res = await apiClient.get('/org-members', { params: { role: 'trainer' } });
+      return res.data?.data || [];
+    },
+    enabled: !!orgId,
+  });
+
+  const departments: any[] = deptData || [];
+  const trainers: any[] = trainerData || [];
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['hospital-review-trainees', orgId],
@@ -351,8 +373,24 @@ export const HospitalReview: React.FC = () => {
         <DialogTitle style={{ fontWeight: 800 }}>تعديل التعيين</DialogTitle>
         <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <Alert severity="info">المتدرب: <strong>{selectedRow?.nameAr}</strong></Alert>
-          <TextField label="معرف القسم الجديد (UUID)" value={newDeptId} onChange={(e) => setNewDeptId(e.target.value)} fullWidth size="small" />
-          <TextField label="معرف المدرب الجديد (UUID)" value={newTrainerId} onChange={(e) => setNewTrainerId(e.target.value)} fullWidth size="small" />
+          <FormControl fullWidth size="small">
+            <InputLabel>القسم المستهدف</InputLabel>
+            <Select value={newDeptId} onChange={(e) => setNewDeptId(e.target.value)} label="القسم المستهدف">
+              <MenuItem value="">— بدون تغيير —</MenuItem>
+              {departments.map((d: any) => (
+                <MenuItem key={d.id} value={d.id}>{d.nameAr}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl fullWidth size="small">
+            <InputLabel>المدرب السريري</InputLabel>
+            <Select value={newTrainerId} onChange={(e) => setNewTrainerId(e.target.value)} label="المدرب السريري">
+              <MenuItem value="">— بدون تغيير —</MenuItem>
+              {trainers.map((t: any) => (
+                <MenuItem key={t.id} value={t.id}>{t.nameAr || t.email}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <TextField type="date" label="تاريخ البداية المعدَّل" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} fullWidth size="small" InputLabelProps={{ shrink: true }} />
           <TextField type="date" label="تاريخ النهاية المعدَّل" value={newEndDate} onChange={(e) => setNewEndDate(e.target.value)} fullWidth size="small" InputLabelProps={{ shrink: true }} />
           <TextField label="سبب التعديل" value={notes} onChange={(e) => setNotes(e.target.value)} fullWidth size="small" />

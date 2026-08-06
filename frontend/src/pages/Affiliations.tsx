@@ -103,10 +103,15 @@ export const Affiliations: React.FC = () => {
       resubmitted: { label: 'مُعاد الإرسال', color: 'info' },
       auto_allocated: { label: 'موزع (آلي)', color: 'success' },
       manually_reallocated: { label: 'موزع (يدوي)', color: 'success' },
-      approved: { label: 'مُعتمد', color: 'success' },
+      approved: { label: 'مُعتمد — بانتظار المستشفى', color: 'success' },
       allocated: { label: 'موزع', color: 'success' },
       rejected: { label: 'مرفوض', color: 'error' },
       active: { label: 'نشط', color: 'success' },
+      hospital_administrator_accepted: { label: 'قبِل المستشفى — بانتظار المشرف', color: 'info' },
+      hospital_accepted: { label: 'قبِل المستشفى', color: 'info' },
+      training_supervisor_accepted: { label: 'قبِل المشرف — بانتظار المدرب', color: 'info' },
+      trainer_accepted: { label: 'قبِل المدرب', color: 'info' },
+      hospital_returned_to_cluster: { label: 'أُعيد للتجمع من المستشفى', color: 'warning' },
     };
     const s = statusMap[status] || { label: status, color: 'default' as const };
     return <Chip label={s.label} color={s.color} size="small" />;

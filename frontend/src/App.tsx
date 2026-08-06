@@ -31,6 +31,9 @@ import { AuditLogs } from './pages/AuditLogs';
 import { RolesManagement } from './pages/RolesManagement';
 import { LogbookPage } from './pages/Logbook';
 import { HospitalReview } from './pages/HospitalReview';
+import { AcceptanceChain } from './pages/AcceptanceChain';
+import { Incidents } from './pages/Incidents';
+import { Graduation } from './pages/Graduation';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -106,6 +109,9 @@ export const App: React.FC = () => {
                   <Route path="corrections" element={<RoleRoute allowedRoles={UNIVERSITY}><UniversityCorrections /></RoleRoute>} />
                   <Route path="hospital-capacity" element={<RoleRoute allowedRoles={['hospital_administrator', ...PLATFORM]}><HospitalCapacity /></RoleRoute>} />
                   <Route path="hospital-review" element={<RoleRoute allowedRoles={[...HOSPITAL, ...PLATFORM]}><HospitalReview /></RoleRoute>} />
+                  <Route path="acceptance-chain" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, 'training_supervisor', ...PLATFORM]}><AcceptanceChain /></RoleRoute>} />
+                  <Route path="incidents" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...CLUSTER, TRAINEE[0], ...PLATFORM]}><Incidents /></RoleRoute>} />
+                  <Route path="graduation" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, 'training_supervisor', 'university_administrator', ...PLATFORM]}><Graduation /></RoleRoute>} />
 
                   {/* Hospital + Trainer */}
                   <Route path="org-members" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...UNIVERSITY]}><OrgMembersPage /></RoleRoute>} />

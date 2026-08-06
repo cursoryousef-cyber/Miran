@@ -23,6 +23,8 @@ import {
   Network,
   RotateCcw,
   BedDouble,
+  AlertTriangle,
+  CheckSquare,
 } from 'lucide-react';
 
 // ─── Navigation definitions per role ───────────────────────────────────────
@@ -66,17 +68,23 @@ const clusterNav: NavItem[] = [
 const hospitalNav: NavItem[] = [
   { name: 'لوحة المستشفى', path: '/', icon: Stethoscope },
   { name: 'الطاقة الاستيعابية', path: '/hospital-capacity', icon: BedDouble },
+  { name: 'سلسلة القبول', path: '/acceptance-chain', icon: CheckSquare },
   { name: 'مراجعة المتدربين الواردين', path: '/hospital-review', icon: ShieldCheck },
   { name: 'الروتيشنات والأقسام', path: '/intakes', icon: ClipboardList },
   { name: 'المتدربون والمدربون', path: '/org-members', icon: UserCog },
   { name: 'السجل السريري (Logbook)', path: '/logbook', icon: BookOpen },
+  { name: 'البلاغات والحوادث', path: '/incidents', icon: AlertTriangle },
+  { name: 'إدارة التخرج', path: '/graduation', icon: GraduationCap },
 ];
 
 // Trainer
 const trainerNav: NavItem[] = [
   { name: 'لوحة المدرب', path: '/', icon: Stethoscope },
+  { name: 'سلسلة القبول', path: '/acceptance-chain', icon: CheckSquare },
   { name: 'متدربيّ المسندين', path: '/org-members', icon: UserCog },
   { name: 'Logbook والتقييمات', path: '/logbook', icon: BookOpen },
+  { name: 'البلاغات والحوادث', path: '/incidents', icon: AlertTriangle },
+  { name: 'إدارة التخرج', path: '/graduation', icon: GraduationCap },
 ];
 
 // Trainee
@@ -84,6 +92,7 @@ const traineeNav: NavItem[] = [
   { name: 'لوحة طبيب الامتياز', path: '/', icon: LayoutDashboard },
   { name: 'السجل السريري (Logbook)', path: '/logbook', icon: BookOpen },
   { name: 'الإقرارات والبطاقة الرقمية', path: '/declarations', icon: FileSignature },
+  { name: 'البلاغات والحوادث', path: '/incidents', icon: AlertTriangle },
 ];
 
 // Academic Supervisor
