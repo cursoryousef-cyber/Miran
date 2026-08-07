@@ -8,9 +8,6 @@ import { WorkspaceOverview } from './WorkspaceOverview';
 import { TrainerCards } from './TrainerCards';
 const CallsHub = lazy(() => import('./CallsHub').then(m => ({ default: m.CallsHub })));
 
-// Existing pages are mounted as sections rather than reimplemented, so every
-// workflow they own — capacity editing, acceptance, reassignment, leave,
-// logbook, incidents, graduation — keeps behaving exactly as before.
 import { HospitalCapacity } from '../HospitalCapacity';
 import { HospitalReview } from '../HospitalReview';
 import { AcceptanceChain } from '../AcceptanceChain';
@@ -19,14 +16,6 @@ import { TrainerLeaveManagement } from '../TrainerLeaveManagement';
 import { LogbookPage } from '../Logbook';
 import { Incidents } from '../Incidents';
 import { Graduation } from '../Graduation';
-
-/**
- * The hospital operational workspace — one page for everything a hospital runs.
- *
- * The tab key lives in the query string so a section can be linked to directly
- * and survives a refresh, which is what lets the old standalone routes redirect
- * here without losing their destination.
- */
 
 interface Section {
   key: string;
@@ -65,35 +54,38 @@ export const HospitalWorkspace: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div
-        className="glass-card"
         style={{
           padding: '28px 32px',
-          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(15, 23, 42, 0.9) 100%)',
-          border: '1px solid rgba(245, 158, 11, 0.3)',
+          background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)',
+          borderRadius: 16,
+          color: '#FFFFFF',
+          boxShadow: '0 4px 14px rgba(15, 118, 110, 0.25)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <Stethoscope size={20} color="#f59e0b" />
-          <span style={{ fontSize: 12, color: '#f59e0b', fontWeight: 700 }}>Hospital Operational Workspace</span>
+          <Stethoscope size={20} color="#CCFBF1" />
+          <span style={{ fontSize: 12, color: '#CCFBF1', fontWeight: 700, letterSpacing: '0.5px' }}>
+            HOSPITAL OPERATIONAL WORKSPACE
+          </span>
         </div>
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+        <h1 style={{ fontSize: 26, fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
           {user?.activeOrganization?.nameAr ?? 'مساحة عمل المستشفى'}
         </h1>
-        <p style={{ fontSize: 13, color: '#cbd5e1', marginTop: 6 }}>
-          مركز العمليات — السعة والمدربون والنداءات والطلبات والروتيشنات والتقييمات والتخرج في مكان واحد
+        <p style={{ fontSize: 13, color: '#F0FDF4', marginTop: 6, opacity: 0.9 }}>
+          مركز العمليات الشامل — إدارة الطاقة الاستيعابية والمدربين والنداءات والتقييمات والسجل السريري والتخرج
         </p>
       </div>
 
-      <Box sx={{ borderBottom: 1, borderColor: 'rgba(255,255,255,0.08)' }}>
+      <Box sx={{ borderBottom: 1, borderColor: '#E2E8F0' }}>
         <Tabs
           value={active}
           onChange={(_, v) => goTo(v)}
           variant="scrollable"
           scrollButtons="auto"
           sx={{
-            '& .MuiTab-root': { color: '#94a3b8', fontWeight: 700, fontSize: 13, minHeight: 44 },
-            '& .Mui-selected': { color: '#f59e0b !important' },
-            '& .MuiTabs-indicator': { backgroundColor: '#f59e0b' },
+            '& .MuiTab-root': { color: '#64748B', fontWeight: 700, fontSize: 13.5, minHeight: 46 },
+            '& .Mui-selected': { color: '#0F766E !important' },
+            '& .MuiTabs-indicator': { backgroundColor: '#0F766E', height: 3 },
           }}
         >
           {SECTIONS.map((s) => <Tab key={s.key} value={s.key} label={s.label} />)}
@@ -102,8 +94,8 @@ export const HospitalWorkspace: React.FC = () => {
 
       <div>
         <Suspense fallback={
-          <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
-            <CircularProgress size={30} style={{ color: '#f59e0b' }} />
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+            <CircularProgress size={32} style={{ color: '#0F766E' }} />
           </div>
         }>
           {section.render(goTo)}

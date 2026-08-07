@@ -49,22 +49,20 @@ interface TrainerCall {
 // ─── State badge helpers ──────────────────────────────────────────────────────
 
 const STATE_META: Record<string, { label: string; color: string; bg: string }> = {
-  notified:           { label: 'مُبلَّغ',         color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' },
-  acknowledged:       { label: 'أكّد الاستلام',   color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
-  self_arrived:       { label: 'في الطريق',       color: '#06b6d4', bg: 'rgba(6,182,212,0.12)' },
-  confirmed_arrived:  { label: 'وصل ✓',           color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
-  no_show:            { label: 'لم يحضر',         color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
+  notified:           { label: 'مُبلَّغ',         color: '#64748B', bg: '#F1F5F9' },
+  acknowledged:       { label: 'أكّد الاستلام',   color: '#B45309', bg: '#FEF3C7' },
+  self_arrived:       { label: 'في الطريق',       color: '#0891B2', bg: '#CFFAFE' },
+  confirmed_arrived:  { label: 'وصل ✓',           color: '#0F766E', bg: '#CCFBF1' },
+  no_show:            { label: 'لم يحضر',         color: '#DC2626', bg: '#FEE2E2' },
 };
 
 const CALL_TYPE_META: Record<string, { label: string; icon: string; accent: string }> = {
-  urgent:           { label: 'حالة عاجلة',           icon: '🚨', accent: '#ef4444' },
-  interesting_case: { label: 'حالة مثيرة للاهتمام', icon: '🔬', accent: '#f59e0b' },
-  skill_training:   { label: 'تدريب على مهارة',     icon: '🩺', accent: '#06b6d4' },
-  teaching_round:   { label: 'راوند تعليمي',        icon: '📚', accent: '#8b5cf6' },
-  general:          { label: 'عام',                  icon: '📢', accent: '#10b981' },
+  urgent:           { label: 'حالة عاجلة',           icon: '🚨', accent: '#DC2626' },
+  interesting_case: { label: 'حالة مثيرة للاهتمام', icon: '🔬', accent: '#B45309' },
+  skill_training:   { label: 'تدريب على مهارة',     icon: '🩺', accent: '#0891B2' },
+  teaching_round:   { label: 'راوند تعليمي',        icon: '📚', accent: '#7E22CE' },
+  general:          { label: 'عام',                  icon: '📢', accent: '#0F766E' },
 };
-
-// ─── Component ───────────────────────────────────────────────────────────────
 
 export const CallsHub: React.FC = () => {
   const { primaryRole } = useAuth();
@@ -74,13 +72,11 @@ export const CallsHub: React.FC = () => {
     'training_supervisor', 'cluster_administrator'].includes(primaryRole ?? '');
   const isTrainee = primaryRole === 'trainee';
 
-  // Launch form state
   const [launching, setLaunching] = useState(false);
   const [launchMsg, setLaunchMsg] = useState<string | null>(null);
   const [ending, setEnding] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
 
-  // ── Trainer: active calls ──────────────────────────────────────────────────
   const { data: activeData, refetch: refetchActive } = useQuery({
     queryKey: ['calls-active'],
     queryFn: async () => {
@@ -91,7 +87,6 @@ export const CallsHub: React.FC = () => {
     enabled: isTrainer,
   });
 
-  // ── Trainer: history ──────────────────────────────────────────────────────
   const { data: historyData } = useQuery({
     queryKey: ['calls-history'],
     queryFn: async () => {
@@ -101,7 +96,6 @@ export const CallsHub: React.FC = () => {
     enabled: isTrainer,
   });
 
-  // ── Trainer: diligence scores ─────────────────────────────────────────────
   const { data: diligenceData } = useQuery({
     queryKey: ['calls-diligence'],
     queryFn: async () => {
@@ -111,176 +105,178 @@ export const CallsHub: React.FC = () => {
     enabled: isTrainer,
   });
 
-  // ── Trainee: incoming calls ───────────────────────────────────────────────
   const { data: incomingData, refetch: refetchIncoming } = useQuery({
     queryKey: ['calls-my-incoming'],
     queryFn: async () => {
       const r = await apiClient.get('/calls/my-incoming');
       return r.data?.data ?? [];
     },
-    refetchInterval: isTrainee ? 10000 : false,
+    refetchInterval: isTrainee ? 6000 : false,
     enabled: isTrainee,
   });
 
-  const activeIncoming = (incomingData ?? []).filter((p: any) => p.call?.status === 'active');
-
-  // ── Launch a call ─────────────────────────────────────────────────────────
   const handleLaunch = async () => {
-    const callType = (document.getElementById('launch-type') as HTMLInputElement)?.value ?? 'urgent';
-    const customTitle = (document.getElementById('launch-title') as HTMLInputElement)?.value;
-    const note = (document.getElementById('launch-note') as HTMLTextAreaElement)?.value;
-    const location = (document.getElementById('launch-location') as HTMLInputElement)?.value;
-    const expectedMinutes = parseInt((document.getElementById('launch-minutes') as HTMLInputElement)?.value ?? '15');
-
     setLaunching(true);
     setLaunchMsg(null);
     try {
-      const r = await apiClient.post('/calls/launch', { callType, customTitle, note, location, expectedMinutes });
-      setLaunchMsg(`✅ تم إطلاق النداء — تم إشعار ${r.data?.data?.traineesNotified ?? 0} متدرب`);
+      const typeEl = (document.getElementById('launch-type') as HTMLInputElement)?.value || 'urgent';
+      const titleEl = (document.getElementById('launch-title') as HTMLInputElement)?.value || '';
+      const locationEl = (document.getElementById('launch-location') as HTMLInputElement)?.value || '';
+      const noteEl = (document.getElementById('launch-note') as HTMLTextAreaElement)?.value || '';
+      const minutesEl = Number((document.getElementById('launch-minutes') as HTMLInputElement)?.value) || 15;
+
+      const res = await apiClient.post('/calls/launch', {
+        callType: typeEl,
+        customTitle: titleEl || undefined,
+        location: locationEl || undefined,
+        note: noteEl || undefined,
+        expectedMinutes: minutesEl,
+      });
+
+      const notified = res.data?.data?.notifiedCount ?? 0;
+      setLaunchMsg(`✅ تم إطلاق النداء بنجاح وتنبيه ${notified} متدرباً`);
       refetchActive();
       qc.invalidateQueries({ queryKey: ['calls-history'] });
     } catch (e: any) {
-      setLaunchMsg(`❌ ${e?.response?.data?.message ?? 'حدث خطأ'}`);
+      setLaunchMsg(`❌ ${e.response?.data?.message || 'تعذر إطلاق النداء'}`);
     } finally {
       setLaunching(false);
     }
   };
 
-  // ── End a call ───────────────────────────────────────────────────────────
   const handleEnd = async (callId: string) => {
     setEnding(callId);
     try {
-      await apiClient.post(`/calls/${callId}/end`, {});
+      await apiClient.post(`/calls/${callId}/end`);
       refetchActive();
       qc.invalidateQueries({ queryKey: ['calls-history'] });
-      qc.invalidateQueries({ queryKey: ['calls-diligence'] });
     } catch (e: any) {
-      alert(e?.response?.data?.message ?? 'حدث خطأ أثناء إنهاء النداء');
+      alert(e.response?.data?.message || 'تعذر إنهاء النداء');
     } finally {
       setEnding(null);
     }
   };
 
-  // ── Trainer confirms trainee arrived ─────────────────────────────────────
   const handleConfirmArrival = async (callId: string, traineeProfileId: string) => {
     setConfirming(traineeProfileId);
     try {
       await apiClient.post(`/calls/${callId}/confirm-arrival`, { traineeProfileId });
       refetchActive();
     } catch (e: any) {
-      alert(e?.response?.data?.message ?? 'خطأ');
+      alert(e.response?.data?.message || 'تعذر تأكيد الوصول');
     } finally {
       setConfirming(null);
     }
   };
 
-  // ── Trainee responds ────────────────────────────────────────────────────
-  const handleTraineeResponse = async (callId: string, action: 'ack' | 'on-way' | 'arrived') => {
+  const handleAck = async (callId: string) => {
     try {
-      await apiClient.post(`/calls/${callId}/${action}`, {});
+      await apiClient.post(`/calls/${callId}/ack`);
       refetchIncoming();
     } catch (e: any) {
-      alert(e?.response?.data?.message ?? 'خطأ');
+      alert(e.response?.data?.message || 'تعذر تأكيد الاستلام');
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────────────────
+  const handleArrived = async (callId: string) => {
+    try {
+      await apiClient.post(`/calls/${callId}/arrived`);
+      refetchIncoming();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'تعذر تسجيل الوصول');
+    }
+  };
+
+  const activeIncoming = (incomingData ?? []).filter((p: any) => p.call?.status === 'active');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* ── Header ────────────────────────────────────────────────────────── */}
+      <div style={{
+        padding: '24px 28px',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16, border: '1px solid #E2E8F0',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16,
+      }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <Radio size={20} color="#0F766E" />
+            <span style={{ fontSize: 12, color: '#0F766E', fontWeight: 700 }}>مركز النداءات الميدانية السريعة</span>
+          </div>
+          <h2 style={{ fontSize: 22, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+            {isTrainer ? 'إطلاق ومتابعة النداءات السريرية (Live Call Dispatch)' : 'النداءات الواردة (My Incoming Calls)'}
+          </h2>
+          <p style={{ fontSize: 13, color: '#64748B', marginTop: 4 }}>
+            تنبيه استدعاء لحظي لجميع أطباء الامتياز بالأقسام السريرية واستجابة مباشرة مع حساب مؤشر الحرص
+          </p>
+        </div>
+
+        {isTrainer && (activeData ?? []).length > 0 && (
+          <Chip
+            icon={<Radio size={14} color="#0F766E" />}
+            label={`${activeData!.length} نداء نشط الآن`}
+            sx={{ backgroundColor: '#CCFBF1', color: '#0F766E', fontWeight: 800, fontSize: 13, padding: '4px 8px' }}
+          />
+        )}
+      </div>
 
       {/* ── TRAINEE VIEW ─────────────────────────────────────────────────── */}
       {isTrainee && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {activeIncoming.map((p: any) => {
+            const c: TrainerCall = p.call;
+            const meta = CALL_TYPE_META[c.callType] ?? CALL_TYPE_META.general;
+            const stateMeta = STATE_META[p.state] ?? STATE_META.notified;
 
-          {/* Active call alert */}
-          {activeIncoming.length > 0 && activeIncoming.map((p: any) => {
-            const meta = CALL_TYPE_META[p.call?.callType] ?? CALL_TYPE_META.general;
             return (
               <div key={p.id} className="glass-card" style={{
                 padding: 24, border: `2px solid ${meta.accent}`,
-                background: `linear-gradient(135deg, ${meta.accent}18, rgba(15,23,42,0.95))`,
-                animation: 'pulse 2s infinite',
+                background: `#FFFFFF`, borderRadius: 16,
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                  <Radio size={22} color={meta.accent} />
-                  <span style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc' }}>
-                    {meta.icon} {p.call?.customTitle ?? meta.label}
-                  </span>
-                  <Chip label="نداء نشط" size="small" sx={{ background: meta.accent + '30', color: meta.accent, fontWeight: 700, ml: 'auto' }} />
-                </div>
-                {p.call?.note && <p style={{ fontSize: 13, color: '#cbd5e1', margin: '0 0 12px' }}>{p.call.note}</p>}
-                {p.call?.location && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
-                    <MapPin size={14} /> {p.call.location}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 20 }}>{meta.icon}</span>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>
+                        {c.customTitle ?? meta.label}
+                      </span>
+                    </div>
+                    {c.note && <p style={{ margin: '8px 0 0', fontSize: 13.5, color: '#334155' }}>{c.note}</p>}
+                    {c.location && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, color: '#64748B', marginTop: 6 }}>
+                        <MapPin size={13} color="#0F766E" /> {c.location}
+                      </div>
+                    )}
                   </div>
-                )}
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  {p.state === 'notified' && (
-                    <Button variant="contained" size="small"
-                      onClick={() => handleTraineeResponse(p.call.id, 'ack')}
-                      style={{ background: '#f59e0b', fontWeight: 700 }}>
-                      ✅ تأكيد الاستلام
-                    </Button>
-                  )}
-                  {p.state === 'acknowledged' && (
-                    <Button variant="contained" size="small"
-                      onClick={() => handleTraineeResponse(p.call.id, 'on-way')}
-                      style={{ background: '#06b6d4', fontWeight: 700 }}>
-                      🚶 أنا في الطريق
-                    </Button>
-                  )}
-                  {p.state === 'self_arrived' && (
-                    <Button variant="contained" size="small"
-                      onClick={() => handleTraineeResponse(p.call.id, 'arrived')}
-                      style={{ background: '#10b981', fontWeight: 700 }}>
-                      📍 وصلت
-                    </Button>
-                  )}
-                  {p.state === 'confirmed_arrived' && (
-                    <Chip label="✓ تم تأكيد وصولك من المدرب" sx={{ background: 'rgba(16,185,129,0.2)', color: '#10b981', fontWeight: 700 }} />
-                  )}
+                  <Chip label={stateMeta.label} sx={{ background: stateMeta.bg, color: stateMeta.color, fontWeight: 800 }} />
                 </div>
-                <div style={{ marginTop: 12, fontSize: 12, color: '#94a3b8' }}>
-                  حالتك: <strong style={{ color: STATE_META[p.state]?.color }}>{STATE_META[p.state]?.label ?? p.state}</strong>
+
+                <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                  {p.state === 'notified' && (
+                    <Button variant="contained" onClick={() => handleAck(c.id)}
+                      style={{ background: '#0F766E', fontWeight: 700, borderRadius: 10 }}>
+                      تأكيد الاستلام ✋
+                    </Button>
+                  )}
+                  {['notified', 'acknowledged'].includes(p.state) && (
+                    <Button variant="contained" onClick={() => handleArrived(c.id)}
+                      style={{ background: '#0891B2', fontWeight: 700, borderRadius: 10 }}>
+                      أنا في الطريق / وصلت 🏃
+                    </Button>
+                  )}
+                  {['self_arrived', 'confirmed_arrived'].includes(p.state) && (
+                    <Chip label="تم تسليم الاستجابة بنجاح ✓" color="success" sx={{ fontWeight: 700 }} />
+                  )}
                 </div>
               </div>
             );
           })}
 
           {activeIncoming.length === 0 && (
-            <div className="glass-card" style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>
-              <Phone size={32} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
-              <p style={{ margin: 0, fontWeight: 700 }}>لا توجد نداءات نشطة في الوقت الحالي</p>
-            </div>
-          )}
-
-          {/* My call history */}
-          {(incomingData ?? []).filter((p: any) => p.call?.status === 'ended').length > 0 && (
-            <div className="glass-card" style={{ padding: 24 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 16 }}>سجل النداءات السابقة</h3>
-              {(incomingData ?? []).filter((p: any) => p.call?.status === 'ended').slice(0, 10).map((p: any) => (
-                <div key={p.id} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.06)',
-                }}>
-                  <div>
-                    <span style={{ fontWeight: 700, color: '#f8fafc' }}>
-                      {CALL_TYPE_META[p.call?.callType]?.icon} {p.call?.customTitle ?? CALL_TYPE_META[p.call?.callType]?.label ?? p.call?.callType}
-                    </span>
-                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-                      {new Date(p.notifiedAt).toLocaleDateString('ar-SA')}
-                    </div>
-                  </div>
-                  <Chip
-                    label={STATE_META[p.state]?.label ?? p.state}
-                    size="small"
-                    sx={{ background: STATE_META[p.state]?.bg, color: STATE_META[p.state]?.color, fontWeight: 700 }}
-                  />
-                </div>
-              ))}
+            <div className="glass-card" style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>
+              <Phone size={36} style={{ margin: '0 auto 12px', opacity: 0.4, color: '#0F766E' }} />
+              <p style={{ margin: 0, fontWeight: 700, fontSize: 15, color: '#0F172A' }}>لا توجد نداءات نشطة في الوقت الحالي</p>
             </div>
           )}
         </div>
@@ -290,25 +286,25 @@ export const CallsHub: React.FC = () => {
       {isTrainer && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-          {/* ── Active Calls Grid ─────────────────────────────────────────── */}
+          {/* Active Calls Grid */}
           {(activeData ?? []).length > 0 && (activeData ?? []).map((call) => (
             <div key={call.id} className="glass-card" style={{
               padding: 24,
-              border: `2px solid ${CALL_TYPE_META[call.callType]?.accent ?? '#f59e0b'}50`,
-              background: `linear-gradient(135deg, ${CALL_TYPE_META[call.callType]?.accent ?? '#f59e0b'}10, rgba(15,23,42,0.95))`,
+              border: `2px solid ${CALL_TYPE_META[call.callType]?.accent ?? '#0F766E'}`,
+              backgroundColor: '#FFFFFF', borderRadius: 16,
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Chip label="نشط الآن" size="small" sx={{ background: 'rgba(16,185,129,0.2)', color: '#10b981', fontWeight: 700 }} />
-                    <span style={{ fontSize: 16, fontWeight: 800, color: '#f8fafc' }}>
+                    <Chip label="نشط الآن" size="small" sx={{ background: '#CCFBF1', color: '#0F766E', fontWeight: 800 }} />
+                    <span style={{ fontSize: 17, fontWeight: 800, color: '#0F172A' }}>
                       {CALL_TYPE_META[call.callType]?.icon} {call.customTitle ?? CALL_TYPE_META[call.callType]?.label}
                     </span>
                   </div>
-                  {call.note && <p style={{ margin: '6px 0 0', fontSize: 13, color: '#94a3b8' }}>{call.note}</p>}
+                  {call.note && <p style={{ margin: '6px 0 0', fontSize: 13.5, color: '#475569' }}>{call.note}</p>}
                   {call.location && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
-                      <MapPin size={12} /> {call.location}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#64748B', marginTop: 4 }}>
+                      <MapPin size={12} color="#0F766E" /> {call.location}
                     </div>
                   )}
                 </div>
@@ -317,12 +313,11 @@ export const CallsHub: React.FC = () => {
                   disabled={ending === call.id}
                   onClick={() => handleEnd(call.id)}
                   startIcon={<PhoneOff size={14} />}
-                  style={{ borderColor: '#ef4444', color: '#ef4444', fontWeight: 700 }}>
+                  style={{ borderColor: '#EF4444', color: '#EF4444', fontWeight: 700, borderRadius: 10 }}>
                   {ending === call.id ? 'جارٍ الإنهاء...' : 'إنهاء النداء'}
                 </Button>
               </div>
 
-              {/* Live stats bar */}
               {call.participants.length > 0 && (() => {
                 const stats = {
                   total: call.participants.length,
@@ -331,35 +326,34 @@ export const CallsHub: React.FC = () => {
                   confirmed: call.participants.filter(p => p.state === 'confirmed_arrived').length,
                 };
                 return (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 16 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 10, marginBottom: 16 }}>
                     {[
-                      { label: 'مُبلَّغ', val: stats.total, color: '#94a3b8' },
-                      { label: 'أكّد', val: stats.acked, color: '#f59e0b' },
-                      { label: 'في الطريق', val: stats.arrived, color: '#06b6d4' },
-                      { label: 'وصل', val: stats.confirmed, color: '#10b981' },
+                      { label: 'مُبلَّغ', val: stats.total, color: '#64748B', bg: '#F1F5F9' },
+                      { label: 'أكّد', val: stats.acked, color: '#B45309', bg: '#FEF3C7' },
+                      { label: 'في الطريق', val: stats.arrived, color: '#0891B2', bg: '#CFFAFE' },
+                      { label: 'وصل', val: stats.confirmed, color: '#0F766E', bg: '#CCFBF1' },
                     ].map(s => (
-                      <div key={s.label} style={{ padding: '10px 12px', background: `${s.color}12`, borderRadius: 8, textAlign: 'center', border: `1px solid ${s.color}30` }}>
-                        <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.val}</div>
-                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{s.label}</div>
+                      <div key={s.label} style={{ padding: '10px 12px', background: s.bg, borderRadius: 10, textAlign: 'center' }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.val}</div>
+                        <div style={{ fontSize: 11, color: '#475569', marginTop: 2, fontWeight: 600 }}>{s.label}</div>
                       </div>
                     ))}
                   </div>
                 );
               })()}
 
-              {/* Participant grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 10 }}>
                 {call.participants.map((p) => {
-                  const meta = STATE_META[p.state] ?? { label: p.state, color: '#94a3b8', bg: 'rgba(148,163,184,0.1)' };
+                  const meta = STATE_META[p.state] ?? { label: p.state, color: '#64748B', bg: '#F1F5F9' };
                   return (
                     <div key={p.id} style={{
-                      padding: '10px 12px', borderRadius: 8,
-                      background: meta.bg, border: `1px solid ${meta.color}30`,
+                      padding: '10px 14px', borderRadius: 10,
+                      background: meta.bg, border: `1px solid ${meta.color}20`,
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     }}>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>{p.traineeProfile?.person?.nameAr ?? '—'}</div>
-                        <div style={{ fontSize: 11, color: meta.color, marginTop: 2 }}>{meta.label}</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{p.traineeProfile?.person?.nameAr ?? '—'}</div>
+                        <div style={{ fontSize: 11, color: meta.color, marginTop: 2, fontWeight: 700 }}>{meta.label}</div>
                       </div>
                       {(p.state === 'self_arrived') && (
                         <Tooltip title="تأكيد الوصول الفعلي">
@@ -367,8 +361,8 @@ export const CallsHub: React.FC = () => {
                             disabled={confirming === p.traineeProfile?.person?.nameAr}
                             onClick={() => handleConfirmArrival(call.id, (p as any).traineeProfileId ?? p.id)}
                             style={{
-                              background: 'rgba(16,185,129,0.2)', border: '1px solid #10b981',
-                              borderRadius: 6, padding: '4px 8px', cursor: 'pointer', color: '#10b981', fontSize: 11, fontWeight: 700,
+                              background: '#0F766E', border: 'none',
+                              borderRadius: 8, padding: '4px 10px', cursor: 'pointer', color: '#FFFFFF', fontSize: 11, fontWeight: 700,
                             }}>
                             تأكيد ✓
                           </button>
@@ -381,88 +375,76 @@ export const CallsHub: React.FC = () => {
             </div>
           ))}
 
-          {/* ── Launch Form ───────────────────────────────────────────────── */}
+          {/* Launch Form */}
           <div className="glass-card" style={{ padding: 24 }}>
-            <h3 style={{ fontSize: 17, fontWeight: 700, color: '#f8fafc', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Phone size={18} color="#f59e0b" /> إطلاق نداء جديد
+            <h3 style={{ fontSize: 17, fontWeight: 700, color: '#0F172A', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Phone size={18} color="#0F766E" /> إطلاق نداء جديد
             </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14, marginBottom: 16 }}>
               <FormControl size="small" fullWidth>
-                <InputLabel sx={{ color: '#94a3b8' }}>نوع النداء</InputLabel>
-                <Select defaultValue="urgent" inputProps={{ id: 'launch-type' }}
-                  sx={{ color: '#f8fafc', '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.2)' } }}>
+                <InputLabel>نوع النداء</InputLabel>
+                <Select defaultValue="urgent" inputProps={{ id: 'launch-type' }} label="نوع النداء">
                   {Object.entries(CALL_TYPE_META).map(([k, v]) => (
                     <MenuItem key={k} value={k}>{v.icon} {v.label}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
-              <TextField label="عنوان النداء (اختياري)" size="small" fullWidth
-                inputProps={{ id: 'launch-title' }}
-                sx={{ '& label': { color: '#94a3b8' }, '& input': { color: '#f8fafc' } }} />
-              <TextField label="الموقع" size="small" fullWidth
-                inputProps={{ id: 'launch-location' }}
-                sx={{ '& label': { color: '#94a3b8' }, '& input': { color: '#f8fafc' } }} />
-              <TextField label="المدة المتوقعة (دقيقة)" size="small" type="number" defaultValue={15} fullWidth
-                inputProps={{ id: 'launch-minutes', min: 5, max: 120 }}
-                sx={{ '& label': { color: '#94a3b8' }, '& input': { color: '#f8fafc' } }} />
+              <TextField label="عنوان النداء (اختياري)" size="small" fullWidth inputProps={{ id: 'launch-title' }} />
+              <TextField label="الموقع" size="small" fullWidth inputProps={{ id: 'launch-location' }} />
+              <TextField label="المدة المتوقعة (دقيقة)" size="small" type="number" defaultValue={15} fullWidth inputProps={{ id: 'launch-minutes', min: 5, max: 120 }} />
             </div>
-            <TextField label="ملاحظة للمتدربين" size="small" fullWidth multiline rows={2}
-              inputProps={{ id: 'launch-note' }}
-              sx={{ mb: 2, '& label': { color: '#94a3b8' }, '& textarea': { color: '#f8fafc' } }} />
+            <TextField label="ملاحظة للمتدربين" size="small" fullWidth multiline rows={2} inputProps={{ id: 'launch-note' }} sx={{ mb: 2 }} />
             {launchMsg && (
-              <div style={{ marginBottom: 12, color: launchMsg.startsWith('✅') ? '#10b981' : '#ef4444', fontWeight: 700 }}>
+              <div style={{ marginBottom: 12, color: launchMsg.startsWith('✅') ? '#0F766E' : '#DC2626', fontWeight: 700, fontSize: 13 }}>
                 {launchMsg}
               </div>
             )}
             <Button variant="contained" disabled={launching} onClick={handleLaunch}
               startIcon={<Zap size={16} />}
-              style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', fontWeight: 700, minWidth: 160 }}>
+              style={{ background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)', fontWeight: 700, minWidth: 160, borderRadius: 12 }}>
               {launching ? 'جارٍ الإطلاق...' : 'إطلاق النداء 🔔'}
             </Button>
-            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>
-              ⚠️ هذه الأداة تعليمية وقياسية — ليست نظام استدعاء طوارئ سريرياً
-            </p>
           </div>
 
-          {/* ── Diligence Leaderboard ─────────────────────────────────────── */}
+          {/* Diligence Leaderboard */}
           {(diligenceData ?? []).length > 0 && (
             <div className="glass-card" style={{ padding: 24 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <TrendingUp size={16} color="#8b5cf6" /> مؤشر الحرص — ترتيب المتدربين
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <TrendingUp size={16} color="#0F766E" /> مؤشر الحرص — ترتيب المتدربين
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(diligenceData ?? []).slice(0, 10).map((d: any, idx: number) => (
                   <div key={d.traineeProfileId} style={{
                     display: 'grid', gridTemplateColumns: '28px 1fr 80px 80px 80px 90px',
                     alignItems: 'center', gap: 12, padding: '10px 14px',
-                    background: idx === 0 ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.03)',
-                    borderRadius: 8, border: `1px solid ${idx === 0 ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                    background: idx === 0 ? '#F0FDF4' : '#F8FAFC',
+                    borderRadius: 10, border: `1px solid ${idx === 0 ? '#99F6E4' : '#E2E8F0'}`,
                   }}>
-                    <span style={{ fontSize: 13, color: idx < 3 ? '#f59e0b' : '#94a3b8', fontWeight: 800 }}>#{idx + 1}</span>
-                    <span style={{ fontWeight: 700, color: '#f8fafc' }}>{d.nameAr}</span>
+                    <span style={{ fontSize: 13, color: idx < 3 ? '#0F766E' : '#64748B', fontWeight: 800 }}>#{idx + 1}</span>
+                    <span style={{ fontWeight: 700, color: '#0F172A' }}>{d.nameAr}</span>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, color: '#94a3b8' }}>أكّد</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#f59e0b' }}>{d.ackRate}%</div>
+                      <div style={{ fontSize: 11, color: '#64748B' }}>أكّد</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#B45309' }}>{d.ackRate}%</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, color: '#94a3b8' }}>حضر</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#06b6d4' }}>{d.arrivalRate}%</div>
+                      <div style={{ fontSize: 11, color: '#64748B' }}>حضر</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#0891B2' }}>{d.arrivalRate}%</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, color: '#94a3b8' }}>نداءات</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8' }}>{d.totalCalls}</div>
+                      <div style={{ fontSize: 11, color: '#64748B' }}>نداءات</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#64748B' }}>{d.totalCalls}</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>الحرص</div>
+                      <div style={{ fontSize: 11, color: '#64748B', marginBottom: 4 }}>الحرص</div>
                       <LinearProgress variant="determinate" value={d.diligenceScore}
                         sx={{
                           height: 6, borderRadius: 3,
-                          background: 'rgba(255,255,255,0.1)',
+                          background: '#E2E8F0',
                           '& .MuiLinearProgress-bar': {
-                            background: d.diligenceScore >= 80 ? '#10b981' : d.diligenceScore >= 50 ? '#f59e0b' : '#ef4444',
+                            background: d.diligenceScore >= 80 ? '#0F766E' : d.diligenceScore >= 50 ? '#F59E0B' : '#DC2626',
                           },
                         }} />
-                      <div style={{ fontSize: 12, fontWeight: 700, color: d.diligenceScore >= 80 ? '#10b981' : d.diligenceScore >= 50 ? '#f59e0b' : '#ef4444', marginTop: 2 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: d.diligenceScore >= 80 ? '#0F766E' : d.diligenceScore >= 50 ? '#F59E0B' : '#DC2626', marginTop: 2 }}>
                         {d.diligenceScore}
                       </div>
                     </div>
@@ -472,18 +454,18 @@ export const CallsHub: React.FC = () => {
             </div>
           )}
 
-          {/* ── Call History Table ─────────────────────────────────────────── */}
+          {/* Call History Table */}
           {(historyData ?? []).length > 0 && (
             <div className="glass-card" style={{ padding: 24 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Clock size={16} color="#94a3b8" /> سجل النداءات
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Clock size={16} color="#0F766E" /> سجل النداءات
               </h3>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                    <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC' }}>
                       {['النوع', 'العنوان', 'التاريخ', 'الحالة', 'المشاركون', 'وصلوا', 'نسبة الوصول'].map(h => (
-                        <th key={h} style={{ padding: '8px 12px', textAlign: 'right', color: '#94a3b8', fontWeight: 700 }}>{h}</th>
+                        <th key={h} style={{ padding: '10px 12px', textAlign: 'right', color: '#475569', fontWeight: 700 }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -492,18 +474,18 @@ export const CallsHub: React.FC = () => {
                       const meta = CALL_TYPE_META[c.callType] ?? CALL_TYPE_META.general;
                       const s = (c as any).stats ?? { total: 0, arrived: 0, arrivalRatePct: 0 };
                       return (
-                        <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                          <td style={{ padding: '8px 12px', color: meta.accent }}>{meta.icon} {meta.label}</td>
-                          <td style={{ padding: '8px 12px', color: '#f8fafc' }}>{c.customTitle ?? '—'}</td>
-                          <td style={{ padding: '8px 12px', color: '#94a3b8' }}>{new Date(c.launchedAt).toLocaleDateString('ar-SA')}</td>
-                          <td style={{ padding: '8px 12px' }}>
+                        <tr key={c.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                          <td style={{ padding: '10px 12px', color: meta.accent, fontWeight: 700 }}>{meta.icon} {meta.label}</td>
+                          <td style={{ padding: '10px 12px', color: '#0F172A' }}>{c.customTitle ?? '—'}</td>
+                          <td style={{ padding: '10px 12px', color: '#64748B' }}>{new Date(c.launchedAt).toLocaleDateString('ar-SA')}</td>
+                          <td style={{ padding: '10px 12px' }}>
                             <Chip label={c.status === 'ended' ? 'منتهٍ' : 'نشط'} size="small"
-                              sx={{ background: c.status === 'ended' ? 'rgba(148,163,184,0.15)' : 'rgba(16,185,129,0.15)', color: c.status === 'ended' ? '#94a3b8' : '#10b981', fontWeight: 700 }} />
+                              sx={{ background: c.status === 'ended' ? '#F1F5F9' : '#CCFBF1', color: c.status === 'ended' ? '#64748B' : '#0F766E', fontWeight: 700 }} />
                           </td>
-                          <td style={{ padding: '8px 12px', color: '#f8fafc', textAlign: 'center' }}>{s.total}</td>
-                          <td style={{ padding: '8px 12px', color: '#06b6d4', textAlign: 'center' }}>{s.arrived}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            <span style={{ color: s.arrivalRatePct >= 80 ? '#10b981' : s.arrivalRatePct >= 50 ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
+                          <td style={{ padding: '10px 12px', color: '#0F172A', textAlign: 'center', fontWeight: 700 }}>{s.total}</td>
+                          <td style={{ padding: '10px 12px', color: '#0891B2', textAlign: 'center', fontWeight: 700 }}>{s.arrived}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            <span style={{ color: s.arrivalRatePct >= 80 ? '#0F766E' : s.arrivalRatePct >= 50 ? '#B45309' : '#DC2626', fontWeight: 700 }}>
                               {s.arrivalRatePct}%
                             </span>
                           </td>
@@ -518,9 +500,9 @@ export const CallsHub: React.FC = () => {
 
           {/* Empty state */}
           {(activeData ?? []).length === 0 && (historyData ?? []).length === 0 && (
-            <div className="glass-card" style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>
-              <Phone size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-              <p style={{ margin: 0, fontWeight: 700, fontSize: 16 }}>لم يُطلق أي نداء بعد</p>
+            <div className="glass-card" style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>
+              <Phone size={40} style={{ margin: '0 auto 12px', opacity: 0.4, color: '#0F766E' }} />
+              <p style={{ margin: 0, fontWeight: 700, fontSize: 16, color: '#0F172A' }}>لم يُطلق أي نداء بعد</p>
               <p style={{ margin: '8px 0 0', fontSize: 13 }}>استخدم النموذج أعلاه لإطلاق أول نداء</p>
             </div>
           )}

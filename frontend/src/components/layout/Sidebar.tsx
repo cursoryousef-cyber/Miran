@@ -7,7 +7,6 @@ import {
   Users,
   GraduationCap,
   GitMerge,
-  ShieldCheck,
   FileSpreadsheet,
   Settings,
   FolderGit2,
@@ -25,18 +24,14 @@ import {
   BedDouble,
   AlertTriangle,
   CheckSquare,
-  ArrowRightLeft,
-  Calendar,
 } from 'lucide-react';
 
-// ─── Navigation definitions per role ───────────────────────────────────────
 interface NavItem {
   name: string;
   path: string;
   icon: any;
 }
 
-// Platform Owner / System Admin / Holding Admin
 const platformNav: NavItem[] = [
   { name: 'مركز التحكم الوطني', path: '/', icon: LayoutDashboard },
   { name: 'الجهات والتجمعات الصحية', path: '/organizations', icon: Building2 },
@@ -48,7 +43,6 @@ const platformNav: NavItem[] = [
   { name: 'إعدادات المنصة', path: '/settings', icon: Settings },
 ];
 
-// University Admin
 const universityNav: NavItem[] = [
   { name: 'لوحة الجامعة', path: '/', icon: GraduationCap },
   { name: 'البرامج والدفعات الأكاديمية', path: '/intakes', icon: ClipboardList },
@@ -57,7 +51,6 @@ const universityNav: NavItem[] = [
   { name: 'أعضاء الجامعة والطلاب', path: '/org-members', icon: Users },
 ];
 
-// Cluster Training Admin
 const clusterNav: NavItem[] = [
   { name: 'لوحة التجمع الصحي', path: '/', icon: Network },
   { name: 'طلبات التدريب الواردة', path: '/affiliations', icon: FolderGit2 },
@@ -66,10 +59,6 @@ const clusterNav: NavItem[] = [
   { name: 'توزيع المتدربين', path: '/intakes', icon: GraduationCap },
 ];
 
-// Hospital Supervisor / Director
-// Capacity, acceptance, incoming review, trainer reassignment, leave, logbook,
-// incidents and graduation are all sections of the workspace now, so they are
-// no longer separate destinations here.
 const hospitalNav: NavItem[] = [
   { name: 'لوحة المستشفى', path: '/', icon: Stethoscope },
   { name: 'مساحة عمل المستشفى', path: '/hospital', icon: BedDouble },
@@ -77,7 +66,6 @@ const hospitalNav: NavItem[] = [
   { name: 'المتدربون والمدربون', path: '/org-members', icon: UserCog },
 ];
 
-// Trainer
 const trainerNav: NavItem[] = [
   { name: 'لوحة المدرب', path: '/', icon: Stethoscope },
   { name: 'سلسلة القبول', path: '/acceptance-chain', icon: CheckSquare },
@@ -87,7 +75,6 @@ const trainerNav: NavItem[] = [
   { name: 'إدارة التخرج', path: '/graduation', icon: GraduationCap },
 ];
 
-// Trainee
 const traineeNav: NavItem[] = [
   { name: 'لوحة طبيب الامتياز', path: '/', icon: LayoutDashboard },
   { name: 'السجل السريري (Logbook)', path: '/logbook', icon: BookOpen },
@@ -95,7 +82,6 @@ const traineeNav: NavItem[] = [
   { name: 'البلاغات والحوادث', path: '/incidents', icon: AlertTriangle },
 ];
 
-// Academic Supervisor
 const academicNav: NavItem[] = [
   { name: 'لوحة الاعتماد الأكاديمي', path: '/', icon: Award },
   { name: 'اعتماد النتائج النهائية', path: '/reports', icon: FileSpreadsheet },
@@ -149,56 +135,58 @@ function getRoleLabelAr(role: string): string {
   return map[role] || role;
 }
 
-export const Sidebar: React.FC = () => {
+export const SidebarContent: React.FC<{ onItemClick?: () => void }> = ({ onItemClick }) => {
   const { user, primaryRole } = useAuth();
   const navItems = getNavForRole(primaryRole);
 
   return (
-    <aside style={{
+    <div style={{
       width: '280px',
-      backgroundColor: 'rgba(15, 23, 42, 0.9)',
-      backdropFilter: 'blur(16px)',
-      borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
+      backgroundColor: '#FFFFFF',
+      borderLeft: '1px solid #E2E8F0',
       display: 'flex',
       flexDirection: 'column',
+      height: '100%',
       minHeight: '100vh',
       padding: '24px 16px',
     }}>
       {/* Brand Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 12px 20px 12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 8px 20px 8px', borderBottom: '1px solid #F1F5F9' }}>
         <div style={{
-          width: '44px',
-          height: '44px',
+          width: '42px',
+          height: '42px',
           borderRadius: '12px',
-          background: 'linear-gradient(135deg, #059669 0%, #06b6d4 100%)',
+          background: 'linear-gradient(135deg, #0F766E 0%, #14B8A6 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 8px 24px rgba(5, 150, 105, 0.3)',
+          boxShadow: '0 4px 12px rgba(15, 118, 110, 0.25)',
         }}>
-          <span style={{ fontWeight: 900, fontSize: '22px', color: '#fff' }}>مِ</span>
+          <span style={{ fontWeight: 900, fontSize: '20px', color: '#fff' }}>مِ</span>
         </div>
         <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#f8fafc', margin: 0, lineHeight: 1.2 }}>مِران (Miran)</h1>
-          <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600, letterSpacing: '0.5px' }}>منصة التدريب الصحي الوطنية</span>
+          <h1 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0, lineHeight: 1.2 }}>مِران (Miran)</h1>
+          <span style={{ fontSize: '11px', color: '#0F766E', fontWeight: 700 }}>منصة التدريب الصحي الوطنية</span>
         </div>
       </div>
 
       {/* Role Badge */}
       <div style={{
-        margin: '16px 12px 8px 12px',
-        padding: '10px 14px',
-        background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(6, 182, 212, 0.1))',
-        borderRadius: '10px',
-        border: '1px solid rgba(16, 185, 129, 0.25)',
+        margin: '16px 4px 12px 4px',
+        padding: '12px 14px',
+        backgroundColor: '#F0FDF4',
+        borderRadius: '12px',
+        border: '1px solid #DCFCE7',
       }}>
-        <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600, marginBottom: '2px' }}>الدور الحالي</div>
-        <div style={{ fontSize: '13px', color: '#34d399', fontWeight: 700 }}>{getRoleLabelAr(primaryRole)}</div>
-        <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>{user?.activeOrganization?.nameAr}</div>
+        <div style={{ fontSize: '11px', color: '#166534', fontWeight: 600, marginBottom: '2px' }}>الدور الحالي</div>
+        <div style={{ fontSize: '13px', color: '#0F766E', fontWeight: 800 }}>{getRoleLabelAr(primaryRole)}</div>
+        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {user?.activeOrganization?.nameAr}
+        </div>
       </div>
 
       {/* Navigation Menu */}
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '16px' }}>
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', flex: 1 }}>
         {navItems.map((item) => {
           const Icon = item.icon;
           return (
@@ -206,27 +194,32 @@ export const Sidebar: React.FC = () => {
               key={item.path + item.name}
               to={item.path}
               end={item.path === '/'}
+              onClick={onItemClick}
               style={({ isActive }) => ({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '12px',
-                padding: '12px 14px',
-                borderRadius: '10px',
-                color: isActive ? '#fff' : '#94a3b8',
-                backgroundColor: isActive ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
-                border: isActive ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid transparent',
+                padding: '10px 14px',
+                borderRadius: '12px',
+                color: isActive ? '#0F766E' : '#475569',
+                backgroundColor: isActive ? '#F0FDF4' : 'transparent',
+                border: isActive ? '1px solid #CCFBF1' : '1px solid transparent',
                 textDecoration: 'none',
-                fontSize: '14px',
-                fontWeight: isActive ? 700 : 500,
-                transition: 'all 0.2s ease',
+                fontSize: '13.5px',
+                fontWeight: isActive ? 700 : 600,
+                transition: 'all 0.15s ease',
               })}
             >
-              <Icon size={18} style={{ color: '#10b981' }} />
+              <Icon size={18} style={{ color: '#0F766E' }} />
               <span>{item.name}</span>
             </NavLink>
           );
         })}
       </nav>
-    </aside>
+    </div>
   );
+};
+
+export const Sidebar: React.FC = () => {
+  return <SidebarContent />;
 };

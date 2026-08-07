@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Building, LogOut, User, ChevronDown } from 'lucide-react';
+import { Building, LogOut, User, ChevronDown, Menu as MenuIcon } from 'lucide-react';
 import { Menu, MenuItem, IconButton, Avatar, Chip } from '@mui/material';
 import { NotificationCenter } from '../NotificationCenter';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  onMobileMenuToggle?: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
   const { user, switchOrganization, logout } = useAuth();
   const [orgAnchorEl, setOrgAnchorEl] = useState<null | HTMLElement>(null);
   const [userAnchorEl, setUserAnchorEl] = useState<null | HTMLElement>(null);
@@ -27,19 +31,29 @@ export const Header: React.FC = () => {
   return (
     <header style={{
       height: '72px',
-      backgroundColor: 'rgba(15, 23, 42, 0.8)',
-      backdropFilter: 'blur(16px)',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+      backgroundColor: '#FFFFFF',
+      borderBottom: '1px solid #E2E8F0',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: '0 32px',
+      padding: '0 24px',
       position: 'sticky',
       top: 0,
       zIndex: 10,
     }}>
-      {/* Active Organization Context Switcher */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Mobile Drawer Trigger Button */}
+        {onMobileMenuToggle && (
+          <IconButton
+            onClick={onMobileMenuToggle}
+            sx={{ display: { xs: 'flex', lg: 'none' }, color: '#0F766E' }}
+            aria-label="فتح القائمة"
+          >
+            <MenuIcon size={22} />
+          </IconButton>
+        )}
+
+        {/* Active Organization Context Switcher */}
         <button
           onClick={handleOrgClick}
           style={{
@@ -47,22 +61,22 @@ export const Header: React.FC = () => {
             alignItems: 'center',
             gap: '10px',
             padding: '8px 16px',
-            backgroundColor: 'rgba(5, 150, 105, 0.12)',
-            border: '1px solid rgba(16, 185, 129, 0.3)',
+            backgroundColor: '#CCFBF1',
+            border: '1px solid #99F6E4',
             borderRadius: '12px',
-            color: '#f8fafc',
+            color: '#0F766E',
             cursor: 'pointer',
             fontSize: '13px',
-            fontWeight: 600,
-            transition: 'all 0.2s ease',
+            fontWeight: 700,
+            transition: 'all 0.15s ease',
           }}
         >
-          <Building size={16} color="#10b981" />
+          <Building size={16} color="#0F766E" />
           <span>الجهة الحالية:</span>
-          <span style={{ color: '#34d399', fontWeight: 700 }}>
+          <span style={{ color: '#0D9488', fontWeight: 800 }}>
             {user?.activeOrganization?.nameAr || 'اختر الجهة'}
           </span>
-          <ChevronDown size={14} color="#94a3b8" />
+          <ChevronDown size={14} color="#0F766E" />
         </button>
 
         <Menu
@@ -71,15 +85,16 @@ export const Header: React.FC = () => {
           onClose={() => setOrgAnchorEl(null)}
           PaperProps={{
             style: {
-              backgroundColor: '#0f172a',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
               borderRadius: '12px',
               marginTop: '8px',
               minWidth: '240px',
+              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
             },
           }}
         >
-          <div style={{ padding: '8px 16px', fontSize: '11px', color: '#64748b', fontWeight: 700 }}>
+          <div style={{ padding: '8px 16px', fontSize: '11px', color: '#64748B', fontWeight: 700 }}>
             الجهات التابعة لحسابك (Multi-Org Context)
           </div>
           {user?.availableOrganizations?.map((org) => (
@@ -97,38 +112,41 @@ export const Header: React.FC = () => {
             >
               <span>{org.nameAr}</span>
               {org.id === user.activeOrganization.id && (
-                <Chip label="نشط" size="small" color="success" style={{ height: '20px', fontSize: '10px' }} />
+                <Chip label="نشط" size="small" style={{ height: '20px', fontSize: '10px', backgroundColor: '#CCFBF1', color: '#0F766E', fontWeight: 700 }} />
               )}
             </MenuItem>
           ))}
         </Menu>
       </div>
 
-      {/* User Actions & Notifications */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      {/* User Actions Right */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <NotificationCenter />
 
-        <button
+        <div style={{ height: '24px', width: '1px', backgroundColor: '#E2E8F0', margin: '0 4px' }} />
+
+        <div
           onClick={handleUserClick}
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '12px',
-            background: 'none',
-            border: 'none',
+            gap: '10px',
             cursor: 'pointer',
-            padding: '4px',
+            padding: '4px 8px',
+            borderRadius: '10px',
           }}
         >
-          <Avatar style={{ backgroundColor: '#059669', width: 36, height: 36, fontSize: '14px', fontWeight: 700 }}>
-            {user?.nameAr?.[0] || 'م'}
+          <Avatar sx={{ width: 36, height: 36, bgcolor: '#0F766E', fontSize: 14, fontWeight: 700 }}>
+            {user?.nameAr?.charAt(0) || 'U'}
           </Avatar>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc' }}>{user?.nameAr || 'المستخدم'}</div>
-            <div style={{ fontSize: '11px', color: '#64748b' }}>{user?.email}</div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
+              {user?.nameAr || 'المستخدم'}
+            </span>
+            <span style={{ fontSize: '11px', color: '#64748B' }}>{user?.email}</span>
           </div>
-          <ChevronDown size={14} color="#94a3b8" />
-        </button>
+          <ChevronDown size={14} color="#64748B" />
+        </div>
 
         <Menu
           anchorEl={userAnchorEl}
@@ -136,16 +154,18 @@ export const Header: React.FC = () => {
           onClose={() => setUserAnchorEl(null)}
           PaperProps={{
             style: {
-              backgroundColor: '#0f172a',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
               borderRadius: '12px',
               marginTop: '8px',
+              minWidth: '200px',
+              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
             },
           }}
         >
-          <MenuItem onClick={logout} style={{ fontSize: '13px', color: '#ef4444', gap: '8px' }}>
+          <MenuItem onClick={logout} style={{ fontSize: '13px', color: '#EF4444', display: 'flex', gap: '8px', fontWeight: 700 }}>
             <LogOut size={16} />
-            تسجيل الخروج
+            <span>تسجيل الخروج</span>
           </MenuItem>
         </Menu>
       </div>

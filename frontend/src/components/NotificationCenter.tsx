@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
-import { Bell, Check, CheckCheck, X } from 'lucide-react';
+import { Bell, CheckCheck } from 'lucide-react';
 import {
   Badge,
   IconButton,
@@ -22,7 +22,7 @@ export const NotificationCenter: React.FC = () => {
       const res = await apiClient.get('/notifications/unread-count').catch(() => ({ data: { data: { count: 0 } } }));
       return res.data?.data || { count: 0 };
     },
-    refetchInterval: 30000, // Poll every 30 seconds
+    refetchInterval: 30000,
   });
 
   const { data: notificationsData, isLoading } = useQuery({
@@ -70,13 +70,14 @@ export const NotificationCenter: React.FC = () => {
 
   const getTypeColor = (type: string) => {
     const colors: Record<string, string> = {
-      training_request: '#06b6d4',
-      training_request_update: '#f59e0b',
-      allocation: '#10b981',
-      import: '#8b5cf6',
-      system: '#ef4444',
+      training_request: '#0F766E',
+      training_request_update: '#F59E0B',
+      allocation: '#10B981',
+      import: '#8B5CF6',
+      system: '#EF4444',
+      call_alert: '#EF4444',
     };
-    return colors[type] || '#94a3b8';
+    return colors[type] || '#64748B';
   };
 
   return (
@@ -84,7 +85,7 @@ export const NotificationCenter: React.FC = () => {
       <Tooltip title="الإشعارات">
         <IconButton
           onClick={(e) => setAnchorEl(e.currentTarget)}
-          style={{ color: '#94a3b8' }}
+          style={{ color: '#0F766E' }}
         >
           <Badge badgeContent={unreadCount} color="error" max={99}>
             <Bell size={20} />
@@ -100,25 +101,25 @@ export const NotificationCenter: React.FC = () => {
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         PaperProps={{
           style: {
-            width: '380px',
+            width: '360px',
             maxHeight: '480px',
-            backgroundColor: 'rgba(15, 23, 42, 0.98)',
-            backdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: '12px',
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: '16px',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
           },
         }}
       >
-        <div style={{ padding: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: '16px', fontWeight: 800, color: '#f8fafc' }}>
-            الإشعارات {unreadCount > 0 && <span style={{ fontSize: '12px', color: '#f59e0b' }}>({unreadCount} جديد)</span>}
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>
+            الإشعارات {unreadCount > 0 && <span style={{ fontSize: '12px', color: '#0F766E' }}>({unreadCount} جديد)</span>}
           </div>
           {unreadCount > 0 && (
             <Button
               size="small"
               startIcon={<CheckCheck size={14} />}
               onClick={() => markAllReadMutation.mutate()}
-              style={{ fontSize: '11px', color: '#10b981' }}
+              style={{ fontSize: '11px', color: '#0F766E', fontWeight: 700 }}
             >
               قراءة الكل
             </Button>
@@ -128,7 +129,7 @@ export const NotificationCenter: React.FC = () => {
         <div style={{ maxHeight: '380px', overflow: 'auto' }}>
           {isLoading ? (
             <div style={{ padding: '32px', textAlign: 'center' }}>
-              <CircularProgress size={24} />
+              <CircularProgress size={24} style={{ color: '#0F766E' }} />
             </div>
           ) : notifications.length > 0 ? (
             notifications.map((n: any) => (
@@ -136,9 +137,9 @@ export const NotificationCenter: React.FC = () => {
                 key={n.id}
                 style={{
                   padding: '12px 16px',
-                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  borderBottom: '1px solid #F8FAFC',
                   cursor: 'pointer',
-                  backgroundColor: n.isRead ? 'transparent' : 'rgba(6, 182, 212, 0.05)',
+                  backgroundColor: n.isRead ? 'transparent' : '#F0FDF4',
                   transition: 'background-color 0.2s',
                 }}
                 onClick={() => !n.isRead && markReadMutation.mutate(n.id)}
@@ -153,15 +154,15 @@ export const NotificationCenter: React.FC = () => {
                     flexShrink: 0,
                   }} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc', marginBottom: '2px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
                       {n.titleAr}
                     </div>
                     {n.bodyAr && (
-                      <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.4 }}>
+                      <div style={{ fontSize: '11.5px', color: '#475569', lineHeight: 1.4 }}>
                         {n.bodyAr}
                       </div>
                     )}
-                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+                    <div style={{ fontSize: '10.5px', color: '#94A3B8', marginTop: '4px' }}>
                       {getTimeAgo(n.createdAt)}
                     </div>
                   </div>
@@ -169,7 +170,7 @@ export const NotificationCenter: React.FC = () => {
               </div>
             ))
           ) : (
-            <div style={{ padding: '32px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+            <div style={{ padding: '32px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
               لا توجد إشعارات حالياً
             </div>
           )}
