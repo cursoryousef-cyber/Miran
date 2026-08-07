@@ -67,16 +67,46 @@ export class TrainingRequestTraineesService {
   }
 
   // ─── الاستيراد والإرسال (المرحلة 1) ───────────────────────────────────────
+  /**
+   * Bulk import from an Excel upload or manual entry.
+   *
+   * Every row is checked against the request before anything is written. The
+   * import is all-or-nothing: a spreadsheet with bad rows is reported back in
+   * full so it can be corrected once, rather than leaving a half-loaded batch.
+   *
+   * Rows inherit the request's specialty and training window when the file omits
+   * them, and the request's pinned plan version applies to all of them — the
+   * version is held on the request, so there is nothing to copy onto each row.
+   */
   async importTrainees(trainingRequestId: string, rows: TraineeRowDto[], user: IAuthenticatedUser) {
-    const request = await this.prisma.trainingRequest.findUnique({ where: { id: trainingRequestId } });
+    const request = await this.prisma.trainingRequest.findUnique({
+      where: { id: trainingRequestId },
+      include: {
+        program: { select: { id: true, code: true, nameAr: true, nameEn: true } },
+        trainingPlanVersion: { select: { id: true, versionNumber: true, totalWeeks: true } },
+      },
+    });
     if (!request) throw new NotFoundException('طلب التدريب غير موجود');
     if (!rows?.length) throw new BadRequestException('لا توجد صفوف متدربين للاستيراد');
+
+    const rowErrors = await this.validateImportRows(rows, request);
+    if (rowErrors.length > 0) {
+      throw new BadRequestException({
+        message: `تعذّر الاستيراد — ${rowErrors.length} صف يحتوي على أخطاء`,
+        importedCount: 0,
+        rowErrors,
+      });
+    }
 
     const created = await this.prisma.$transaction(
       rows.map((row) =>
         this.prisma.trainingRequestTrainee.create({
           data: {
             ...this.mapRow(row),
+            // Fall back to the batch-level values the university already set.
+            specialty: row.specialty ?? request.specialty ?? undefined,
+            startDate: row.startDate ? new Date(row.startDate) : request.trainingStartDate ?? undefined,
+            endDate: row.endDate ? new Date(row.endDate) : request.trainingEndDate ?? undefined,
             trainingRequestId,
             universityOrgId: row.universityOrgId || request.sourceOrgId,
             status: TRAINEE_ROW_STATUS.DRAFT,
@@ -88,9 +118,128 @@ export class TrainingRequestTraineesService {
 
     await this.audit(user, request.sourceOrgId, 'import_training_request_trainees', trainingRequestId, null, {
       importedCount: created.length,
+      trainingPlanVersionId: request.trainingPlanVersionId,
     });
 
-    return { data: created, success: true, message: `تم استيراد ${created.length} متدرب كمسودة` };
+    return {
+      data: created,
+      success: true,
+      importedCount: created.length,
+      rowErrors: [],
+      // Echoed back so the caller can confirm which plan the batch will run on.
+      appliedPlanVersion: request.trainingPlanVersion
+        ? {
+            id: request.trainingPlanVersion.id,
+            versionNumber: request.trainingPlanVersion.versionNumber,
+            totalWeeks: request.trainingPlanVersion.totalWeeks,
+          }
+        : null,
+      message: `تم استيراد ${created.length} متدرب كمسودة`,
+    };
+  }
+
+  /**
+   * Per-row checks for a bulk upload. Reports every problem in the file at once,
+   * addressed by spreadsheet row number so the university can fix them together.
+   */
+  private async validateImportRows(
+    rows: TraineeRowDto[],
+    request: {
+      specialty: string | null;
+      trainingStartDate: Date | null;
+      trainingEndDate: Date | null;
+      program: { id: string; code: string; nameAr: string; nameEn: string | null } | null;
+    },
+  ) {
+    const specialtyCodes = new Set(
+      (
+        await this.prisma.lookupTable.findMany({
+          where: { category: 'specialty', isActive: true },
+          select: { code: true },
+        })
+      ).map((s) => s.code),
+    );
+
+    const seenNationalIds = new Map<string, number>();
+    const seenAcademicNumbers = new Map<string, number>();
+    const errors: Array<{ row: number; academicNumber?: string; errors: string[] }> = [];
+
+    rows.forEach((row, index) => {
+      // 1-based, plus a header line, so the number matches what the user sees.
+      const rowNumber = index + 2;
+      const rowIssues: string[] = [];
+
+      if (!row.academicNumber?.trim()) rowIssues.push('الرقم الأكاديمي مطلوب');
+      if (!row.nationalId?.trim()) rowIssues.push('رقم الهوية الوطنية مطلوب');
+      else if (!/^\d{10}$/.test(row.nationalId.trim())) rowIssues.push('رقم الهوية يجب أن يكون 10 أرقام');
+      if (!row.nameAr?.trim()) rowIssues.push('الاسم بالعربية مطلوب');
+
+      if (row.gender && !['male', 'female'].includes(row.gender)) {
+        rowIssues.push(`الجنس "${row.gender}" غير صالح — القيم المقبولة male أو female`);
+      }
+
+      const specialty = row.specialty ?? request.specialty;
+      if (specialty && !specialtyCodes.has(specialty)) {
+        rowIssues.push(`التخصص "${specialty}" غير موجود في جدول التخصصات`);
+      }
+
+      // The spreadsheet's program column must agree with the request's program;
+      // a batch runs on one plan version, so mixed programs cannot be honoured.
+      if (row.internshipProgram && request.program) {
+        if (!this.programMatches(row.internshipProgram, request.program)) {
+          rowIssues.push(
+            `البرنامج "${row.internshipProgram}" لا يطابق برنامج الطلب (${request.program.nameAr})`,
+          );
+        }
+      }
+
+      const start = row.startDate ? new Date(row.startDate) : request.trainingStartDate;
+      const end = row.endDate ? new Date(row.endDate) : request.trainingEndDate;
+      if (row.startDate && Number.isNaN(new Date(row.startDate).getTime())) {
+        rowIssues.push('تاريخ البداية غير صالح');
+      }
+      if (row.endDate && Number.isNaN(new Date(row.endDate).getTime())) {
+        rowIssues.push('تاريخ النهاية غير صالح');
+      }
+      if (start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end <= start) {
+        rowIssues.push('تاريخ النهاية يجب أن يكون بعد تاريخ البداية');
+      }
+
+      // Duplicates inside the uploaded file itself.
+      const nid = row.nationalId?.trim();
+      if (nid) {
+        const first = seenNationalIds.get(nid);
+        if (first) rowIssues.push(`رقم الهوية مكرر داخل الملف (الصف ${first})`);
+        else seenNationalIds.set(nid, rowNumber);
+      }
+      const acad = row.academicNumber?.trim();
+      if (acad) {
+        const first = seenAcademicNumbers.get(acad);
+        if (first) rowIssues.push(`الرقم الأكاديمي مكرر داخل الملف (الصف ${first})`);
+        else seenAcademicNumbers.set(acad, rowNumber);
+      }
+
+      if (rowIssues.length > 0) {
+        errors.push({ row: rowNumber, academicNumber: row.academicNumber, errors: rowIssues });
+      }
+    });
+
+    return errors;
+  }
+
+  /** Spreadsheets carry program names or codes, in either language. */
+  private programMatches(
+    value: string,
+    program: { code: string; nameAr: string; nameEn: string | null },
+  ): boolean {
+    const normalize = (s: string) => s.trim().toLowerCase().replace(/[\s_-]+/g, '');
+    const needle = normalize(value);
+    return [program.code, program.nameAr, program.nameEn]
+      .filter((v): v is string => Boolean(v))
+      .some((v) => {
+        const candidate = normalize(v);
+        return candidate === needle || candidate.includes(needle) || needle.includes(candidate);
+      });
   }
 
   /** إرسال الدفعة للتجمع الصحي، ثم تشغيل محرك التحقق مباشرة */

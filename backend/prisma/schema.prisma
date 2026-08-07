@@ -826,6 +826,9 @@ model TrainingRequest {
   sourceOrgId      String    @map("source_org_id") @db.Uuid
   targetOrgId      String    @map("target_org_id") @db.Uuid
   programId        String?   @map("program_id") @db.Uuid
+  /// رمز التخصص من LookupTable — تخصص الدفعة كاملة كما تحدده الجامعة.
+  /// يبقى التخصص على مستوى الصف هو المرجع لكل متدرب على حدة.
+  specialty        String?   @db.VarChar(100)
   /// قالب الخطة التدريبية الذي اختارته الجامعة عند التقديم
   trainingPlanId   String?   @map("training_plan_id") @db.Uuid
   /// الإصدار المثبّت وقت التقديم — يبقى ثابتاً حتى لو صدر إصدار أحدث لاحقاً

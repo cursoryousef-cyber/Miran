@@ -48,7 +48,10 @@ export class TraineeRowDto {
   @IsUUID('4')
   collegeOrgId?: string;
 
-  @ApiPropertyOptional({ description: 'برنامج الامتياز' })
+  @ApiPropertyOptional({
+    description:
+      'البرنامج التدريبي كما ورد في ملف الإكسل — نص أو رمز يُطابَق مع كتالوج البرامج ومع برنامج الطلب',
+  })
   @IsOptional()
   @IsString()
   internshipProgram?: string;

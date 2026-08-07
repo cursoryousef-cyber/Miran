@@ -6,6 +6,7 @@ import { ValidationEngineService } from './validation-engine.service';
 import { AllocationEngineService } from './allocation-engine.service';
 import { ActivationService } from './activation.service';
 import { GraduationService } from './graduation.service';
+import { RequestCompositionService } from './request-composition.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
@@ -22,6 +23,7 @@ import { TimelineModule } from '../timeline/timeline.module';
     AllocationEngineService,
     ActivationService,
     GraduationService,
+    RequestCompositionService,
   ],
   exports: [
     TrainingRequestsService,
@@ -30,6 +32,7 @@ import { TimelineModule } from '../timeline/timeline.module';
     AllocationEngineService,
     ActivationService,
     GraduationService,
+    RequestCompositionService,
   ],
 })
 export class TrainingRequestsModule {}

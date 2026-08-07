@@ -12,7 +12,12 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { TrainingRequestsService } from './training-requests.service';
 import { TrainingRequestTraineesService } from './training-request-trainees.service';
 import { GraduationService } from './graduation.service';
-import { CreateTrainingRequestDto, UpdateTrainingRequestDto } from './dto/training-request.dto';
+import { RequestCompositionService } from './request-composition.service';
+import {
+  CreateTrainingRequestDto,
+  PreviewTrainingRequestDto,
+  UpdateTrainingRequestDto,
+} from './dto/training-request.dto';
 import {
   ChangeAssignmentDto,
   HospitalRejectDto,
@@ -44,7 +49,30 @@ export class TrainingRequestsController {
     private trainingRequestsService: TrainingRequestsService,
     private traineesService: TrainingRequestTraineesService,
     private graduationService: GraduationService,
+    private compositionService: RequestCompositionService,
   ) {}
+
+  // ─── University request composition (Module 5) ──────────────────────────────
+  // Declared before the parameterised routes so the literal segments are not
+  // captured as a request id.
+
+  @Get('plan-options')
+  @RequireRoles(...UNIVERSITY_ROLES, ...CLUSTER_ROLES)
+  @ApiOperation({
+    summary: 'قوالب الخطط المتاحة لبرنامج تدريبي مع اقتراح الإصدار المعتمد',
+  })
+  async planOptions(@Query('programId') programId: string) {
+    return this.compositionService.getPlanOptions(programId);
+  }
+
+  @Post('preview')
+  @RequireRoles(...UNIVERSITY_ROLES, ...CLUSTER_ROLES)
+  @ApiOperation({
+    summary: 'التحقق من الطلب قبل الإرسال وعرض ملخصه (البرنامج، الإصدار، عدد الروتيشنات، الأسابيع)',
+  })
+  async preview(@Body() dto: PreviewTrainingRequestDto) {
+    return this.compositionService.previewRequest(dto);
+  }
 
   @Get()
   @ApiOperation({ summary: 'قائمة طلبات التدريب الواردة للتجمع الصحي أو الصادرة من الجامعة' })
@@ -65,6 +93,12 @@ export class TrainingRequestsController {
   @ApiOperation({ summary: 'قائمة المتدربين الموزَّعين على المستشفى لمراجعتها' })
   async findForHospitalReview(@OrgContext() orgId: string) {
     return this.traineesService.findForHospitalReview(orgId);
+  }
+
+  @Get(':id/summary')
+  @ApiOperation({ summary: 'ملخص الطلب: البرنامج والإصدار وعدد الروتيشنات والأسابيع وعدد الطلاب' })
+  async summary(@Param('id') id: string) {
+    return this.compositionService.getRequestSummary(id);
   }
 
   @Get(':id')

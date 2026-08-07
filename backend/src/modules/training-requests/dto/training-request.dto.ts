@@ -12,6 +12,11 @@ export class CreateTrainingRequestDto {
   @IsUUID('4')
   programId?: string;
 
+  @ApiPropertyOptional({ description: 'رمز التخصص من جدول التخصصات — تخصص الدفعة' })
+  @IsOptional()
+  @IsString()
+  specialty?: string;
+
   @ApiPropertyOptional({
     description: 'قالب الخطة التدريبية المختار — يُثبَّت إصداره النشط وقت التقديم',
   })
@@ -60,6 +65,52 @@ export class CreateTrainingRequestDto {
   @IsOptional()
   @IsString()
   notes?: string;
+}
+
+/**
+ * Pre-submission check. Carries the same fields as creation minus the target
+ * cluster, so the university can validate and preview a batch before committing.
+ */
+export class PreviewTrainingRequestDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID('4')
+  programId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  specialty?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID('4')
+  trainingPlanId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID('4')
+  trainingPlanVersionId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  trainingStartDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  trainingEndDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  expectedGraduationDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  studentCount?: number;
 }
 
 export class UpdateTrainingRequestDto {
