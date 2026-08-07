@@ -5,6 +5,7 @@ import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TimelineService } from '../timeline/timeline.service';
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
@@ -20,7 +21,10 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
 @Controller('operations')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class OperationsController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private timelineService: TimelineService,
+  ) {}
 
   @Get('trainer/dashboard')
   @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
@@ -73,10 +77,17 @@ export class OperationsController {
     const present = attendance.filter((a) => a.status === 'present').length;
     const required = competencies.reduce((sum, c) => sum + c.requiredCount, 0);
     const completed = competencies.reduce((sum, c) => sum + c.completedCount, 0);
+    // Progress and readiness come from the timeline rather than being recomputed
+    // here, so this dashboard cannot disagree with the hospital or cluster view.
+    const { data: timeline } = await this.timelineService.getTraineeTimeline(profile.id);
     return {
       data: {
         profile,
         rotation,
+        timeline,
+        completionPercentage: timeline.completionPercentage,
+        graduationProgress: timeline.graduationProgress,
+        readiness: timeline.readiness,
         attendanceRate: attendance.length ? Math.round((present / attendance.length) * 100) : 0,
         logbook: { total: logbook, approved: approvedLogbook, pending: logbook - approvedLogbook },
         competencies: { required, completed, percentage: required ? Math.round((completed / required) * 100) : 0, data: competencies },

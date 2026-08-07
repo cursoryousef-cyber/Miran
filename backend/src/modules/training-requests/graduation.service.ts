@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationService } from '../notifications/notification.service';
+import { TimelineService } from '../timeline/timeline.service';
 import { IAuthenticatedUser } from '../../common/interfaces';
 
 const REQUIRED_APPROVER_ROLES = ['trainer', 'training_supervisor', 'hospital_administrator', 'university_administrator'];
@@ -10,50 +11,37 @@ export class GraduationService {
   constructor(
     private prisma: PrismaService,
     private notificationService: NotificationService,
+    private timelineService: TimelineService,
   ) {}
 
+  /**
+   * Eligibility is read from the trainee timeline rather than recomputed here.
+   * The timeline measures a trainee against the plan version they actually
+   * started on, so this endpoint and every dashboard quote the same numbers.
+   * This service keeps what is genuinely its own: the approval chain.
+   */
   async checkEligibility(traineeProfileId: string) {
     const profile = await this.prisma.traineeProfile.findUnique({
       where: { id: traineeProfileId },
-      include: {
-        rotations: true,
-        competencies: true,
-        caseLogs: true,
-        graduationApprovals: true,
-      },
+      select: { id: true, isLocked: true },
     });
     if (!profile) throw new NotFoundException('المتدرب غير موجود');
     if (profile.isLocked) throw new BadRequestException('ملف المتدرب مغلق ولا يمكن تعديله');
 
-    const issues: string[] = [];
+    const { data: readiness } = await this.timelineService.getGraduationReadiness(traineeProfileId);
 
-    // Rotations: at least one completed
-    const completedRotations = profile.rotations.filter(r => r.status === 'completed').length;
-    if (!completedRotations) issues.push('لا توجد روتيشنات مكتملة');
-
-    // Competencies: all required ones at 100%
-    const incompleteCompetencies = profile.competencies.filter(c => c.completedCount < c.requiredCount);
-    if (incompleteCompetencies.length) {
-      issues.push(`${incompleteCompetencies.length} كفاءة لم تكتمل بعد`);
-    }
-
-    // Logbook: at least 10 approved case logs
-    const approvedLogs = profile.caseLogs.filter(l => l.status === 'academic_approved' || l.status === 'completed').length;
-    if (approvedLogs < 10) issues.push(`سجل الحالات السريرية ناقص (${approvedLogs}/10)`);
-
-    // Attendance: applicationStatus must be 'active'
-    if (profile.applicationStatus !== 'active') {
-      issues.push(`حالة التدريب غير نشطة (${profile.applicationStatus})`);
-    }
-
-    const approvedRoles = profile.graduationApprovals.map(a => a.approverRole);
-    const pendingApprovals = REQUIRED_APPROVER_ROLES.filter(r => !approvedRoles.includes(r));
+    const pendingApprovals = REQUIRED_APPROVER_ROLES.filter(
+      (r) => !readiness.approvals.submitted.includes(r),
+    );
 
     return {
-      eligible: issues.length === 0 && pendingApprovals.length === 0,
-      issues,
+      eligible: readiness.readyForGraduation && pendingApprovals.length === 0,
+      issues: readiness.remainingRequirements,
       pendingApprovals,
-      approvedApprovals: approvedRoles,
+      approvedApprovals: readiness.approvals.submitted,
+      overallCompletion: readiness.overallCompletion,
+      expectedGraduationStatus: readiness.expectedGraduationStatus,
+      remaining: readiness.remaining,
     };
   }
 
