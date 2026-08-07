@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -118,7 +119,7 @@ export const AcceptanceChain: React.FC = () => {
 
   if (pendingStatuses.length === 0) {
     return (
-      <div style={{ padding: '48px', textAlign: 'center', color: '#94a3b8' }}>
+      <div style={{ padding: '48px', textAlign: 'center', color: '#64748B' }}>
         دورك الحالي ({primaryRole}) لا يشارك في سلسلة القبول
       </div>
     );
@@ -126,21 +127,17 @@ export const AcceptanceChain: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-            سلسلة القبول — طلبات بانتظار موافقتك
-          </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            {user?.activeOrganization?.nameAr} — دورك: {roleLabel[primaryRole] ?? primaryRole}
-          </p>
-        </div>
+      <PageHeader
+        title="سلسلة القبول — طلبات بانتظار موافقتك"
+        subtitle={<>{user?.activeOrganization?.nameAr} — دورك: {roleLabel[primaryRole] ?? primaryRole}</>}
+        actions={<>
         <Tooltip title="تحديث">
-          <IconButton onClick={() => refetch()} style={{ color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
+          <IconButton onClick={() => refetch()} style={{ color: '#059669', border: '1px solid rgba(16,185,129,0.3)' }}>
             <RefreshCw size={18} />
           </IconButton>
         </Tooltip>
-      </div>
+        </>}
+      />
 
       {successMsg && <Alert severity="success" onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
@@ -149,12 +146,12 @@ export const AcceptanceChain: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>رقم الطلب</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الجامعة الموفِدة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>عدد المتدربين</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>تاريخ الطلب</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>حالة السلسلة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700, textAlign: 'center' }}>الإجراءات</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>رقم الطلب</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الجامعة الموفِدة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>عدد المتدربين</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>تاريخ الطلب</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>حالة السلسلة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700, textAlign: 'center' }}>الإجراءات</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -162,7 +159,7 @@ export const AcceptanceChain: React.FC = () => {
               <TableRow><TableCell colSpan={6} align="center"><CircularProgress size={24} /></TableCell></TableRow>
             ) : requests.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center" style={{ color: '#94a3b8', padding: '40px' }}>
+                <TableCell colSpan={6} align="center" style={{ color: '#64748B', padding: '40px' }}>
                   ✅ لا توجد طلبات بانتظار موافقتك حالياً
                 </TableCell>
               </TableRow>
@@ -171,16 +168,16 @@ export const AcceptanceChain: React.FC = () => {
                 const st = STATUS_LABELS[req.status] ?? { label: req.status, color: 'default' as const };
                 return (
                   <TableRow key={req.id}>
-                    <TableCell style={{ fontFamily: 'monospace', color: '#06b6d4', fontWeight: 700 }}>
+                    <TableCell style={{ fontFamily: 'monospace', color: '#0891B2', fontWeight: 700 }}>
                       {req.requestNumber}
                     </TableCell>
-                    <TableCell style={{ color: '#f8fafc', fontWeight: 600 }}>
+                    <TableCell style={{ color: '#0F172A', fontWeight: 600 }}>
                       {req.sourceOrg?.nameAr || '—'}
                     </TableCell>
-                    <TableCell style={{ color: '#f59e0b', fontWeight: 700 }}>
+                    <TableCell style={{ color: '#D97706', fontWeight: 700 }}>
                       {req.studentCount} متدرب
                     </TableCell>
-                    <TableCell style={{ fontSize: '12px', color: '#94a3b8' }}>
+                    <TableCell style={{ fontSize: '12px', color: '#64748B' }}>
                       {new Date(req.createdAt).toLocaleDateString('ar-SA')}
                     </TableCell>
                     <TableCell>
@@ -215,7 +212,7 @@ export const AcceptanceChain: React.FC = () => {
                           <Button
                             size="small"
                             variant="outlined"
-                            style={{ borderColor: '#f59e0b', color: '#f59e0b', minWidth: 0, padding: '6px 12px', gap: '4px', fontSize: '12px' }}
+                            style={{ borderColor: '#D97706', color: '#D97706', minWidth: 0, padding: '6px 12px', gap: '4px', fontSize: '12px' }}
                             onClick={() => openDialog(req, 'return')}
                           >
                             <ArrowRightLeft size={14} />
@@ -267,7 +264,7 @@ export const AcceptanceChain: React.FC = () => {
 
       {/* Reject Dialog */}
       <Dialog open={dialog === 'reject'} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>
-        <DialogTitle style={{ fontWeight: 800, color: '#ef4444' }}>رفض الطلب — {selectedReq?.requestNumber}</DialogTitle>
+        <DialogTitle style={{ fontWeight: 800, color: '#DC2626' }}>رفض الطلب — {selectedReq?.requestNumber}</DialogTitle>
         <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <Alert severity="warning">
             سيتم رفض الطلب وإخطار الجامعة. لا يمكن التراجع عن هذا الإجراء.
@@ -318,7 +315,7 @@ export const AcceptanceChain: React.FC = () => {
           <Button onClick={() => setDialog(null)}>إلغاء</Button>
           <Button
             variant="contained"
-            style={{ background: '#f59e0b', color: '#000' }}
+            style={{ background: '#D97706', color: '#000' }}
             onClick={() => returnMut.mutate()}
             disabled={returnMut.isPending || !notes.trim()}
           >

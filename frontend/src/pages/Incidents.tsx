@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -110,19 +111,11 @@ export const Incidents: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <AlertTriangle size={24} color="#f59e0b" />
-            البلاغات والحوادث
-          </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            {user?.activeOrganization?.nameAr} — تسجيل ومتابعة بلاغات الحوادث
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+      <PageHeader
+        title="البلاغات والحوادث"
+        actions={<>
           <Tooltip title="تحديث">
-            <IconButton onClick={() => refetch()} style={{ color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
+            <IconButton onClick={() => refetch()} style={{ color: '#059669', border: '1px solid rgba(16,185,129,0.3)' }}>
               <RefreshCw size={18} />
             </IconButton>
           </Tooltip>
@@ -130,12 +123,12 @@ export const Incidents: React.FC = () => {
             variant="contained"
             startIcon={<Plus size={16} />}
             onClick={() => setCreateOpen(true)}
-            style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', fontWeight: 700 }}
+            style={{ background: 'linear-gradient(135deg, #D97706, #d97706)', fontWeight: 700 }}
           >
             تسجيل بلاغ جديد
           </Button>
-        </div>
-      </div>
+        </>}
+      />
 
       {successMsg && <Alert severity="success" onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
@@ -166,13 +159,13 @@ export const Incidents: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>نوع الحادثة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الوصف</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الخطورة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المُبلِّغ</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>التاريخ</TableCell>
-              {isManager && <TableCell style={{ color: '#94a3b8', fontWeight: 700, textAlign: 'center' }}>إجراء</TableCell>}
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>نوع الحادثة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الوصف</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الخطورة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الحالة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>المُبلِّغ</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>التاريخ</TableCell>
+              {isManager && <TableCell style={{ color: '#64748B', fontWeight: 700, textAlign: 'center' }}>إجراء</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -180,7 +173,7 @@ export const Incidents: React.FC = () => {
               <TableRow><TableCell colSpan={isManager ? 7 : 6} align="center"><CircularProgress size={24} /></TableCell></TableRow>
             ) : incidents.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isManager ? 7 : 6} align="center" style={{ color: '#94a3b8', padding: '40px' }}>
+                <TableCell colSpan={isManager ? 7 : 6} align="center" style={{ color: '#64748B', padding: '40px' }}>
                   لا توجد بلاغات مسجلة
                 </TableCell>
               </TableRow>
@@ -190,15 +183,15 @@ export const Incidents: React.FC = () => {
                 const st = STATUS_MAP[inc.status] ?? { label: inc.status, color: 'default' as const };
                 return (
                   <TableRow key={inc.id}>
-                    <TableCell style={{ color: '#f8fafc', fontWeight: 600 }}>
+                    <TableCell style={{ color: '#0F172A', fontWeight: 600 }}>
                       {INCIDENT_TYPES.find((t) => t.value === inc.incidentType)?.label ?? inc.incidentType}
                     </TableCell>
-                    <TableCell style={{ color: '#94a3b8', fontSize: '13px', maxWidth: '280px' }}>
+                    <TableCell style={{ color: '#64748B', fontSize: '13px', maxWidth: '280px' }}>
                       <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {inc.description}
                       </div>
                       {inc.resolution && (
-                        <div style={{ color: '#10b981', fontSize: '11px', marginTop: '2px' }}>
+                        <div style={{ color: '#059669', fontSize: '11px', marginTop: '2px' }}>
                           الحل: {inc.resolution}
                         </div>
                       )}
@@ -209,10 +202,10 @@ export const Incidents: React.FC = () => {
                     <TableCell>
                       <Chip label={st.label} color={st.color} size="small" style={{ fontWeight: 700 }} />
                     </TableCell>
-                    <TableCell style={{ fontSize: '12px', color: '#94a3b8' }}>
+                    <TableCell style={{ fontSize: '12px', color: '#64748B' }}>
                       {inc.reportedBy?.person?.nameAr || inc.reportedBy?.email || '—'}
                     </TableCell>
-                    <TableCell style={{ fontSize: '12px', color: '#94a3b8' }}>
+                    <TableCell style={{ fontSize: '12px', color: '#64748B' }}>
                       {new Date(inc.createdAt).toLocaleDateString('ar-SA')}
                     </TableCell>
                     {isManager && (
@@ -221,7 +214,7 @@ export const Incidents: React.FC = () => {
                           <Button
                             size="small"
                             variant="outlined"
-                            style={{ borderColor: '#06b6d4', color: '#06b6d4', fontSize: '11px' }}
+                            style={{ borderColor: '#0891B2', color: '#0891B2', fontSize: '11px' }}
                             onClick={() => openStatusDialog(inc)}
                           >
                             تحديث الحالة
@@ -240,7 +233,7 @@ export const Incidents: React.FC = () => {
       {/* Create Incident Dialog */}
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <AlertTriangle size={20} color="#f59e0b" />
+          <AlertTriangle size={20} color="#D97706" />
           تسجيل بلاغ جديد
         </DialogTitle>
         <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -276,7 +269,7 @@ export const Incidents: React.FC = () => {
           <Button onClick={() => setCreateOpen(false)}>إلغاء</Button>
           <Button
             variant="contained"
-            style={{ background: '#f59e0b', color: '#000', fontWeight: 700 }}
+            style={{ background: '#D97706', color: '#000', fontWeight: 700 }}
             onClick={() => createMut.mutate()}
             disabled={createMut.isPending || !incidentType || !description}
           >

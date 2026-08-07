@@ -313,7 +313,7 @@ export const CallsHub: React.FC = () => {
                   disabled={ending === call.id}
                   onClick={() => handleEnd(call.id)}
                   startIcon={<PhoneOff size={14} />}
-                  style={{ borderColor: '#EF4444', color: '#EF4444', fontWeight: 700, borderRadius: 10 }}>
+                  style={{ borderColor: '#DC2626', color: '#DC2626', fontWeight: 700, borderRadius: 10 }}>
                   {ending === call.id ? 'جارٍ الإنهاء...' : 'إنهاء النداء'}
                 </Button>
               </div>
@@ -441,10 +441,10 @@ export const CallsHub: React.FC = () => {
                           height: 6, borderRadius: 3,
                           background: '#E2E8F0',
                           '& .MuiLinearProgress-bar': {
-                            background: d.diligenceScore >= 80 ? '#0F766E' : d.diligenceScore >= 50 ? '#F59E0B' : '#DC2626',
+                            background: d.diligenceScore >= 80 ? '#0F766E' : d.diligenceScore >= 50 ? '#D97706' : '#DC2626',
                           },
                         }} />
-                      <div style={{ fontSize: 12, fontWeight: 700, color: d.diligenceScore >= 80 ? '#0F766E' : d.diligenceScore >= 50 ? '#F59E0B' : '#DC2626', marginTop: 2 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: d.diligenceScore >= 80 ? '#0F766E' : d.diligenceScore >= 50 ? '#D97706' : '#DC2626', marginTop: 2 }}>
                         {d.diligenceScore}
                       </div>
                     </div>

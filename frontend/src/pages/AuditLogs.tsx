@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { Shield, Search, Download, Filter, Eye, RefreshCw } from 'lucide-react';
 import {
   Button,
@@ -37,21 +38,14 @@ export const AuditLogs: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-            🛡️ سجلات التدقيق والمراقبة الأمنية (Audit Logs & Compliance)
-          </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            تتبع غير قابل للتغيير لكل عملية تمت في النظام (المستخدم، الوقت، IP، الجهاز، البيانات السابقة والحالية)
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '12px' }}>
+      <PageHeader
+        title="🛡️ سجلات التدقيق والمراقبة الأمنية (Audit Logs & Compliance)"
+        subtitle={`تتبع غير قابل للتغيير لكل عملية تمت في النظام (المستخدم، الوقت، IP، الجهاز، البيانات السابقة والحالية)`}
+        actions={<>
           <Button
             variant="outlined"
             startIcon={<Download size={18} />}
-            style={{ borderColor: '#06b6d4', color: '#06b6d4', fontWeight: 700 }}
+            style={{ borderColor: '#0891B2', color: '#0891B2', fontWeight: 700 }}
           >
             تصدير السجل (Excel / PDF)
           </Button>
@@ -63,8 +57,8 @@ export const AuditLogs: React.FC = () => {
           >
             تحديث السجلات
           </Button>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* Filters & Search */}
       <div className="glass-card" style={{ padding: '20px', display: 'flex', gap: '16px', alignItems: 'center' }}>
@@ -102,34 +96,34 @@ export const AuditLogs: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>نوع العملية (Action)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المستخدم (Actor)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الكيان (Entity)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>عنوان IP والجهاز</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>التاريخ والوقت</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>نوع العملية (Action)</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>المستخدم (Actor)</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الكيان (Entity)</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>عنوان IP والجهاز</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>التاريخ والوقت</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {data?.data?.map((log: any) => (
               <TableRow key={log.id}>
-                <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>
+                <TableCell style={{ fontWeight: 700, color: '#0F172A' }}>
                   <Chip label={log.action} color="primary" size="small" variant="outlined" style={{ fontWeight: 700 }} />
                 </TableCell>
                 <TableCell>
                   <div style={{ fontWeight: 700, color: '#fff' }}>{log.actor?.person?.nameAr || 'المستخدم'}</div>
-                  <div style={{ fontSize: '11px', color: '#06b6d4' }}>{log.actor?.email}</div>
+                  <div style={{ fontSize: '11px', color: '#0891B2' }}>{log.actor?.email}</div>
                 </TableCell>
                 <TableCell>
-                  <Chip label={log.entityType} size="small" style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#cbd5e1' }} />
+                  <Chip label={log.entityType} size="small" style={{ backgroundColor: '#F1F5F9', color: '#475569' }} />
                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{log.entityId}</div>
                 </TableCell>
-                <TableCell style={{ fontSize: '12px', color: '#cbd5e1' }}>
-                  <div style={{ fontFamily: 'monospace', color: '#10b981' }}>{log.ipAddress}</div>
+                <TableCell style={{ fontSize: '12px', color: '#475569' }}>
+                  <div style={{ fontFamily: 'monospace', color: '#059669' }}>{log.ipAddress}</div>
                   <div style={{ fontSize: '10px', color: '#64748b', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {log.userAgent}
                   </div>
                 </TableCell>
-                <TableCell style={{ fontSize: '12px', color: '#94a3b8' }}>
+                <TableCell style={{ fontSize: '12px', color: '#64748B' }}>
                   {new Date(log.createdAt).toLocaleString('ar-SA')}
                 </TableCell>
               </TableRow>

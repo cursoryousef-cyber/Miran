@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -91,22 +92,17 @@ export const Graduation: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <GraduationCap size={26} color="#10b981" />
-            إدارة التخرج — Stage 12
-          </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            {user?.activeOrganization?.nameAr} — متابعة أهلية التخرج واعتماد نهاية التدريب
-          </p>
-        </div>
+      <PageHeader
+        title="إدارة التخرج — Stage 12"
+        subtitle={<>{user?.activeOrganization?.nameAr} — متابعة أهلية التخرج واعتماد نهاية التدريب</>}
+        actions={<>
         <Tooltip title="تحديث">
-          <IconButton onClick={() => refetch()} style={{ color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
+          <IconButton onClick={() => refetch()} style={{ color: '#059669', border: '1px solid rgba(16,185,129,0.3)' }}>
             <RefreshCw size={18} />
           </IconButton>
         </Tooltip>
-      </div>
+        </>}
+      />
 
       {successMsg && <Alert severity="success" onClose={() => setSuccessMsg(null)} style={{ fontSize: '14px' }}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
@@ -114,12 +110,12 @@ export const Graduation: React.FC = () => {
       {/* Summary stats */}
       <div style={{ display: 'flex', gap: '16px' }}>
         {[
-          { label: 'المتدربون النشطون', value: trainees.filter((t) => t.applicationStatus === 'active').length, color: '#10b981' },
-          { label: 'المتخرجون', value: trainees.filter((t) => t.applicationStatus === 'graduated').length, color: '#8b5cf6' },
+          { label: 'المتدربون النشطون', value: trainees.filter((t) => t.applicationStatus === 'active').length, color: '#059669' },
+          { label: 'المتخرجون', value: trainees.filter((t) => t.applicationStatus === 'graduated').length, color: '#7C3AED' },
         ].map((s) => (
           <Paper key={s.label} className="glass-card" style={{ padding: '16px 24px', flex: 1 }}>
             <div style={{ fontSize: '28px', fontWeight: 900, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>{s.label}</div>
+            <div style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>{s.label}</div>
           </Paper>
         ))}
       </div>
@@ -128,13 +124,13 @@ export const Graduation: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700, width: '32px' }} />
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المتدرب</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>التخصص</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الجامعة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الروتيشنات</TableCell>
-              {canApprove && <TableCell style={{ color: '#94a3b8', fontWeight: 700, textAlign: 'center' }}>تخريج</TableCell>}
+              <TableCell style={{ color: '#64748B', fontWeight: 700, width: '32px' }} />
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>المتدرب</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>التخصص</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الجامعة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الحالة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الروتيشنات</TableCell>
+              {canApprove && <TableCell style={{ color: '#64748B', fontWeight: 700, textAlign: 'center' }}>تخريج</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -142,7 +138,7 @@ export const Graduation: React.FC = () => {
               <TableRow><TableCell colSpan={canApprove ? 7 : 6} align="center"><CircularProgress size={24} /></TableCell></TableRow>
             ) : trainees.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={canApprove ? 7 : 6} align="center" style={{ color: '#94a3b8', padding: '40px' }}>
+                <TableCell colSpan={canApprove ? 7 : 6} align="center" style={{ color: '#64748B', padding: '40px' }}>
                   لا يوجد متدربون نشطون أو متخرجون حالياً
                 </TableCell>
               </TableRow>
@@ -159,27 +155,27 @@ export const Graduation: React.FC = () => {
                   <React.Fragment key={profile.id}>
                     <TableRow style={{ cursor: 'pointer' }} onClick={() => setExpandedId(isExpanded ? null : profile.id)}>
                       <TableCell style={{ padding: '8px' }}>
-                        <IconButton size="small" style={{ color: '#94a3b8' }}>
+                        <IconButton size="small" style={{ color: '#64748B' }}>
                           {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                         </IconButton>
                       </TableCell>
                       <TableCell>
-                        <div style={{ fontWeight: 700, color: '#f8fafc' }}>
+                        <div style={{ fontWeight: 700, color: '#0F172A' }}>
                           {profile.person?.nameAr || '—'}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                        <div style={{ fontSize: '11px', color: '#64748B', fontFamily: 'monospace' }}>
                           {profile.person?.nationalId || profile.traineeNumber}
                         </div>
                       </TableCell>
-                      <TableCell style={{ color: '#34d399' }}>{profile.specialtyAr || '—'}</TableCell>
-                      <TableCell style={{ fontSize: '12px', color: '#94a3b8' }}>
+                      <TableCell style={{ color: '#047857' }}>{profile.specialtyAr || '—'}</TableCell>
+                      <TableCell style={{ fontSize: '12px', color: '#64748B' }}>
                         {profile.sponsorOrganization?.nameAr || profile.organization?.nameAr || '—'}
                       </TableCell>
                       <TableCell>{getStatusChip(profile.applicationStatus)}</TableCell>
                       <TableCell>
                         {totalRotations > 0 ? (
                           <div style={{ minWidth: '100px' }}>
-                            <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                            <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>
                               {completedRotations}/{totalRotations} مكتملة
                             </div>
                             <LinearProgress
@@ -201,7 +197,7 @@ export const Graduation: React.FC = () => {
                             <Button
                               size="small"
                               variant="contained"
-                              style={{ background: 'linear-gradient(135deg, #7c3aed, #8b5cf6)', fontSize: '11px' }}
+                              style={{ background: 'linear-gradient(135deg, #7c3aed, #7C3AED)', fontSize: '11px' }}
                               onClick={(e) => { e.stopPropagation(); checkEligibility(profile); }}
                               disabled={eligibilityLoading}
                             >
@@ -223,12 +219,12 @@ export const Graduation: React.FC = () => {
                           <Box style={{ padding: '16px 32px', background: 'rgba(0,0,0,0.2)' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                               <div>
-                                <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '6px', fontWeight: 700 }}>الكفاءات</div>
+                                <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '6px', fontWeight: 700 }}>الكفاءات</div>
                                 {totalCompetencies === 0 ? (
                                   <span style={{ color: '#64748b', fontSize: '12px' }}>لم تبدأ بعد</span>
                                 ) : (
                                   <>
-                                    <div style={{ fontSize: '20px', fontWeight: 800, color: competenciesDone === totalCompetencies ? '#10b981' : '#f59e0b' }}>
+                                    <div style={{ fontSize: '20px', fontWeight: 800, color: competenciesDone === totalCompetencies ? '#059669' : '#D97706' }}>
                                       {competenciesDone}/{totalCompetencies}
                                     </div>
                                     <LinearProgress
@@ -241,15 +237,15 @@ export const Graduation: React.FC = () => {
                                 )}
                               </div>
                               <div>
-                                <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '6px', fontWeight: 700 }}>الحالات السريرية</div>
-                                <div style={{ fontSize: '20px', fontWeight: 800, color: '#38bdf8' }}>
+                                <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '6px', fontWeight: 700 }}>الحالات السريرية</div>
+                                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0284C7' }}>
                                   {(profile.caseLogs || []).length}
                                 </div>
                                 <div style={{ fontSize: '11px', color: '#64748b' }}>حالة مسجلة</div>
                               </div>
                               <div>
-                                <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '6px', fontWeight: 700 }}>تاريخ التسجيل</div>
-                                <div style={{ fontSize: '13px', color: '#f8fafc' }}>
+                                <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '6px', fontWeight: 700 }}>تاريخ التسجيل</div>
+                                <div style={{ fontSize: '13px', color: '#0F172A' }}>
                                   {profile.graduatedAt
                                     ? `✓ ${new Date(profile.graduatedAt).toLocaleDateString('ar-SA')}`
                                     : new Date(profile.createdAt).toLocaleDateString('ar-SA')
@@ -272,7 +268,7 @@ export const Graduation: React.FC = () => {
       {/* Graduation Approval Dialog */}
       <Dialog open={approveOpen} onClose={() => { setApproveOpen(false); setEligibility(null); }} maxWidth="sm" fullWidth>
         <DialogTitle style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <GraduationCap size={22} color="#8b5cf6" />
+          <GraduationCap size={22} color="#7C3AED" />
           مراجعة أهلية التخرج — {selectedProfile?.person?.nameAr}
         </DialogTitle>
         <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -289,10 +285,10 @@ export const Graduation: React.FC = () => {
               {/* Issues list */}
               {eligibility.issues?.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#f59e0b' }}>المتطلبات الناقصة:</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#D97706' }}>المتطلبات الناقصة:</div>
                   {eligibility.issues.map((issue: string, i: number) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#fca5a5' }}>
-                      <AlertCircle size={14} color="#ef4444" />
+                      <AlertCircle size={14} color="#DC2626" />
                       {issue}
                     </div>
                   ))}
@@ -301,14 +297,14 @@ export const Graduation: React.FC = () => {
 
               {/* Approvals status */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8' }}>سلسلة اعتماد التخرج:</div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#64748B' }}>سلسلة اعتماد التخرج:</div>
                 {APPROVER_ROLES.map((role) => {
                   const approved = eligibility.approvedApprovals?.includes(role);
                   const pending = eligibility.pendingApprovals?.includes(role);
                   const isMine = role === primaryRole;
                   return (
                     <div key={role} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
-                      <span style={{ fontSize: '13px', color: isMine ? '#10b981' : '#f8fafc', fontWeight: isMine ? 700 : 400 }}>
+                      <span style={{ fontSize: '13px', color: isMine ? '#059669' : '#f8fafc', fontWeight: isMine ? 700 : 400 }}>
                         {APPROVER_ROLE_LABELS[role]}
                         {isMine && ' (أنت)'}
                       </span>
@@ -350,7 +346,7 @@ export const Graduation: React.FC = () => {
           {canApprove && eligibility && !eligibility.approvedApprovals?.includes(primaryRole) && (
             <Button
               variant="contained"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #8b5cf6)', fontWeight: 700 }}
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #7C3AED)', fontWeight: 700 }}
               onClick={() => approveMut.mutate()}
               disabled={approveMut.isPending}
             >

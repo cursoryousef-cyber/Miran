@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { apiClient } from '../api/client';
 import { FileSignature, Plus, CheckCircle2, ShieldCheck, FileText } from 'lucide-react';
 import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Alert, LinearProgress } from '@mui/material';
@@ -47,15 +48,10 @@ export const Declarations: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-            إدارة الإقرارات والتعهدات الوطنية (Declarations & Compliance)
-          </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            إدارة إقرارات الانضمام وتعهدات الشؤون الأكاديمية والتوقيعات الرقمية للمتدربين
-          </p>
-        </div>
+      <PageHeader
+        title="إدارة الإقرارات والتعهدات الوطنية (Declarations & Compliance)"
+        subtitle="إدارة إقرارات الانضمام وتعهدات الشؤون الأكاديمية والتوقيعات الرقمية للمتدربين"
+        actions={<>
 
         <Button
           variant="contained"
@@ -65,7 +61,8 @@ export const Declarations: React.FC = () => {
         >
           إنشاء إقرار وتعهد جديد
         </Button>
-      </div>
+        </>}
+      />
 
       {(isLoadingDecls || isLoadingStats) && <LinearProgress sx={{ borderRadius: 1 }} />}
       {isErrorDecls && <Alert severity="error">تعذر تحميل الإقرارات من الخادم</Alert>}
@@ -73,15 +70,15 @@ export const Declarations: React.FC = () => {
       {/* Compliance Stats Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
         <div className="glass-card" style={{ padding: '20px' }}>
-          <div style={{ fontSize: '12px', color: '#94a3b8' }}>إجمالي الإقرارات النشطة</div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#10b981', marginTop: '4px' }}>
+          <div style={{ fontSize: '12px', color: '#64748B' }}>إجمالي الإقرارات النشطة</div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: '#059669', marginTop: '4px' }}>
             {declarations?.length || 0}
           </div>
         </div>
 
         <div className="glass-card" style={{ padding: '20px' }}>
-          <div style={{ fontSize: '12px', color: '#94a3b8' }}>إجمالي التوقيعات والموافقات الرقمية</div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#06b6d4', marginTop: '4px' }}>
+          <div style={{ fontSize: '12px', color: '#64748B' }}>إجمالي التوقيعات والموافقات الرقمية</div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: '#0891B2', marginTop: '4px' }}>
             {statistics?.totalAcceptances || 0}
           </div>
         </div>
@@ -89,27 +86,27 @@ export const Declarations: React.FC = () => {
 
       {/* Declarations List */}
       <div>
-        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc', marginBottom: '16px' }}>قائمة الإقرارات والتعهدات الحالية</h3>
+        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', marginBottom: '16px' }}>قائمة الإقرارات والتعهدات الحالية</h3>
         <TableContainer component={Paper} className="glass-card">
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>عنوان الإقرار</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>النوع</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الإصدار (Version)</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>عدد التوقيعات</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>عنوان الإقرار</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>النوع</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الإصدار (Version)</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>عدد التوقيعات</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الحالة</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {declarations?.map((dec: any) => (
                 <TableRow key={dec.id}>
-                  <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>{dec.titleAr}</TableCell>
+                  <TableCell style={{ fontWeight: 700, color: '#0F172A' }}>{dec.titleAr}</TableCell>
                   <TableCell>
                     <Chip label={dec.type === 'joining' ? 'إقرار انضمام' : 'إقرار الشؤون الأكاديمية'} size="small" variant="outlined" />
                   </TableCell>
-                  <TableCell style={{ fontWeight: 700, color: '#06b6d4' }}>v{dec.version}</TableCell>
-                  <TableCell style={{ fontWeight: 700, color: '#34d399' }}>{dec._count?.acceptances || 0} موافقة</TableCell>
+                  <TableCell style={{ fontWeight: 700, color: '#0891B2' }}>v{dec.version}</TableCell>
+                  <TableCell style={{ fontWeight: 700, color: '#047857' }}>{dec._count?.acceptances || 0} موافقة</TableCell>
                   <TableCell><Chip label="مفعّل وممتثل" color="success" size="small" /></TableCell>
                 </TableRow>
               ))}

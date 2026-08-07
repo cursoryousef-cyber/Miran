@@ -71,11 +71,11 @@ export const NotificationCenter: React.FC = () => {
   const getTypeColor = (type: string) => {
     const colors: Record<string, string> = {
       training_request: '#0F766E',
-      training_request_update: '#F59E0B',
-      allocation: '#10B981',
-      import: '#8B5CF6',
-      system: '#EF4444',
-      call_alert: '#EF4444',
+      training_request_update: '#D97706',
+      allocation: '#059669',
+      import: '#7C3AED',
+      system: '#DC2626',
+      call_alert: '#DC2626',
     };
     return colors[type] || '#64748B';
   };
@@ -162,7 +162,7 @@ export const NotificationCenter: React.FC = () => {
                         {n.bodyAr}
                       </div>
                     )}
-                    <div style={{ fontSize: '10.5px', color: '#94A3B8', marginTop: '4px' }}>
+                    <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '4px' }}>
                       {getTimeAgo(n.createdAt)}
                     </div>
                   </div>

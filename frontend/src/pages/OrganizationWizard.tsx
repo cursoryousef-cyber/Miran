@@ -87,7 +87,7 @@ export const OrganizationWizard: React.FC = () => {
           width: '56px',
           height: '56px',
           borderRadius: '16px',
-          background: 'linear-gradient(135deg, #059669 0%, #06b6d4 100%)',
+          background: 'linear-gradient(135deg, #059669 0%, #0891B2 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -95,10 +95,10 @@ export const OrganizationWizard: React.FC = () => {
         }}>
           <Wand2 size={28} color="#fff" />
         </div>
-        <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
           معالج تزويد الجهات آلياً (Auto Provisioning Wizard)
         </h1>
-        <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
+        <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>
           إنشاء وتزويد الجهات بالتراخيص، الحسابات الإدارية، الهيكل التنظيمي، وباقاتها بضغطة زر واحدة
         </p>
       </div>
@@ -110,7 +110,7 @@ export const OrganizationWizard: React.FC = () => {
       <Stepper activeStep={activeStep} alternativeLabel style={{ backgroundColor: 'transparent' }}>
         {steps.map((label) => (
           <Step key={label}>
-            <StepLabel style={{ color: '#f8fafc' }}>{label}</StepLabel>
+            <StepLabel style={{ color: '#0F172A' }}>{label}</StepLabel>
           </Step>
         ))}
       </Stepper>
@@ -121,7 +121,7 @@ export const OrganizationWizard: React.FC = () => {
       <div className="glass-card" style={{ padding: '32px' }}>
         {activeStep === 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc' }}>1. البيانات الأساسية للجهة</h3>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A' }}>1. البيانات الأساسية للجهة</h3>
             <TextField
               label="اسم الجهة بالعربية"
               value={formData.nameAr}
@@ -151,14 +151,14 @@ export const OrganizationWizard: React.FC = () => {
 
         {activeStep === 1 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc' }}>2. نوع الجهة والتابعيات والشجرة التنظيمية</h3>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A' }}>2. نوع الجهة والتابعيات والشجرة التنظيمية</h3>
             <TextField
               label="المدينة والمنطقة"
               value={formData.cityAr}
               onChange={(e) => setFormData({ ...formData, cityAr: e.target.value })}
               fullWidth
             />
-            <p style={{ fontSize: '13px', color: '#94a3b8' }}>
+            <p style={{ fontSize: '13px', color: '#64748B' }}>
               سيتم إنشاء السجل في الشجرة الشجرية (Closure Table) وتعيين المسارات تلقائياً بدون تداخل.
             </p>
           </div>
@@ -166,7 +166,7 @@ export const OrganizationWizard: React.FC = () => {
 
         {activeStep === 2 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc' }}>3. الحساب الإداري الافتراضي لمدير الجهة</h3>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A' }}>3. الحساب الإداري الافتراضي لمدير الجهة</h3>
             <TextField
               label="اسم المدير بالعربية"
               value={formData.adminNameAr}
@@ -195,10 +195,10 @@ export const OrganizationWizard: React.FC = () => {
 
         {activeStep === 3 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc' }}>4. ملخص الترخيص والإعدادات التلقائية</h3>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A' }}>4. ملخص الترخيص والإعدادات التلقائية</h3>
             <div style={{ backgroundColor: 'rgba(5, 150, 105, 0.1)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: '#34d399' }}>باقة التشغيل: Enterprise License (1 Year)</div>
-              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#047857' }}>باقة التشغيل: Enterprise License (1 Year)</div>
+              <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
                 تتضمن: 100 مستخدم إداري + 500 متدرب + 50 GB مساحة تخزينية + كافّة ميزات النظام والمستندات والنداءات.
               </div>
             </div>
@@ -207,7 +207,7 @@ export const OrganizationWizard: React.FC = () => {
 
         {activeStep === 4 && resultData && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', textAlign: 'center' }}>
-            <CheckCircle2 size={64} color="#10b981" style={{ margin: '0 auto' }} />
+            <CheckCircle2 size={64} color="#059669" style={{ margin: '0 auto' }} />
             <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>تم إنشاء الجهة والحساب الإداري بنجاح!</h2>
 
             <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '20px', borderRadius: '12px', textAlign: 'right' }}>
@@ -234,7 +234,7 @@ export const OrganizationWizard: React.FC = () => {
         {/* Buttons Nav */}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '32px' }}>
           {activeStep < 4 && (
-            <Button disabled={activeStep === 0} onClick={handleBack} style={{ color: '#94a3b8' }}>
+            <Button disabled={activeStep === 0} onClick={handleBack} style={{ color: '#64748B' }}>
               السابق
             </Button>
           )}

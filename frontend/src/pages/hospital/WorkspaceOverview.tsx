@@ -15,7 +15,7 @@ interface Occupancy {
   occupancyPercentage: number;
 }
 
-const barColour = (pct: number) => (pct >= 90 ? '#EF4444' : pct >= 70 ? '#F59E0B' : '#0F766E');
+const barColour = (pct: number) => (pct >= 90 ? '#DC2626' : pct >= 70 ? '#D97706' : '#0F766E');
 
 const StatTile: React.FC<{
   label: string; value: React.ReactNode; icon: any; colour: string; hint?: string;
@@ -148,14 +148,14 @@ export const WorkspaceOverview: React.FC<{ onNavigate: (tab: string) => void }> 
       {/* Normalized KPI Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
         <StatTile label="الروتيشنات النشطة" value={activeRotations} icon={Activity} colour="#0F766E" />
-        <StatTile label="المتدربون الحاليون" value={timeline?.traineeCount ?? 0} icon={Stethoscope} colour="#10B981"
+        <StatTile label="المتدربون الحاليون" value={timeline?.traineeCount ?? 0} icon={Stethoscope} colour="#059669"
           hint={`متوسط الإنجاز ${timeline?.averageCompletion ?? 0}%`} />
-        <StatTile label="حضور اليوم" value={`${presentToday}/${todayAttendance.length}`} icon={CalendarCheck} colour="#8B5CF6" />
-        <StatTile label="تقييمات معلّقة" value={pendingEvaluations} icon={ClipboardCheck} colour="#F59E0B" />
+        <StatTile label="حضور اليوم" value={`${presentToday}/${todayAttendance.length}`} icon={CalendarCheck} colour="#7C3AED" />
+        <StatTile label="تقييمات معلّقة" value={pendingEvaluations} icon={ClipboardCheck} colour="#D97706" />
         <StatTile label="جاهزون للتخرج" value={timeline?.readyForGraduation ?? 0} icon={GraduationCap} colour="#0F766E"
           hint={`متعثرون: ${(timeline?.atRisk ?? 0) + (timeline?.offTrack ?? 0)}`} />
         <StatTile label="بلاغات مفتوحة" value={openIncidents} icon={AlertTriangle}
-          colour={openIncidents > 0 ? '#EF4444' : '#10B981'} />
+          colour={openIncidents > 0 ? '#DC2626' : '#059669'} />
       </div>
 
       {/* Panels Grid */}
@@ -212,10 +212,10 @@ export const WorkspaceOverview: React.FC<{ onNavigate: (tab: string) => void }> 
         <Panel title="جاهزية التخرج" icon={GraduationCap}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
             {[
-              { label: 'في المسار', value: timeline?.onTrack ?? 0, colour: '#10B981', bg: '#DCFCE7' },
+              { label: 'في المسار', value: timeline?.onTrack ?? 0, colour: '#059669', bg: '#DCFCE7' },
               { label: 'جاهز', value: timeline?.readyForGraduation ?? 0, colour: '#0F766E', bg: '#CCFBF1' },
-              { label: 'متأخر', value: timeline?.atRisk ?? 0, colour: '#F59E0B', bg: '#FEF3C7' },
-              { label: 'خارج المسار', value: timeline?.offTrack ?? 0, colour: '#EF4444', bg: '#FEE2E2' },
+              { label: 'متأخر', value: timeline?.atRisk ?? 0, colour: '#D97706', bg: '#FEF3C7' },
+              { label: 'خارج المسار', value: timeline?.offTrack ?? 0, colour: '#DC2626', bg: '#FEE2E2' },
             ].map((s) => (
               <div key={s.label} style={{ padding: 14, background: s.bg, borderRadius: 12 }}>
                 <div style={{ fontSize: 11.5, color: '#475569', fontWeight: 600 }}>{s.label}</div>

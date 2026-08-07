@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { apiClient } from '../api/client';
 import { GraduationCap, Plus, Send, CheckCircle2, Building2, Layers, Calendar, Users, Activity } from 'lucide-react';
 import {
@@ -111,22 +112,14 @@ export const AcademicIntakes: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Top Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-            الدفعات الأكاديمية وطلبات التدريب (Academic Intakes & Training Requests)
-          </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            {user?.activeOrganization?.nameAr || 'المنظومة الوطنية للتدريب الصحي'} — متابعة دفعات الامتياز وطلبات التوزيع السريري
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '12px' }}>
+      <PageHeader
+        title="الدفعات الأكاديمية وطلبات التدريب (Academic Intakes & Training Requests)"
+        actions={<>
           <Button
             variant="outlined"
             startIcon={<Send size={18} />}
             onClick={() => setOpenReqModal(true)}
-            style={{ borderColor: '#06b6d4', color: '#06b6d4', fontWeight: 700 }}
+            style={{ borderColor: '#0891B2', color: '#0891B2', fontWeight: 700 }}
           >
             إرسال طلب تدريب جديد
           </Button>
@@ -139,8 +132,8 @@ export const AcademicIntakes: React.FC = () => {
           >
             إنشاء دفعة أكاديمية
           </Button>
-        </div>
-      </div>
+        </>}
+      />
 
       {successMsg && (
         <Alert severity="success" onClose={() => setSuccessMsg(null)} style={{ borderRadius: '10px' }}>
@@ -149,10 +142,10 @@ export const AcademicIntakes: React.FC = () => {
       )}
 
       {/* Tabs Bar */}
-      <Paper style={{ background: '#1e293b', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+      <Paper style={{ background: '#1e293b', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
         <Tabs value={activeTab} onChange={(_, val) => setActiveTab(val)} textColor="secondary" indicatorColor="secondary">
-          <Tab icon={<GraduationCap size={18} />} iconPosition="start" label={`الدفعات الأكاديمية (${intakesList.length})`} style={{ fontWeight: 700, color: '#f8fafc' }} />
-          <Tab icon={<Layers size={18} />} iconPosition="start" label={`طلبات التدريب الواردة (${requestsList.length})`} style={{ fontWeight: 700, color: '#f8fafc' }} />
+          <Tab icon={<GraduationCap size={18} />} iconPosition="start" label={`الدفعات الأكاديمية (${intakesList.length})`} style={{ fontWeight: 700, color: '#0F172A' }} />
+          <Tab icon={<Layers size={18} />} iconPosition="start" label={`طلبات التدريب الواردة (${requestsList.length})`} style={{ fontWeight: 700, color: '#0F172A' }} />
         </Tabs>
       </Paper>
 
@@ -162,14 +155,14 @@ export const AcademicIntakes: React.FC = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>رمز واسم الدفعة</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الجامعة (University)</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>البرنامج والتخصص</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>فترة التدريب</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المطلوب</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الموزع فعلياً</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المتبقي</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>رمز واسم الدفعة</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الجامعة (University)</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>البرنامج والتخصص</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>فترة التدريب</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>المطلوب</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الموزع فعلياً</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>المتبقي</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الحالة</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -185,22 +178,22 @@ export const AcademicIntakes: React.FC = () => {
 
                   return (
                     <TableRow key={intake.id}>
-                      <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>
+                      <TableCell style={{ fontWeight: 700, color: '#0F172A' }}>
                         {intake.nameAr}
-                        <div style={{ fontFamily: 'monospace', fontSize: '11px', color: '#06b6d4' }}>{intake.code}</div>
+                        <div style={{ fontFamily: 'monospace', fontSize: '11px', color: '#0891B2' }}>{intake.code}</div>
                       </TableCell>
-                      <TableCell style={{ color: '#cbd5e1', fontWeight: 600 }}>
+                      <TableCell style={{ color: '#475569', fontWeight: 600 }}>
                         {intake.organization?.nameAr || 'جامعة الحدود الشمالية'}
                       </TableCell>
-                      <TableCell style={{ color: '#34d399', fontWeight: 600 }}>
+                      <TableCell style={{ color: '#047857', fontWeight: 600 }}>
                         {intake.program?.nameAr || 'برنامج امتياز الطب البشري'}
                       </TableCell>
-                      <TableCell style={{ color: '#94a3b8', fontSize: '12px' }}>
+                      <TableCell style={{ color: '#64748B', fontSize: '12px' }}>
                         {intake.startDate ? new Date(intake.startDate).toISOString().split('T')[0] : '2026-07-01'} إلى {intake.endDate ? new Date(intake.endDate).toISOString().split('T')[0] : '2027-06-30'}
                       </TableCell>
-                      <TableCell style={{ fontWeight: 800, color: '#38bdf8' }}>{reqCount} طالب</TableCell>
-                      <TableCell style={{ fontWeight: 800, color: '#10b981' }}>{allocCount} موزع</TableCell>
-                      <TableCell style={{ fontWeight: 800, color: remCount > 0 ? '#f59e0b' : '#10b981' }}>{remCount} متبقي</TableCell>
+                      <TableCell style={{ fontWeight: 800, color: '#0284C7' }}>{reqCount} طالب</TableCell>
+                      <TableCell style={{ fontWeight: 800, color: '#059669' }}>{allocCount} موزع</TableCell>
+                      <TableCell style={{ fontWeight: 800, color: remCount > 0 ? '#D97706' : '#059669' }}>{remCount} متبقي</TableCell>
                       <TableCell>
                         <Chip
                           label={intake.status === 'active' || intake.status === 'planned' ? 'نشطة (Active)' : intake.status}
@@ -214,7 +207,7 @@ export const AcademicIntakes: React.FC = () => {
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} align="center" style={{ color: '#94a3b8', padding: '32px' }}>
+                  <TableCell colSpan={8} align="center" style={{ color: '#64748B', padding: '32px' }}>
                     لا توجد دفعات أكاديمية حالياً
                   </TableCell>
                 </TableRow>
@@ -230,14 +223,14 @@ export const AcademicIntakes: React.FC = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>رقم الطلب</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الجامعة الموفدة</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الجهة المستهدفة</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الأولوية</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الطلاب المطلوبون</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الموزع على المستشفيات</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>حالة الطلب</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>تاريخ التقديم</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>رقم الطلب</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الجامعة الموفدة</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الجهة المستهدفة</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الأولوية</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الطلاب المطلوبون</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الموزع على المستشفيات</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>حالة الطلب</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>تاريخ التقديم</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -248,20 +241,20 @@ export const AcademicIntakes: React.FC = () => {
               ) : requestsList.length > 0 ? (
                 requestsList.map((req: any) => (
                   <TableRow key={req.id}>
-                    <TableCell style={{ fontFamily: 'monospace', color: '#06b6d4', fontWeight: 800 }}>
+                    <TableCell style={{ fontFamily: 'monospace', color: '#0891B2', fontWeight: 800 }}>
                       {req.requestNumber}
                     </TableCell>
-                    <TableCell style={{ color: '#f8fafc', fontWeight: 700 }}>
+                    <TableCell style={{ color: '#0F172A', fontWeight: 700 }}>
                       {req.sourceOrg?.nameAr || 'جامعة الحدود الشمالية'}
                     </TableCell>
-                    <TableCell style={{ color: '#cbd5e1' }}>
+                    <TableCell style={{ color: '#475569' }}>
                       {req.targetOrg?.nameAr || 'تجمع الحدود الشمالية الصحي'}
                     </TableCell>
                     <TableCell>
                       <Chip label={req.priority === 'urgent' ? 'عاجل' : 'عادي'} color={req.priority === 'urgent' ? 'error' : 'default'} size="small" />
                     </TableCell>
-                    <TableCell style={{ fontWeight: 800, color: '#38bdf8' }}>{req.studentCount} طالب</TableCell>
-                    <TableCell style={{ fontWeight: 800, color: '#10b981' }}>
+                    <TableCell style={{ fontWeight: 800, color: '#0284C7' }}>{req.studentCount} طالب</TableCell>
+                    <TableCell style={{ fontWeight: 800, color: '#059669' }}>
                       {Array.isArray(req.allocations) ? req.allocations.reduce((sum: number, a: any) => sum + (Number(a.allocatedSeats) || Number(a.seats) || 0), 0) : 0} مقعد
                     </TableCell>
                     <TableCell>
@@ -280,14 +273,14 @@ export const AcademicIntakes: React.FC = () => {
                         style={{ fontWeight: 700 }}
                       />
                     </TableCell>
-                    <TableCell style={{ color: '#94a3b8', fontSize: '12px' }}>
+                    <TableCell style={{ color: '#64748B', fontSize: '12px' }}>
                       {req.createdAt ? new Date(req.createdAt).toISOString().split('T')[0] : '2026-08-01'}
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} align="center" style={{ color: '#94a3b8', padding: '32px' }}>
+                  <TableCell colSpan={8} align="center" style={{ color: '#64748B', padding: '32px' }}>
                     لا توجد طلبات تدريب واردة حالياً
                   </TableCell>
                 </TableRow>
@@ -323,7 +316,7 @@ export const AcademicIntakes: React.FC = () => {
         </DialogContent>
         <DialogActions style={{ padding: '16px 24px' }}>
           <Button onClick={() => setOpenReqModal(false)}>إلغاء</Button>
-          <Button variant="contained" onClick={() => submitRequestMutation.mutate()} disabled={submitRequestMutation.isPending} style={{ background: '#06b6d4', fontWeight: 700 }}>
+          <Button variant="contained" onClick={() => submitRequestMutation.mutate()} disabled={submitRequestMutation.isPending} style={{ background: '#0891B2', fontWeight: 700 }}>
             {submitRequestMutation.isPending ? <CircularProgress size={20} /> : 'إرسال الطلب (Submit)'}
           </Button>
         </DialogActions>

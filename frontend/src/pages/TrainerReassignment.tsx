@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { apiClient } from '../api/client';
 import {
   ArrowRightLeft,
@@ -202,19 +203,12 @@ export const TrainerReassignment: React.FC = () => {
   const steps = ['نوع الإسناد', 'اختيار المتدربين', 'السبب', 'المدرب البديل', 'المراجعة'];
 
   return (
-    <div style={{ padding: '24px', direction: 'rtl', fontFamily: 'Tajawal, sans-serif' }}>
-      {/* ─── Header ─── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: '#1e293b' }}>
-            <ArrowRightLeft size={24} style={{ verticalAlign: 'middle', marginLeft: 8, color: '#6366f1' }} />
-            إعادة إسناد المدربين
-          </h1>
-          <p style={{ color: '#64748b', fontSize: 14, margin: '4px 0 0' }}>
-            نقل المتدربين بين المدربين مع الحفاظ على التقييمات والسجل السريري
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, direction: 'rtl' }}>
+      <PageHeader
+        icon={ArrowRightLeft}
+        title="إعادة إسناد المدربين"
+        subtitle="نقل المتدربين بين المدربين مع الحفاظ على التقييمات والسجل السريري"
+        actions={<>
           <Button variant="outlined" startIcon={<History size={18} />} onClick={() => setShowHistory(!showHistory)}
             sx={{ borderColor: '#6366f1', color: '#6366f1', fontFamily: 'Tajawal', '&:hover': { borderColor: '#4f46e5', bgcolor: '#eef2ff' } }}>
             {showHistory ? 'إخفاء السجل' : 'سجل الإسناد'}
@@ -224,8 +218,8 @@ export const TrainerReassignment: React.FC = () => {
             sx={{ bgcolor: '#6366f1', fontFamily: 'Tajawal', '&:hover': { bgcolor: '#4f46e5' } }}>
             إعادة إسناد جديد
           </Button>
-        </div>
-      </div>
+        </>}
+      />
 
       {successMsg && <Alert severity="success" sx={{ mb: 2, fontFamily: 'Tajawal' }} onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" sx={{ mb: 2, fontFamily: 'Tajawal' }} onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
@@ -233,7 +227,7 @@ export const TrainerReassignment: React.FC = () => {
       {/* ─── Trainers Grid ─── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <div style={{ position: 'relative', flex: 1, maxWidth: 400 }}>
-          <Search size={18} style={{ position: 'absolute', right: 12, top: 10, color: '#94a3b8' }} />
+          <Search size={18} style={{ position: 'absolute', right: 12, top: 10, color: '#64748B' }} />
           <input
             placeholder="بحث عن مدرب..."
             value={searchTerm}
@@ -263,7 +257,7 @@ export const TrainerReassignment: React.FC = () => {
               <div key={trainer.id} style={{
                 background: '#fff', borderRadius: 16, padding: 20, border: '1px solid #e2e8f0',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.04)', transition: 'all 0.2s',
-                borderRight: `4px solid ${isOverloaded ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#22c55e'}`,
+                borderRight: `4px solid ${isOverloaded ? '#DC2626' : pct >= 80 ? '#D97706' : '#22c55e'}`,
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                   <div>
@@ -273,7 +267,7 @@ export const TrainerReassignment: React.FC = () => {
                     <p style={{ margin: '2px 0', fontSize: 13, color: '#64748b' }}>
                       {trainer.department?.nameAr || 'بدون قسم'}
                     </p>
-                    <p style={{ margin: 0, fontSize: 12, color: '#94a3b8' }}>
+                    <p style={{ margin: 0, fontSize: 12, color: '#64748B' }}>
                       {trainer.specialization || ''}
                     </p>
                   </div>
@@ -295,7 +289,7 @@ export const TrainerReassignment: React.FC = () => {
                     height: 6, borderRadius: 3, mb: 1.5,
                     bgcolor: '#f1f5f9',
                     '& .MuiLinearProgress-bar': {
-                      bgcolor: isOverloaded ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#22c55e',
+                      bgcolor: isOverloaded ? '#DC2626' : pct >= 80 ? '#D97706' : '#22c55e',
                       borderRadius: 3,
                     },
                   }}
@@ -360,7 +354,7 @@ export const TrainerReassignment: React.FC = () => {
                     </tr>
                   ))}
                   {(!historyData || historyData.length === 0) && (
-                    <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: '#94a3b8' }}>لا توجد عمليات إعادة إسناد سابقة</td></tr>
+                    <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: '#64748B' }}>لا توجد عمليات إعادة إسناد سابقة</td></tr>
                   )}
                 </tbody>
               </table>
@@ -477,7 +471,7 @@ export const TrainerReassignment: React.FC = () => {
                       </div>
                     ))}
                     {(selectedTrainerId ? trainerRotations : activeRotations).length === 0 && (
-                      <div style={{ padding: 32, textAlign: 'center', color: '#94a3b8' }}>لا توجد روتيشنات نشطة</div>
+                      <div style={{ padding: 32, textAlign: 'center', color: '#64748B' }}>لا توجد روتيشنات نشطة</div>
                     )}
                   </div>
                   {selectedTrainees.length > 0 && (
@@ -512,7 +506,7 @@ export const TrainerReassignment: React.FC = () => {
           {activeStep === 3 && (
             <div>
               <p style={{ fontSize: 14, color: '#475569', marginBottom: 12 }}>
-                <Zap size={16} style={{ verticalAlign: 'middle', color: '#f59e0b' }} /> المدربون البدلاء المقترحون (مرتبين حسب السعة المتاحة)
+                <Zap size={16} style={{ verticalAlign: 'middle', color: '#D97706' }} /> المدربون البدلاء المقترحون (مرتبين حسب السعة المتاحة)
               </p>
               {suggestions.length > 0 ? (
                 <div style={{ display: 'grid', gap: 8 }}>

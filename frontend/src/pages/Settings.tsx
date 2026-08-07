@@ -1,5 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { Button, TextField, Switch, FormControlLabel, LinearProgress, Alert } from '@mui/material';
@@ -27,14 +28,10 @@ export const SettingsPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div>
-        <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-          مركز إعدادات المنصة والتراخيص (Settings & Subscription Quotas)
-        </h1>
-        <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>
-          الإعدادات الديناميكية المحفوظة بقاعدة البيانات وتراخيص السعات التخزينية والأدوار
-        </p>
-      </div>
+      <PageHeader
+        title="مركز إعدادات المنصة والتراخيص (Settings & Subscription Quotas)"
+        subtitle="الإعدادات الديناميكية المحفوظة بقاعدة البيانات وتراخيص السعات التخزينية والأدوار"
+      />
 
       {(isLoadingSettings || isLoadingLicense) && <LinearProgress sx={{ borderRadius: 1, backgroundColor: '#E2E8F0', '& .MuiLinearProgress-bar': { backgroundColor: '#0F766E' } }} />}
       {isErrorSettings && <Alert severity="error">تعذر تحميل الإعدادات من الخادم</Alert>}
@@ -46,21 +43,21 @@ export const SettingsPage: React.FC = () => {
         </h3>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-          <div style={{ backgroundColor: 'rgba(255,255,255,0.15)', padding: '16px', borderRadius: '12px' }}>
+          <div style={{ backgroundColor: '#E2E8F0', padding: '16px', borderRadius: '12px' }}>
             <div style={{ fontSize: '12px', color: '#CCFBF1', fontWeight: 600 }}>الباقة التشغيلية</div>
             <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFFFFF', textTransform: 'uppercase', marginTop: 4 }}>
               {license?.plan ? String(license.plan) : 'ENTERPRISE'}
             </div>
           </div>
 
-          <div style={{ backgroundColor: 'rgba(255,255,255,0.15)', padding: '16px', borderRadius: '12px' }}>
+          <div style={{ backgroundColor: '#E2E8F0', padding: '16px', borderRadius: '12px' }}>
             <div style={{ fontSize: '12px', color: '#CCFBF1', fontWeight: 600 }}>سعة المستخدمين والإداريين</div>
             <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFFFFF', marginTop: 4 }}>
               {license?.maxUsers ? Number(license.maxUsers) : 100} مستخدم
             </div>
           </div>
 
-          <div style={{ backgroundColor: 'rgba(255,255,255,0.15)', padding: '16px', borderRadius: '12px' }}>
+          <div style={{ backgroundColor: '#E2E8F0', padding: '16px', borderRadius: '12px' }}>
             <div style={{ fontSize: '12px', color: '#CCFBF1', fontWeight: 600 }}>حالة الترخيص السنوي</div>
             <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFFFFF', marginTop: 4 }}>
               {license?.status ? String(license.status).toUpperCase() : 'ACTIVE'}

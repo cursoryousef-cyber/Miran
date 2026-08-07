@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { apiClient } from '../api/client';
 import { AlertTriangle, CalendarClock, FileWarning, RotateCcw } from 'lucide-react';
 import {
@@ -114,16 +115,12 @@ export const UniversityCorrections: React.FC = () => {
     Boolean(deadline && new Date(deadline) < new Date());
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        <RotateCcw size={22} />
-        <Typography variant="h5" fontWeight={700}>
-          تصحيحات الجامعة
-        </Typography>
-      </Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        المتدربون الذين أعادهم التجمع الصحي للتصحيح. عدّل البيانات المطلوبة ثم أعد الإرسال.
-      </Typography>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <PageHeader
+        icon={RotateCcw}
+        title="تصحيحات الجامعة"
+        subtitle="المتدربون الذين أعادهم التجمع الصحي للتصحيح — عدّل البيانات ثم أعد الإرسال"
+      />
 
       {successMsg && (
         <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMsg(null)}>

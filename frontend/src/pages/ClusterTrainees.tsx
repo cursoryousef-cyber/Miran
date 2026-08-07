@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { apiClient } from '../api/client';
 import * as XLSX from 'xlsx';
 import {
@@ -298,17 +299,9 @@ export const ClusterTrainees: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-            توزيع متدربي الامتياز وطاقتي التجمع (Cluster Training Distribution)
-          </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            {user?.activeOrganization?.nameAr || 'تجمع الحدود الشمالية الصحي'} — التوزيع الذكي للطلاب وتحديد المستشفيات والأقسام والمدربين
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '12px' }}>
+      <PageHeader
+        title="توزيع متدربي الامتياز وطاقتي التجمع (Cluster Training Distribution)"
+        actions={<>
           <Button
             variant="contained"
             startIcon={<Zap size={18} />}
@@ -322,7 +315,7 @@ export const ClusterTrainees: React.FC = () => {
             variant="outlined"
             startIcon={<Download size={18} />}
             onClick={handleDownloadTemplate}
-            style={{ borderColor: '#06b6d4', color: '#06b6d4', fontWeight: 700 }}
+            style={{ borderColor: '#0891B2', color: '#0891B2', fontWeight: 700 }}
           >
             تحميل نموذج Excel المعتمد
           </Button>
@@ -336,8 +329,8 @@ export const ClusterTrainees: React.FC = () => {
             استيراد ملف Excel
             <input type="file" hidden accept=".xlsx, .xls" onChange={handleFileUpload} />
           </Button>
-        </div>
-      </div>
+        </>}
+      />
 
       {successMsg && (
         <Alert severity="success" onClose={() => setSuccessMsg(null)} style={{ borderRadius: '10px' }}>
@@ -353,8 +346,8 @@ export const ClusterTrainees: React.FC = () => {
 
       {/* SECTION 7: Hospital Capacity Dashboard Cards */}
       <div>
-        <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#f8fafc', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Building2 size={20} color="#06b6d4" />
+        <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Building2 size={20} color="#0891B2" />
           بطاقات المستشفيات والطاقة الاستيعابية المباشرة (Hospital Capacity Dashboard)
         </h3>
 
@@ -379,8 +372,8 @@ export const ClusterTrainees: React.FC = () => {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <div style={{ fontSize: '16px', fontWeight: 800, color: '#f8fafc' }}>{hosp.nameAr}</div>
-                      <div style={{ fontSize: '12px', color: '#94a3b8', fontFamily: 'monospace' }}>{hosp.code} — {hosp.cityAr}</div>
+                      <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>{hosp.nameAr}</div>
+                      <div style={{ fontSize: '12px', color: '#64748B', fontFamily: 'monospace' }}>{hosp.code} — {hosp.cityAr}</div>
                     </div>
                     <Chip
                       label={`${hosp.occupancyPercentage}% اشغال`}
@@ -392,7 +385,7 @@ export const ClusterTrainees: React.FC = () => {
 
                   {/* Progress bar */}
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#cbd5e1', marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
                       <span>المستغل: <strong>{hosp.occupied}</strong> مقعد</span>
                       <span>الطاقة الكاملة: <strong>{hosp.capacity}</strong></span>
                     </div>
@@ -404,10 +397,10 @@ export const ClusterTrainees: React.FC = () => {
                   </div>
 
                   {/* Footer Stats */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '12px', color: '#94a3b8' }}>
-                    <span>الأقسام: <strong style={{ color: '#38bdf8' }}>{hosp.departmentsCount}</strong></span>
-                    <span>المدربون: <strong style={{ color: '#10b981' }}>{hosp.trainerCount}</strong></span>
-                    <span>المقاعد المتاحة: <strong style={{ color: '#f59e0b' }}>{hosp.available}</strong></span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid #F1F5F9', fontSize: '12px', color: '#64748B' }}>
+                    <span>الأقسام: <strong style={{ color: '#0284C7' }}>{hosp.departmentsCount}</strong></span>
+                    <span>المدربون: <strong style={{ color: '#059669' }}>{hosp.trainerCount}</strong></span>
+                    <span>المقاعد المتاحة: <strong style={{ color: '#D97706' }}>{hosp.available}</strong></span>
                   </div>
                 </Paper>
               </Grid>
@@ -450,13 +443,13 @@ export const ClusterTrainees: React.FC = () => {
                   checked={selectedIds.length > 0 && selectedIds.length === traineesList.length}
                 />
               </TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الرقم الأكاديمي والهوية</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>اسم طبيب الامتياز</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الجامعة الموفدة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>التخصص والبرنامج</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المستشفى الموجه إليه</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>القسم والمدرب والمشرف</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة والعمليات</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الرقم الأكاديمي والهوية</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>اسم طبيب الامتياز</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الجامعة الموفدة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>التخصص والبرنامج</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>المستشفى الموجه إليه</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>القسم والمدرب والمشرف</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الحالة والعمليات</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -483,26 +476,26 @@ export const ClusterTrainees: React.FC = () => {
                         />
                       </TableCell>
                       <TableCell style={{ fontWeight: 700 }}>
-                        <div style={{ fontFamily: 'monospace', color: '#06b6d4' }}>{t.traineeNumber}</div>
-                        <div style={{ fontFamily: 'monospace', fontSize: '11px', color: '#94a3b8' }}>ID: {t.person?.nationalId}</div>
+                        <div style={{ fontFamily: 'monospace', color: '#0891B2' }}>{t.traineeNumber}</div>
+                        <div style={{ fontFamily: 'monospace', fontSize: '11px', color: '#64748B' }}>ID: {t.person?.nationalId}</div>
                       </TableCell>
-                      <TableCell style={{ color: '#f8fafc', fontWeight: 700 }}>
+                      <TableCell style={{ color: '#0F172A', fontWeight: 700 }}>
                         {t.person?.nameAr}
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>{t.person?.gender === 'female' ? 'أنثى' : 'ذكر'}</div>
+                        <div style={{ fontSize: '11px', color: '#64748B' }}>{t.person?.gender === 'female' ? 'أنثى' : 'ذكر'}</div>
                       </TableCell>
-                      <TableCell style={{ color: '#cbd5e1' }}>
+                      <TableCell style={{ color: '#475569' }}>
                         {t.sponsorOrganization?.nameAr || t.academicIntake?.organization?.nameAr || 'جامعة الحدود الشمالية'}
                       </TableCell>
-                      <TableCell style={{ color: '#34d399', fontWeight: 600 }}>
+                      <TableCell style={{ color: '#047857', fontWeight: 600 }}>
                         {t.specialtyAr || 'طب وجراحة عامة'}
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>{t.program?.nameAr || 'دفعة امتياز 2027'}</div>
+                        <div style={{ fontSize: '11px', color: '#64748B' }}>{t.program?.nameAr || 'دفعة امتياز 2027'}</div>
                       </TableCell>
-                      <TableCell style={{ fontWeight: 700, color: '#f59e0b' }}>
+                      <TableCell style={{ fontWeight: 700, color: '#D97706' }}>
                         {t.organization?.nameAr || 'مستشفى برج الشمال الطبي'}
                       </TableCell>
                       <TableCell style={{ fontSize: '12px' }}>
-                        <div style={{ color: '#38bdf8', fontWeight: 700 }}>القسم: {deptName}</div>
-                        <div style={{ color: '#10b981' }}>المدرب: {trainerName}</div>
+                        <div style={{ color: '#0284C7', fontWeight: 700 }}>القسم: {deptName}</div>
+                        <div style={{ color: '#059669' }}>المدرب: {trainerName}</div>
                       </TableCell>
                       <TableCell>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -523,7 +516,7 @@ export const ClusterTrainees: React.FC = () => {
                 })
             ) : (
               <TableRow>
-                <TableCell colSpan={8} align="center" style={{ color: '#94a3b8', padding: '32px' }}>
+                <TableCell colSpan={8} align="center" style={{ color: '#64748B', padding: '32px' }}>
                   لا يوجد متدربون مستوردون حالياً
                 </TableCell>
               </TableRow>
@@ -541,7 +534,7 @@ export const ClusterTrainees: React.FC = () => {
           </Alert>
 
           {activeRequest && (
-            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
+            <div style={{ background: '#F1F5F9', padding: '12px', borderRadius: '8px' }}>
               <div>رقم الطلب النشط: <strong>{activeRequest.requestNumber}</strong></div>
               <div>عدد الطلاب المطلوب توزيعهم: <strong>{activeRequest.studentCount} طالب</strong></div>
             </div>
@@ -569,9 +562,9 @@ export const ClusterTrainees: React.FC = () => {
           </Alert>
 
           {selectedTraineeForRealloc && (
-            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
+            <div style={{ background: '#F1F5F9', padding: '12px', borderRadius: '8px' }}>
               <div>المتدرب: <strong>{selectedTraineeForRealloc.person?.nameAr}</strong> ({selectedTraineeForRealloc.traineeNumber})</div>
-              <div>المستشفى الحالي: <strong style={{ color: '#f59e0b' }}>{selectedTraineeForRealloc.organization?.nameAr}</strong></div>
+              <div>المستشفى الحالي: <strong style={{ color: '#D97706' }}>{selectedTraineeForRealloc.organization?.nameAr}</strong></div>
             </div>
           )}
 
@@ -640,7 +633,7 @@ export const ClusterTrainees: React.FC = () => {
               <TableBody>
                 {(allocationResults || []).map((row: any) => (
                   <TableRow key={row.rowId} style={{ backgroundColor: row.allocated ? 'rgba(16,185,129,0.05)' : 'rgba(239,68,68,0.05)' }}>
-                    <TableCell style={{ fontFamily: 'monospace', fontSize: '11px', color: '#94a3b8' }}>
+                    <TableCell style={{ fontFamily: 'monospace', fontSize: '11px', color: '#64748B' }}>
                       {row.rowId?.slice(0, 8)}…
                     </TableCell>
                     <TableCell>
@@ -651,14 +644,14 @@ export const ClusterTrainees: React.FC = () => {
                         style={{ fontWeight: 700 }}
                       />
                     </TableCell>
-                    <TableCell style={{ color: '#f59e0b', fontWeight: 700 }}>
+                    <TableCell style={{ color: '#D97706', fontWeight: 700 }}>
                       {row.hospitalName || '—'}
                       {row.score !== undefined && (
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>تقييم: {row.score?.toFixed(1)}</div>
+                        <div style={{ fontSize: '11px', color: '#64748B' }}>تقييم: {row.score?.toFixed(1)}</div>
                       )}
                     </TableCell>
                     <TableCell style={{ fontSize: '12px', maxWidth: 200 }}>
-                      <span style={{ color: row.allocated ? '#10b981' : '#ef4444' }}>{row.reason}</span>
+                      <span style={{ color: row.allocated ? '#059669' : '#DC2626' }}>{row.reason}</span>
                     </TableCell>
                     <TableCell style={{ maxWidth: 350 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -675,11 +668,11 @@ export const ClusterTrainees: React.FC = () => {
                               fontSize: '11px',
                             }}
                           >
-                            <span style={{ color: ev.passed ? '#10b981' : '#ef4444', fontWeight: 700 }}>
+                            <span style={{ color: ev.passed ? '#059669' : '#DC2626', fontWeight: 700 }}>
                               {ev.passed ? '✓' : '✗'} {ev.hospitalName}
                             </span>
                             {ev.passed ? (
-                              <span style={{ color: '#94a3b8' }}>تقييم: {ev.score?.toFixed(1)}</span>
+                              <span style={{ color: '#64748B' }}>تقييم: {ev.score?.toFixed(1)}</span>
                             ) : (
                               <span style={{ color: '#fca5a5', maxWidth: 180, textAlign: 'left' }}>{ev.failureReason}</span>
                             )}

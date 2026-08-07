@@ -31,7 +31,7 @@ const LEAVE_LABELS: Record<string, string> = {
   resignation: 'استقالة',
 };
 
-const barColour = (pct: number) => (pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#10b981');
+const barColour = (pct: number) => (pct >= 90 ? '#DC2626' : pct >= 70 ? '#D97706' : '#059669');
 
 export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ onNavigate }) => {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -82,13 +82,13 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
           <MenuItem value="all">كل الأقسام</MenuItem>
           {departments.map(([id, name]) => <MenuItem key={id} value={id}>{name}</MenuItem>)}
         </TextField>
-        <div style={{ marginRight: 'auto', fontSize: 13, color: '#94a3b8' }}>
+        <div style={{ marginRight: 'auto', fontSize: 13, color: '#64748B' }}>
           {visible.length} مدرب
         </div>
       </div>
 
       {visible.length === 0 && (
-        <div className="glass-card" style={{ padding: 32, textAlign: 'center', color: '#94a3b8' }}>
+        <div className="glass-card" style={{ padding: 32, textAlign: 'center', color: '#64748B' }}>
           لا يوجد مدربون مطابقون
         </div>
       )}
@@ -99,13 +99,13 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
           return (
             <div key={t.id} className="glass-card" style={{
               padding: 20,
-              border: t.onLeave ? '1px solid rgba(245,158,11,0.4)' : '1px solid rgba(255,255,255,0.06)',
+              border: t.onLeave ? '1px solid rgba(245,158,11,0.4)' : '1px solid #F1F5F9',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <UserCog size={16} color="#8b5cf6" />
-                    <span style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc' }}>{t.nameAr}</span>
+                    <UserCog size={16} color="#7C3AED" />
+                    <span style={{ fontSize: 15, fontWeight: 800, color: '#0F172A' }}>{t.nameAr}</span>
                   </div>
                   <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
                     {t.department?.nameAr ?? 'بدون قسم'}{t.titleAr ? ` — ${t.titleAr}` : ''}
@@ -113,21 +113,21 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
                 </div>
                 {t.onLeave && (
                   <Chip size="small" icon={<CalendarOff size={13} />} label="في إجازة"
-                    sx={{ background: 'rgba(245,158,11,0.18)', color: '#fbbf24', fontWeight: 700 }} />
+                    sx={{ background: 'rgba(245,158,11,0.18)', color: '#B45309', fontWeight: 700 }} />
                 )}
               </div>
 
               <div style={{ marginTop: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
-                  <span style={{ color: '#94a3b8' }}>الإشغال</span>
-                  <span style={{ color: '#cbd5e1', fontWeight: 700 }}>
+                  <span style={{ color: '#64748B' }}>الإشغال</span>
+                  <span style={{ color: '#475569', fontWeight: 700 }}>
                     {t.occupied}/{t.maxTrainees} — متاح {t.available}
                   </span>
                 </div>
                 <LinearProgress
                   variant="determinate" value={Math.min(100, t.occupancyPercentage)}
                   sx={{
-                    height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.07)',
+                    height: 7, borderRadius: 4, backgroundColor: '#F1F5F9',
                     '& .MuiLinearProgress-bar': { backgroundColor: barColour(t.occupancyPercentage), borderRadius: 4 },
                   }}
                 />
@@ -135,17 +135,17 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
 
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 14 }}>
                 {t.qualifiedPrograms.length === 0 && (
-                  <span style={{ fontSize: 11, color: '#f87171' }}>غير مؤهل لأي برنامج</span>
+                  <span style={{ fontSize: 11, color: '#DC2626' }}>غير مؤهل لأي برنامج</span>
                 )}
                 {t.qualifiedPrograms.map((p: any) => (
                   <Chip key={p.id} size="small" label={p.nameAr}
-                    sx={{ background: 'rgba(6,182,212,0.15)', color: '#67e8f9', fontSize: 11 }} />
+                    sx={{ background: 'rgba(6,182,212,0.15)', color: '#0E7490', fontSize: 11 }} />
                 ))}
               </div>
 
               <div style={{ display: 'flex', gap: 10, marginTop: 14, fontSize: 11, color: '#64748b' }}>
-                <span>روتيشنات: <strong style={{ color: '#cbd5e1' }}>{t.rotationCount}</strong></span>
-                <span>متدربون حاليون: <strong style={{ color: '#cbd5e1' }}>{t.currentTrainees.length}</strong></span>
+                <span>روتيشنات: <strong style={{ color: '#475569' }}>{t.rotationCount}</strong></span>
+                <span>متدربون حاليون: <strong style={{ color: '#475569' }}>{t.currentTrainees.length}</strong></span>
               </div>
 
               {t.leave && (
@@ -153,13 +153,13 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
                   marginTop: 12, padding: 10, borderRadius: 8,
                   background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)',
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#fbbf24' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#B45309' }}>
                     {LEAVE_LABELS[t.leave.leaveType] ?? t.leave.leaveType}
                   </div>
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 4 }}>
                     {String(t.leave.startDate).slice(0, 10)} → {String(t.leave.endDate).slice(0, 10)} • {t.leave.status}
                   </div>
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
                     البديل: {t.leave.replacementTrainerNameAr ?? 'غير محدد'}
                     {t.leave.autoReassigned ? ' • إعادة إسناد تلقائية' : ''}
                   </div>
@@ -168,42 +168,42 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
 
               <div style={{ display: 'flex', gap: 4, marginTop: 14, flexWrap: 'wrap' }}>
                 <Tooltip title="عرض الملف">
-                  <IconButton size="small" onClick={() => setProfile(t)} sx={{ color: '#06b6d4' }}>
+                  <IconButton size="small" onClick={() => setProfile(t)} sx={{ color: '#0891B2' }}>
                     <Eye size={16} />
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="المتدربون الحاليون">
-                  <IconButton size="small" onClick={() => setExpanded(isOpen ? null : t.id)} sx={{ color: '#10b981' }}>
+                  <IconButton size="small" onClick={() => setExpanded(isOpen ? null : t.id)} sx={{ color: '#059669' }}>
                     {isOpen ? <ChevronUp size={16} /> : <Users size={16} />}
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="إسناد متدرب — من الطلبات الواردة">
-                  <IconButton size="small" onClick={() => onNavigate('requests')} sx={{ color: '#f59e0b' }}>
+                  <IconButton size="small" onClick={() => onNavigate('requests')} sx={{ color: '#D97706' }}>
                     <UserPlus size={16} />
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="إعادة إسناد المتدربين">
-                  <IconButton size="small" onClick={() => onNavigate('reassignment')} sx={{ color: '#a78bfa' }}>
+                  <IconButton size="small" onClick={() => onNavigate('reassignment')} sx={{ color: '#6D28D9' }}>
                     <ArrowRightLeft size={16} />
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="إدارة الإجازات">
-                  <IconButton size="small" onClick={() => onNavigate('leaves')} sx={{ color: '#fbbf24' }}>
+                  <IconButton size="small" onClick={() => onNavigate('leaves')} sx={{ color: '#B45309' }}>
                     <CalendarOff size={16} />
                   </IconButton>
                 </Tooltip>
               </div>
 
               <Collapse in={isOpen}>
-                <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12 }}>
+                <div style={{ marginTop: 12, borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
                   {t.currentTrainees.length === 0 ? (
                     <div style={{ fontSize: 12, color: '#64748b' }}>لا يوجد متدربون حالياً</div>
                   ) : t.currentTrainees.map((c: any) => (
                     <div key={c.rotationId} style={{
                       padding: '8px 10px', marginBottom: 6, borderRadius: 8,
-                      background: 'rgba(255,255,255,0.03)',
+                      background: '#F8FAFC',
                     }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#f8fafc' }}>{c.nameAr ?? '—'}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A' }}>{c.nameAr ?? '—'}</div>
                       <div style={{ fontSize: 11, color: '#64748b' }}>
                         {c.departmentNameAr} • {String(c.startDate).slice(0, 10)} → {String(c.endDate).slice(0, 10)}
                       </div>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -160,14 +161,10 @@ export const HospitalReview: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div>
-        <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-          مراجعة المستشفى للمتدربين الموزَّعين (Stage 6 — Hospital Review)
-        </h1>
-        <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-          {user?.activeOrganization?.nameAr} — مراجعة المتدربين المُحالين وإتخاذ القرارات
-        </p>
-      </div>
+      <PageHeader
+        title="مراجعة المستشفى للمتدربين الموزَّعين (Stage 6 — Hospital Review)"
+        subtitle={<>{user?.activeOrganization?.nameAr} — مراجعة المتدربين المُحالين وإتخاذ القرارات</>}
+      />
 
       {successMsg && <Alert severity="success" onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
@@ -176,36 +173,36 @@ export const HospitalReview: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المتدرب</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الجامعة / الطلب</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>التخصص</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>القسم / المدرب</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700, textAlign: 'center' }}>الإجراءات</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>المتدرب</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الجامعة / الطلب</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>التخصص</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>القسم / المدرب</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الحالة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700, textAlign: 'center' }}>الإجراءات</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={6} align="center"><CircularProgress size={24} /></TableCell></TableRow>
             ) : rows.length === 0 ? (
-              <TableRow><TableCell colSpan={6} align="center" style={{ color: '#94a3b8', padding: '32px' }}>لا توجد حالات للمراجعة حالياً</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} align="center" style={{ color: '#64748B', padding: '32px' }}>لا توجد حالات للمراجعة حالياً</TableCell></TableRow>
             ) : (
               rows.map((row: any) => {
                 const st = STATUS_LABELS[row.status] || { label: row.status, color: 'default' as const };
                 return (
                   <TableRow key={row.id}>
-                    <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>
+                    <TableCell style={{ fontWeight: 700, color: '#0F172A' }}>
                       {row.nameAr}
-                      <div style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>{row.nationalId}</div>
+                      <div style={{ fontSize: '11px', color: '#64748B', fontFamily: 'monospace' }}>{row.nationalId}</div>
                     </TableCell>
-                    <TableCell style={{ fontSize: '12px', color: '#94a3b8' }}>
+                    <TableCell style={{ fontSize: '12px', color: '#64748B' }}>
                       {row.trainingRequest?.sourceOrg?.nameAr || '—'}
-                      <div style={{ fontFamily: 'monospace', color: '#06b6d4' }}>{row.trainingRequest?.requestNumber}</div>
+                      <div style={{ fontFamily: 'monospace', color: '#0891B2' }}>{row.trainingRequest?.requestNumber}</div>
                     </TableCell>
-                    <TableCell style={{ color: '#34d399' }}>{row.specialty || '—'}</TableCell>
+                    <TableCell style={{ color: '#047857' }}>{row.specialty || '—'}</TableCell>
                     <TableCell style={{ fontSize: '12px' }}>
-                      <div style={{ color: '#38bdf8' }}>{row.assignedDepartment?.nameAr || 'غير محدد'}</div>
-                      <div style={{ color: '#10b981' }}>{row.assignedTrainer?.person?.nameAr || 'غير محدد'}</div>
+                      <div style={{ color: '#0284C7' }}>{row.assignedDepartment?.nameAr || 'غير محدد'}</div>
+                      <div style={{ color: '#059669' }}>{row.assignedTrainer?.person?.nameAr || 'غير محدد'}</div>
                     </TableCell>
                     <TableCell>
                       <Chip label={st.label} color={st.color} size="small" style={{ fontWeight: 700 }} />
@@ -230,7 +227,7 @@ export const HospitalReview: React.FC = () => {
                         )}
                         {['allocated', 'hospital_review'].includes(row.status) && (
                           <Tooltip title="إيقاف مؤقت">
-                            <Button size="small" variant="outlined" style={{ borderColor: '#94a3b8', color: '#94a3b8', minWidth: 0, padding: '4px 8px' }}
+                            <Button size="small" variant="outlined" style={{ borderColor: '#94a3b8', color: '#64748B', minWidth: 0, padding: '4px 8px' }}
                               onClick={() => openDialog(row, 'hold')}>
                               <PauseCircle size={14} />
                             </Button>
@@ -239,7 +236,7 @@ export const HospitalReview: React.FC = () => {
                         {['hospital_review', 'on_hold'].includes(row.status) && (
                           <>
                             <Tooltip title="إعادة للتجمع">
-                              <Button size="small" variant="outlined" style={{ borderColor: '#f59e0b', color: '#f59e0b', minWidth: 0, padding: '4px 8px' }}
+                              <Button size="small" variant="outlined" style={{ borderColor: '#D97706', color: '#D97706', minWidth: 0, padding: '4px 8px' }}
                                 onClick={() => openDialog(row, 'return')}>
                                 <ArrowRightLeft size={14} />
                               </Button>
@@ -255,19 +252,19 @@ export const HospitalReview: React.FC = () => {
                         {['allocated', 'hospital_review', 'on_hold'].includes(row.status) && (
                           <>
                             <Tooltip title="طلب مستندات">
-                              <Button size="small" variant="outlined" style={{ borderColor: '#06b6d4', color: '#06b6d4', minWidth: 0, padding: '4px 8px' }}
+                              <Button size="small" variant="outlined" style={{ borderColor: '#0891B2', color: '#0891B2', minWidth: 0, padding: '4px 8px' }}
                                 onClick={() => openDialog(row, 'docs')}>
                                 <FileText size={14} />
                               </Button>
                             </Tooltip>
                             <Tooltip title="طلب تصحيح بيانات">
-                              <Button size="small" variant="outlined" style={{ borderColor: '#8b5cf6', color: '#8b5cf6', minWidth: 0, padding: '4px 8px' }}
+                              <Button size="small" variant="outlined" style={{ borderColor: '#7C3AED', color: '#7C3AED', minWidth: 0, padding: '4px 8px' }}
                                 onClick={() => openDialog(row, 'correction')}>
                                 <AlertTriangle size={14} />
                               </Button>
                             </Tooltip>
                             <Tooltip title="تعديل التعيين">
-                              <Button size="small" variant="outlined" style={{ borderColor: '#10b981', color: '#10b981', minWidth: 0, padding: '4px 8px' }}
+                              <Button size="small" variant="outlined" style={{ borderColor: '#059669', color: '#059669', minWidth: 0, padding: '4px 8px' }}
                                 onClick={() => openDialog(row, 'assign')}>
                                 <Edit3 size={14} />
                               </Button>
@@ -286,7 +283,7 @@ export const HospitalReview: React.FC = () => {
 
       {/* Reject Dialog */}
       <Dialog open={dialog === 'reject'} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>
-        <DialogTitle style={{ fontWeight: 800, color: '#ef4444' }}>رفض المتدرب نهائياً</DialogTitle>
+        <DialogTitle style={{ fontWeight: 800, color: '#DC2626' }}>رفض المتدرب نهائياً</DialogTitle>
         <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <Alert severity="warning">المتدرب: <strong>{selectedRow?.nameAr}</strong> — سيتم إخطار الجامعة بالرفض.</Alert>
           <TextField label="سبب الرفض *" value={reason} onChange={(e) => setReason(e.target.value)} fullWidth required multiline rows={2} size="small" />
@@ -310,7 +307,7 @@ export const HospitalReview: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialog(null)}>إلغاء</Button>
-          <Button variant="contained" style={{ background: '#f59e0b' }} onClick={() => returnMut.mutate()} disabled={returnMut.isPending || !reason}>
+          <Button variant="contained" style={{ background: '#D97706' }} onClick={() => returnMut.mutate()} disabled={returnMut.isPending || !reason}>
             {returnMut.isPending ? <CircularProgress size={20} /> : 'إعادة للتجمع'}
           </Button>
         </DialogActions>

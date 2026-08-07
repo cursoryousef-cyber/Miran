@@ -1,5 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { apiClient } from '../api/client';
 import { GitMerge, Plus, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, LinearProgress, Alert } from '@mui/material';
@@ -15,15 +16,10 @@ export const Workflows: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-            محرك سير العمل (Workflow Engine)
-          </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            تخصيص وإدارة مسارات اعتماد طلبات التدريب والبطاقات والروتيشنات دون تعديل الكود البرمجي
-          </p>
-        </div>
+      <PageHeader
+        title="محرك سير العمل (Workflow Engine)"
+        subtitle="تخصيص وإدارة مسارات اعتماد طلبات التدريب والبطاقات والروتيشنات دون تعديل الكود البرمجي"
+        actions={<>
 
         <Button
           variant="contained"
@@ -32,7 +28,8 @@ export const Workflows: React.FC = () => {
         >
           إنشاء سير عمل جديد
         </Button>
-      </div>
+        </>}
+      />
 
       {isLoading && <LinearProgress sx={{ borderRadius: 1 }} />}
       {isError && <Alert severity="error">تعذر تحميل سير العمل من الخادم</Alert>}
@@ -41,20 +38,20 @@ export const Workflows: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>اسم سير العمل</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الرمز (Code)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>نوع الكيان المستهدف</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>عدد الخطوات</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الإصدار</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>اسم سير العمل</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الرمز (Code)</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>نوع الكيان المستهدف</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>عدد الخطوات</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الإصدار</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الحالة</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {data?.map((wf: any) => (
               <TableRow key={wf.id}>
-                <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>{wf.nameAr}</TableCell>
-                <TableCell style={{ fontFamily: 'monospace', color: '#06b6d4' }}>{wf.code}</TableCell>
-                <TableCell style={{ color: '#34d399' }}>{wf.entityType}</TableCell>
+                <TableCell style={{ fontWeight: 700, color: '#0F172A' }}>{wf.nameAr}</TableCell>
+                <TableCell style={{ fontFamily: 'monospace', color: '#0891B2' }}>{wf.code}</TableCell>
+                <TableCell style={{ color: '#047857' }}>{wf.entityType}</TableCell>
                 <TableCell style={{ fontWeight: 700 }}>{wf.steps?.length || 0} خطوات</TableCell>
                 <TableCell>v{wf.version}</TableCell>
                 <TableCell><Chip label="مفعّل" color="success" size="small" /></TableCell>

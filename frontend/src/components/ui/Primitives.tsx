@@ -17,7 +17,7 @@ import { colour, font, radius, space, toneColour, type Tone } from './tokens';
 export const PageHeader: React.FC<{
   eyebrow?: string;
   title: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   icon?: any;
   actions?: React.ReactNode;
 }> = ({ eyebrow, title, subtitle, icon: Icon, actions }) => (

@@ -1,4 +1,6 @@
+import { UsersRound } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
+import { PageHeader } from '../components/ui';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../api/client';
@@ -22,12 +24,12 @@ interface DeptDef { id: string; code?: string; nameAr: string; }
 
 // ── Role Color Map ─────────────────────────────────────────────────────────────
 const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
-  org_manager:        { bg: 'rgba(5,150,105,0.15)',   text: '#10b981' },
-  academic_supervisor:{ bg: 'rgba(139,92,246,0.15)',  text: '#a78bfa' },
-  trainer:            { bg: 'rgba(6,182,212,0.15)',   text: '#22d3ee' },
-  trainee:            { bg: 'rgba(59,130,246,0.15)',  text: '#60a5fa' },
+  org_manager:        { bg: 'rgba(5,150,105,0.15)',   text: '#059669' },
+  academic_supervisor:{ bg: 'rgba(139,92,246,0.15)',  text: '#6D28D9' },
+  trainer:            { bg: 'rgba(6,182,212,0.15)',   text: '#0E7490' },
+  trainee:            { bg: 'rgba(59,130,246,0.15)',  text: '#2563EB' },
 };
-const getRoleColor = (code: string) => ROLE_COLORS[code] || { bg: 'rgba(255,255,255,0.08)', text: '#94a3b8' };
+const getRoleColor = (code: string) => ROLE_COLORS[code] || { bg: '#F1F5F9', text: '#94a3b8' };
 
 const ROLE_LABELS: Record<string, string> = {
   org_manager: 'مدير الجهة',
@@ -115,32 +117,12 @@ export const OrgMembersPage: React.FC = () => {
   ];
 
   return (
-    <div style={{ minHeight: '100vh', color: '#f8fafc', fontFamily: 'var(--font-arabic)' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
-          <div style={{
-            width: '56px', height: '56px', borderRadius: '14px',
-            background: 'linear-gradient(135deg, #059669, #06b6d4)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 8px 24px rgba(5,150,105,0.3)',
-          }}>
-            <svg width="28" height="28" fill="none" stroke="#fff" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-          </div>
-          <div>
-            <h1 style={{ fontSize: '28px', fontWeight: 800, margin: 0, color: '#f8fafc' }}>
-              إدارة أعضاء الجهة
-            </h1>
-            <p style={{ margin: 0, color: '#10b981', fontSize: '14px', fontWeight: 600 }}>
-              RBAC — إضافة / تعديل / تعطيل وتعيين الأدوار
-            </p>
-          </div>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <PageHeader
+        icon={UsersRound}
+        title="أعضاء الجهة"
+        subtitle="إضافة وتعديل وتعطيل الأعضاء وتعيين أدوارهم وفق ضوابط الصلاحيات"
+      />
         {error && (
           <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.15)', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', marginTop: '12px' }}>
             {error}
@@ -151,7 +133,6 @@ export const OrgMembersPage: React.FC = () => {
             {successMsg}
           </div>
         )}
-      </div>
 
       {/* Filters Row */}
       <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -161,7 +142,7 @@ export const OrgMembersPage: React.FC = () => {
             <button key={opt.value} onClick={() => setFilterRole(opt.value)} style={{
               padding: '8px 18px', borderRadius: '20px', border: 'none', cursor: 'pointer',
               fontWeight: 600, fontSize: '13px', transition: 'all 0.2s',
-              background: filterRole === opt.value ? 'linear-gradient(135deg,#059669,#06b6d4)' : 'rgba(255,255,255,0.07)',
+              background: filterRole === opt.value ? 'linear-gradient(135deg,#059669,#0891B2)' : '#F1F5F9',
               color: filterRole === opt.value ? '#fff' : '#94a3b8',
               boxShadow: filterRole === opt.value ? '0 4px 12px rgba(5,150,105,0.3)' : 'none',
             }}>
@@ -178,15 +159,15 @@ export const OrgMembersPage: React.FC = () => {
           onChange={(e) => setSearch(e.target.value)}
           style={{
             flex: 1, minWidth: '240px', padding: '10px 16px',
-            background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: '10px', color: '#f8fafc', fontSize: '14px', outline: 'none',
+            background: '#F1F5F9', border: '1px solid #E2E8F0',
+            borderRadius: '10px', color: '#0F172A', fontSize: '14px', outline: 'none',
           }}
         />
 
         {/* Add Button */}
         <button onClick={() => setShowAddModal(true)} style={{
           display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 22px',
-          background: 'linear-gradient(135deg,#059669,#06b6d4)', border: 'none',
+          background: 'linear-gradient(135deg,#059669,#0891B2)', border: 'none',
           borderRadius: '10px', color: '#fff', fontWeight: 700, fontSize: '14px',
           cursor: 'pointer', boxShadow: '0 4px 14px rgba(5,150,105,0.4)',
         }}>
@@ -200,15 +181,15 @@ export const OrgMembersPage: React.FC = () => {
       {/* Stats Bar */}
       <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
         {[
-          { label: 'إجمالي الأعضاء', count: members.length, color: '#10b981' },
-          { label: 'مدراء', count: members.filter(m => m.roles.some(r => r.code === 'org_manager')).length, color: '#10b981' },
-          { label: 'مشرفون', count: members.filter(m => m.roles.some(r => r.code === 'academic_supervisor')).length, color: '#a78bfa' },
-          { label: 'مدربون', count: members.filter(m => m.roles.some(r => r.code === 'trainer')).length, color: '#22d3ee' },
-          { label: 'متدربون', count: members.filter(m => m.roles.some(r => r.code === 'trainee')).length, color: '#60a5fa' },
+          { label: 'إجمالي الأعضاء', count: members.length, color: '#059669' },
+          { label: 'مدراء', count: members.filter(m => m.roles.some(r => r.code === 'org_manager')).length, color: '#059669' },
+          { label: 'مشرفون', count: members.filter(m => m.roles.some(r => r.code === 'academic_supervisor')).length, color: '#6D28D9' },
+          { label: 'مدربون', count: members.filter(m => m.roles.some(r => r.code === 'trainer')).length, color: '#0E7490' },
+          { label: 'متدربون', count: members.filter(m => m.roles.some(r => r.code === 'trainee')).length, color: '#2563EB' },
         ].map((stat) => (
           <div key={stat.label} style={{
             flex: 1, minWidth: '120px', padding: '16px', textAlign: 'center',
-            background: 'rgba(255,255,255,0.04)', borderRadius: '12px',
+            background: '#F8FAFC', borderRadius: '12px',
             border: `1px solid ${stat.color}30`,
           }}>
             <div style={{ fontSize: '28px', fontWeight: 800, color: stat.color }}>{stat.count}</div>
@@ -219,7 +200,7 @@ export const OrgMembersPage: React.FC = () => {
 
       {/* Table */}
       {isLoading ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#10b981' }}>
+        <div style={{ textAlign: 'center', padding: '60px', color: '#059669' }}>
           <div style={{ fontSize: '18px', marginBottom: '12px' }}>⏳ جاري التحميل...</div>
         </div>
       ) : filteredMembers.length === 0 ? (
@@ -228,10 +209,10 @@ export const OrgMembersPage: React.FC = () => {
           <div style={{ fontSize: '18px' }}>لا يوجد أعضاء</div>
         </div>
       ) : (
-        <div style={{ background: 'rgba(15,23,42,0.7)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+        <div style={{ background: 'rgba(15,23,42,0.7)', borderRadius: '16px', border: '1px solid #F1F5F9', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
                 {['الاسم', 'البريد الإلكتروني', 'الهوية', 'الأدوار', 'الحالة', 'الإجراءات'].map((h) => (
                   <th key={h} style={{ padding: '14px 20px', textAlign: 'right', fontSize: '13px', fontWeight: 700, color: '#64748b', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
@@ -240,7 +221,7 @@ export const OrgMembersPage: React.FC = () => {
             <tbody>
               {filteredMembers.map((member, idx) => (
                 <tr key={member.id} style={{
-                  borderBottom: idx < filteredMembers.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                  borderBottom: idx < filteredMembers.length - 1 ? '1px solid #F1F5F9' : 'none',
                   transition: 'background 0.15s',
                 }}>
                   {/* Name */}
@@ -250,12 +231,12 @@ export const OrgMembersPage: React.FC = () => {
                         width: '40px', height: '40px', borderRadius: '50%',
                         background: 'linear-gradient(135deg,rgba(5,150,105,0.3),rgba(6,182,212,0.3))',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '16px', fontWeight: 700, color: '#10b981',
+                        fontSize: '16px', fontWeight: 700, color: '#059669',
                       }}>
                         {(member.nameAr || member.email)[0]}
                       </div>
                       <div>
-                        <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '14px' }}>
+                        <div style={{ fontWeight: 600, color: '#0F172A', fontSize: '14px' }}>
                           {member.nameAr || '—'}
                         </div>
                         <div style={{ fontSize: '12px', color: '#64748b' }}>{member.username}</div>
@@ -264,7 +245,7 @@ export const OrgMembersPage: React.FC = () => {
                   </td>
 
                   {/* Email */}
-                  <td style={{ padding: '16px 20px', color: '#94a3b8', fontSize: '14px' }}>{member.email}</td>
+                  <td style={{ padding: '16px 20px', color: '#64748B', fontSize: '14px' }}>{member.email}</td>
 
                   {/* National ID */}
                   <td style={{ padding: '16px 20px', color: '#64748b', fontSize: '13px', fontFamily: 'monospace' }}>
@@ -295,7 +276,7 @@ export const OrgMembersPage: React.FC = () => {
                     <span style={{
                       padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600,
                       background: member.isActive ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
-                      color: member.isActive ? '#10b981' : '#f87171',
+                      color: member.isActive ? '#059669' : '#DC2626',
                     }}>
                       {member.isActive ? 'نشط' : 'معطل'}
                     </span>
@@ -306,7 +287,7 @@ export const OrgMembersPage: React.FC = () => {
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button onClick={() => setEditMember(member)} style={{
                         padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(6,182,212,0.3)',
-                        background: 'rgba(6,182,212,0.1)', color: '#22d3ee', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
+                        background: 'rgba(6,182,212,0.1)', color: '#0E7490', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
                       }}>
                         تعديل
                       </button>
@@ -314,14 +295,14 @@ export const OrgMembersPage: React.FC = () => {
                       {member.isActive ? (
                         <button onClick={() => handleDeactivate(member.id)} style={{
                           padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.3)',
-                          background: 'rgba(239,68,68,0.1)', color: '#f87171', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
+                          background: 'rgba(239,68,68,0.1)', color: '#DC2626', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
                         }}>
                           تعطيل
                         </button>
                       ) : (
                         <button onClick={() => handleActivate(member.id)} style={{
                           padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(16,185,129,0.3)',
-                          background: 'rgba(16,185,129,0.1)', color: '#10b981', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
+                          background: 'rgba(16,185,129,0.1)', color: '#059669', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
                         }}>
                           تفعيل
                         </button>

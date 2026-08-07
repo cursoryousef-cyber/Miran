@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { apiClient } from '../api/client';
 import {
   Calendar,
@@ -28,11 +29,11 @@ import {
 } from '@mui/material';
 
 const LEAVE_TYPES = [
-  { value: 'annual_leave', label: 'إجازة سنوية', color: '#3b82f6' },
-  { value: 'emergency_leave', label: 'إجازة اضطرارية', color: '#ef4444' },
-  { value: 'sick_leave', label: 'إجازة مرضية', color: '#f59e0b' },
+  { value: 'annual_leave', label: 'إجازة سنوية', color: '#2563EB' },
+  { value: 'emergency_leave', label: 'إجازة اضطرارية', color: '#DC2626' },
+  { value: 'sick_leave', label: 'إجازة مرضية', color: '#D97706' },
   { value: 'maternity_leave', label: 'إجازة أمومة', color: '#ec4899' },
-  { value: 'training_course', label: 'دورة تدريبية', color: '#8b5cf6' },
+  { value: 'training_course', label: 'دورة تدريبية', color: '#7C3AED' },
   { value: 'conference', label: 'مؤتمر', color: '#6366f1' },
   { value: 'temporary_assignment', label: 'تكليف مؤقت', color: '#14b8a6' },
   { value: 'transfer', label: 'نقل لمستشفى آخر', color: '#f97316' },
@@ -41,11 +42,11 @@ const LEAVE_TYPES = [
 ];
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  pending: { label: 'معلقة', color: '#f59e0b', bg: '#fffbeb' },
+  pending: { label: 'معلقة', color: '#D97706', bg: '#fffbeb' },
   approved: { label: 'مُعتمدة', color: '#22c55e', bg: '#f0fdf4' },
-  active: { label: 'نشطة', color: '#3b82f6', bg: '#eff6ff' },
+  active: { label: 'نشطة', color: '#2563EB', bg: '#eff6ff' },
   completed: { label: 'مكتملة', color: '#6b7280', bg: '#f3f4f6' },
-  cancelled: { label: 'ملغاة', color: '#ef4444', bg: '#fef2f2' },
+  cancelled: { label: 'ملغاة', color: '#DC2626', bg: '#fef2f2' },
 };
 
 export const TrainerLeaveManagement: React.FC = () => {
@@ -159,24 +160,19 @@ export const TrainerLeaveManagement: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '24px', direction: 'rtl', fontFamily: 'Tajawal, sans-serif' }}>
-      {/* ─── Header ─── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: '#1e293b' }}>
-            <Calendar size={24} style={{ verticalAlign: 'middle', marginLeft: 8, color: '#6366f1' }} />
-            إجازات المدربين
-          </h1>
-          <p style={{ color: '#64748b', fontSize: 14, margin: '4px 0 0' }}>
-            إدارة إجازات المدربين وضمان استمرار تدريب المتدربين
-          </p>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, direction: 'rtl' }}>
+      <PageHeader
+        icon={Calendar}
+        title="إجازات المدربين"
+        subtitle="إدارة إجازات المدربين وضمان استمرار تدريب المتدربين"
+        actions={<>
         <Button variant="contained" startIcon={<Plus size={18} />}
           onClick={() => setOpenDialog(true)}
           sx={{ bgcolor: '#6366f1', fontFamily: 'Tajawal', '&:hover': { bgcolor: '#4f46e5' } }}>
           تسجيل إجازة جديدة
         </Button>
-      </div>
+        </>}
+      />
 
       {successMsg && <Alert severity="success" sx={{ mb: 2, fontFamily: 'Tajawal' }} onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" sx={{ mb: 2, fontFamily: 'Tajawal' }} onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
@@ -280,7 +276,7 @@ export const TrainerLeaveManagement: React.FC = () => {
                           <Button size="small" variant="outlined"
                             onClick={() => cancelMutation.mutate(leave.id)}
                             disabled={cancelMutation.isPending}
-                            sx={{ minWidth: 0, p: '4px 8px', borderColor: '#ef4444', color: '#ef4444', fontSize: 11, fontFamily: 'Tajawal' }}>
+                            sx={{ minWidth: 0, p: '4px 8px', borderColor: '#DC2626', color: '#DC2626', fontSize: 11, fontFamily: 'Tajawal' }}>
                             <XCircle size={14} />
                           </Button>
                         </div>
@@ -289,7 +285,7 @@ export const TrainerLeaveManagement: React.FC = () => {
                         <Button size="small" variant="outlined"
                           onClick={() => cancelMutation.mutate(leave.id)}
                           disabled={cancelMutation.isPending}
-                          sx={{ fontSize: 11, fontFamily: 'Tajawal', borderColor: '#ef4444', color: '#ef4444' }}>
+                          sx={{ fontSize: 11, fontFamily: 'Tajawal', borderColor: '#DC2626', color: '#DC2626' }}>
                           إلغاء
                         </Button>
                       )}
@@ -298,7 +294,7 @@ export const TrainerLeaveManagement: React.FC = () => {
                 );
               })}
               {leaves.length === 0 && (
-                <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>
+                <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>
                   لا توجد إجازات مسجلة
                 </td></tr>
               )}

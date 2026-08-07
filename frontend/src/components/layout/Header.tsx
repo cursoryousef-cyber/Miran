@@ -179,7 +179,7 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
             },
           }}
         >
-          <MenuItem onClick={logout} style={{ fontSize: '13px', color: '#EF4444', display: 'flex', gap: '8px', fontWeight: 700 }}>
+          <MenuItem onClick={logout} style={{ fontSize: '13px', color: '#DC2626', display: 'flex', gap: '8px', fontWeight: 700 }}>
             <LogOut size={16} />
             <span>تسجيل الخروج</span>
           </MenuItem>

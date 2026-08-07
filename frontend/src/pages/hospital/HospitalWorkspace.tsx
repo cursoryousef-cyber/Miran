@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Tabs, Tab, Box, CircularProgress } from '@mui/material';
 import { Stethoscope } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { PageHeader } from '../../components/ui';
 
 import { WorkspaceOverview } from './WorkspaceOverview';
 import { TrainerCards } from './TrainerCards';
@@ -53,28 +54,12 @@ export const HospitalWorkspace: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <div
-        style={{
-          padding: '28px 32px',
-          background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)',
-          borderRadius: 16,
-          color: '#FFFFFF',
-          boxShadow: '0 4px 14px rgba(15, 118, 110, 0.25)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <Stethoscope size={20} color="#CCFBF1" />
-          <span style={{ fontSize: 12, color: '#CCFBF1', fontWeight: 700, letterSpacing: '0.5px' }}>
-            HOSPITAL OPERATIONAL WORKSPACE
-          </span>
-        </div>
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
-          {user?.activeOrganization?.nameAr ?? 'مساحة عمل المستشفى'}
-        </h1>
-        <p style={{ fontSize: 13, color: '#F0FDF4', marginTop: 6, opacity: 0.9 }}>
-          مركز العمليات الشامل — إدارة الطاقة الاستيعابية والمدربين والنداءات والتقييمات والسجل السريري والتخرج
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="HOSPITAL OPERATIONAL WORKSPACE"
+        icon={Stethoscope}
+        title={user?.activeOrganization?.nameAr ?? 'مساحة عمل المستشفى'}
+        subtitle="مركز العمليات — الطاقة الاستيعابية والمدربون والنداءات والتقييمات والسجل السريري والتخرج"
+      />
 
       <Box sx={{ borderBottom: 1, borderColor: '#E2E8F0' }}>
         <Tabs

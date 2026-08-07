@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { DataPageShell } from '../components/ui';
+import { Users as UsersIcon, MailCheck, KeyRound, UserPlus2 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { hasPermission } from '../utils/rbac';
@@ -101,37 +103,42 @@ export const UsersPage: React.FC = () => {
     });
   };
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-            إدارة المستخدمين والأدوار الوطنية (Users & User Accounts)
-          </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            CRUD شامل ومربوط بـ REST API لإدارة الحسابات والأدوار وفقRBAC
-          </p>
-        </div>
+  const accounts = data?.data ?? [];
+  const activeCount = accounts.filter((u: any) => u.isActive !== false && u.status !== 'suspended').length;
+  const verified = accounts.filter((u: any) => u.isEmailVerified).length;
+  const withMfa = accounts.filter((u: any) => u.mfaEnabled).length;
+  const neverLoggedIn = accounts.filter((u: any) => !u.lastLoginAt).length;
 
-        <div style={{ display: 'flex', gap: '12px' }}>
+  return (
+    <DataPageShell
+      icon={UsersIcon}
+      title="المستخدمون والحسابات"
+      subtitle="إدارة حسابات المنصة وأدوارها وفق ضوابط الصلاحيات"
+      loading={isLoading}
+      stats={[
+        { label: 'إجمالي الحسابات', value: data?.meta?.total ?? accounts.length, icon: UsersIcon, tone: 'primary' },
+        { label: 'حسابات نشطة', value: activeCount, icon: ShieldCheck, tone: 'success' },
+        { label: 'بريد موثّق', value: verified, icon: MailCheck, tone: 'info' },
+        { label: 'مفعّل التحقق الثنائي', value: withMfa, icon: KeyRound, tone: 'violet' },
+        { label: 'لم يسجّل دخول بعد', value: neverLoggedIn, icon: UserPlus2,
+          tone: neverLoggedIn ? 'warning' : 'success' },
+      ]}
+      actions={
+        <>
           <Tooltip title="تحديث السجلات">
-            <IconButton onClick={() => refetch()} style={{ color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
-              <RefreshCw size={18} />
+            <IconButton onClick={() => refetch()} sx={{ border: '1px solid #E2E8F0', borderRadius: 2 }}>
+              <RefreshCw size={17} color="#0F766E" />
             </IconButton>
           </Tooltip>
-
           {canCreate && (
-            <Button
-              variant="contained"
-              startIcon={<Plus size={18} />}
-              onClick={() => { resetForm(); setOpenCreate(true); }}
-              style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', fontWeight: 700 }}
-            >
-              إضافة مستخدم جديد
+            <Button variant="contained" startIcon={<Plus size={17} />}
+              onClick={() => { resetForm(); setOpenCreate(true); }}>
+              إضافة مستخدم
             </Button>
           )}
-        </div>
-      </div>
+        </>
+      }
+    >
 
       <div className="glass-card" style={{ padding: '16px 24px' }}>
         <TextField
@@ -150,29 +157,29 @@ export const UsersPage: React.FC = () => {
       <TableContainer component={Paper} className="glass-card">
         <Table>
           <TableHead>
-            <TableRow style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>اسم المستخدم</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الهوية الوطنية</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>البريد الإلكتروني</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الأدوار النشطة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700, textAlign: 'center' }}>العمليات (RBAC)</TableCell>
+            <TableRow style={{ backgroundColor: '#F8FAFC' }}>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>اسم المستخدم</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الهوية الوطنية</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>البريد الإلكتروني</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الأدوار النشطة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الحالة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700, textAlign: 'center' }}>العمليات (RBAC)</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={6} style={{ textAlign: 'center', color: '#cbd5e1' }}>جاري التحميل...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} style={{ textAlign: 'center', color: '#475569' }}>جاري التحميل...</TableCell></TableRow>
             ) : data?.data?.length === 0 ? (
-              <TableRow><TableCell colSpan={6} style={{ textAlign: 'center', color: '#94a3b8' }}>لا توجد حسابات مطابقة.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} style={{ textAlign: 'center', color: '#64748B' }}>لا توجد حسابات مطابقة.</TableCell></TableRow>
             ) : (
               data?.data?.map((u: any) => (
                 <TableRow key={u.id} hover>
-                  <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>
+                  <TableCell style={{ fontWeight: 700, color: '#0F172A' }}>
                     {u.person?.nameAr || u.email}
                     {u.person?.nameEn && <div style={{ fontSize: '11px', color: '#64748b' }}>{u.person.nameEn}</div>}
                   </TableCell>
                   <TableCell style={{ fontFamily: 'monospace' }}>{u.person?.nationalId || '—'}</TableCell>
-                  <TableCell style={{ color: '#06b6d4' }}>{u.email}</TableCell>
+                  <TableCell style={{ color: '#0891B2' }}>{u.email}</TableCell>
                   <TableCell>
                     <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                       {u.roles?.map((r: any, idx: number) => (
@@ -184,7 +191,7 @@ export const UsersPage: React.FC = () => {
                   <TableCell style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
                       <Tooltip title="عرض التفاصيل">
-                        <IconButton size="small" onClick={() => setOpenDetails(u)} style={{ color: '#3b82f6' }}>
+                        <IconButton size="small" onClick={() => setOpenDetails(u)} style={{ color: '#2563EB' }}>
                           <Eye size={16} />
                         </IconButton>
                       </Tooltip>
@@ -205,7 +212,7 @@ export const UsersPage: React.FC = () => {
                                 roleCode: u.roles?.[0]?.role?.code || 'trainee',
                               });
                             }}
-                            style={{ color: '#f59e0b' }}
+                            style={{ color: '#D97706' }}
                           >
                             <Edit size={16} />
                           </IconButton>
@@ -214,7 +221,7 @@ export const UsersPage: React.FC = () => {
 
                       {canDelete && (
                         <Tooltip title="حذف">
-                          <IconButton size="small" onClick={() => setDeleteId(u.id)} style={{ color: '#ef4444' }}>
+                          <IconButton size="small" onClick={() => setDeleteId(u.id)} style={{ color: '#DC2626' }}>
                             <Trash2 size={16} />
                           </IconButton>
                         </Tooltip>
@@ -309,6 +316,6 @@ export const UsersPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };

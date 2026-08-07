@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { PageHeader } from '../components/ui';
 import { Activity, Database, Server, HardDrive, Mail, Bell, Shield, Cloud, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Button, Chip, LinearProgress } from '@mui/material';
 import { apiClient } from '../api/client';
@@ -26,25 +27,21 @@ export const HealthMonitor: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-            🖥️ مراقبة سلامة وجاهزية الخدمات (System Health & Infrastructure Monitor)
-          </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            فحص لحظي مستمر لكل المكونات: API, Neon PostgreSQL, Storage, FCM, SMTP, Hosting & CDN
-          </p>
-        </div>
+      <PageHeader
+        title="🖥️ مراقبة سلامة وجاهزية الخدمات (System Health & Infrastructure Monitor)"
+        subtitle="فحص لحظي مستمر لكل المكونات: API, Neon PostgreSQL, Storage, FCM, SMTP, Hosting & CDN"
+        actions={<>
 
         <Button
           variant="outlined"
           startIcon={<RefreshCw size={18} className={loading ? 'animate-spin' : ''} />}
           onClick={fetchHealth}
-          style={{ borderColor: '#10b981', color: '#10b981', fontWeight: 700 }}
+          style={{ borderColor: '#059669', color: '#059669', fontWeight: 700 }}
         >
           تحديث الفحص اللحظي
         </Button>
-      </div>
+        </>}
+      />
 
       {/* Status Card Banner */}
       <div
@@ -90,7 +87,7 @@ export const HealthMonitor: React.FC = () => {
         {data?.services?.map((svc: any) => (
           <div key={svc.id} className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: '#f8fafc' }}>{svc.nameAr}</div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>{svc.nameAr}</div>
               <Chip
                 label={svc.status === 'healthy' ? 'نشط (Up)' : 'متوقف (Down)'}
                 color={svc.status === 'healthy' ? 'success' : 'error'}
@@ -99,19 +96,19 @@ export const HealthMonitor: React.FC = () => {
               />
             </div>
 
-            <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-              الفئة: <span style={{ color: '#cbd5e1' }}>{svc.category}</span>
+            <div style={{ fontSize: '12px', color: '#64748B' }}>
+              الفئة: <span style={{ color: '#475569' }}>{svc.category}</span>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid #F1F5F9' }}>
               <div>
                 <div style={{ fontSize: '11px', color: '#64748b' }}>وقت الاستجابة (Latency)</div>
-                <div style={{ fontSize: '16px', fontWeight: 800, color: '#10b981' }}>{svc.responseTimeMs} ms</div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#059669' }}>{svc.responseTimeMs} ms</div>
               </div>
 
               <div>
                 <div style={{ fontSize: '11px', color: '#64748b' }}>نسبة الجاهزية (Uptime)</div>
-                <div style={{ fontSize: '16px', fontWeight: 800, color: '#06b6d4' }}>{svc.uptime}</div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#0891B2' }}>{svc.uptime}</div>
               </div>
             </div>
           </div>

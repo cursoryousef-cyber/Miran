@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { apiClient } from '../api/client';
 import { BedDouble, Building2, GraduationCap, Plus, Trash2, UserCog, Users } from 'lucide-react';
 import {
@@ -151,14 +152,12 @@ export const HospitalCapacity: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        <BedDouble size={22} />
-        <Typography variant="h5" fontWeight={700}>الطاقة الاستيعابية للمستشفى</Typography>
-      </Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        المستشفى هو المسؤول الوحيد عن تحديد طاقته. أي تعديل ينعكس فوراً على لوحة التجمع الصحي.
-      </Typography>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <PageHeader
+        icon={BedDouble}
+        title="الطاقة الاستيعابية للمستشفى"
+        subtitle="المستشفى هو المسؤول الوحيد عن تحديد طاقته — أي تعديل ينعكس فوراً على لوحة التجمع"
+      />
 
       {successMsg && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}

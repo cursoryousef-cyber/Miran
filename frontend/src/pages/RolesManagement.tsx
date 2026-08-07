@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { PageHeader } from '../components/ui';
 import { Shield, Plus, Lock, Key, CheckCircle, Edit, Trash2 } from 'lucide-react';
 import {
   Button,
@@ -74,15 +75,10 @@ export const RolesManagement: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-            🔑 إدارة الأدوار والصلاحيات الديناميكية (Dynamic RBAC Engine)
-          </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            تخصيص الأدوار، ربط الصلاحيات، وإدارة مستويات الوصول التشغيلية والسحابية بكل مرونة
-          </p>
-        </div>
+      <PageHeader
+        title="🔑 إدارة الأدوار والصلاحيات الديناميكية (Dynamic RBAC Engine)"
+        subtitle="تخصيص الأدوار، ربط الصلاحيات، وإدارة مستويات الوصول التشغيلية والسحابية بكل مرونة"
+        actions={<>
 
         <Button
           variant="contained"
@@ -92,7 +88,8 @@ export const RolesManagement: React.FC = () => {
         >
           إنشاء دور جديد (Custom Role)
         </Button>
-      </div>
+        </>}
+      />
 
       {(isLoadingRoles || isLoadingPerms) && <LinearProgress sx={{ borderRadius: 1 }} />}
       {isErrorRoles && <Alert severity="error">تعذر تحميل الأدوار من الخادم</Alert>}
@@ -102,24 +99,24 @@ export const RolesManagement: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>اسم الدور (Role Name)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الرمز التمييزي (Code)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المستوى الهيكلي</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الصلاحيات المرتبطة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>عدد المستخدمين</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>اسم الدور (Role Name)</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الرمز التمييزي (Code)</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>المستوى الهيكلي</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الصلاحيات المرتبطة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>عدد المستخدمين</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {rolesData?.data?.map((r: any) => (
               <TableRow key={r.id}>
-                <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>
+                <TableCell style={{ fontWeight: 700, color: '#0F172A' }}>
                   {r.nameAr}
                   {r.isSystem && <Chip label="دور سيادي" size="small" color="success" variant="outlined" style={{ marginRight: '8px' }} />}
                 </TableCell>
-                <TableCell style={{ fontFamily: 'monospace', color: '#06b6d4' }}>{r.code}</TableCell>
-                <TableCell style={{ fontWeight: 700, color: '#f59e0b' }}>المستوى {r.hierarchyLevel}</TableCell>
+                <TableCell style={{ fontFamily: 'monospace', color: '#0891B2' }}>{r.code}</TableCell>
+                <TableCell style={{ fontWeight: 700, color: '#D97706' }}>المستوى {r.hierarchyLevel}</TableCell>
                 <TableCell style={{ maxWidth: '300px' }}>
-                  <Chip label={`${r.rolePermissions?.length || 0} صلاحيات مفعلة`} size="small" style={{ backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981', fontWeight: 700 }} />
+                  <Chip label={`${r.rolePermissions?.length || 0} صلاحيات مفعلة`} size="small" style={{ backgroundColor: 'rgba(16,185,129,0.15)', color: '#059669', fontWeight: 700 }} />
                 </TableCell>
                 <TableCell style={{ fontWeight: 700 }}>{r._count?.userRoles || 0} مستخدمين</TableCell>
               </TableRow>
