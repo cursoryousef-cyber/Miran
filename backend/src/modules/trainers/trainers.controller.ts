@@ -24,6 +24,19 @@ export class TrainersController {
   // Registered before the parameterised trainer routes below so that the literal
   // segments are not swallowed by ':id'.
 
+  @Get('workspace-cards')
+  @RequireRoles(
+    'training_supervisor', 'hospital_administrator', 'cluster_administrator',
+    'training_director', 'platform_owner',
+  )
+  @ApiOperation({ summary: 'بطاقات المدربين لمساحة عمل المستشفى — التأهيل والسعة والإشغال والإجازة' })
+  async workspaceCards(
+    @CurrentUser() user: IAuthenticatedUser,
+    @Query('organizationId') organizationId?: string,
+  ) {
+    return this.qualificationService.listWorkspaceCards(organizationId || user.organizationId);
+  }
+
   @Get('qualified')
   @RequireRoles(
     'training_supervisor', 'hospital_administrator', 'cluster_administrator',

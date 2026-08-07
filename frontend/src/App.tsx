@@ -36,6 +36,7 @@ import { Incidents } from './pages/Incidents';
 import { Graduation } from './pages/Graduation';
 import { TrainerReassignment } from './pages/TrainerReassignment';
 import { TrainerLeaveManagement } from './pages/TrainerLeaveManagement';
+import { HospitalWorkspace } from './pages/hospital/HospitalWorkspace';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -109,16 +110,21 @@ export const App: React.FC = () => {
                   <Route path="cluster-trainees" element={<RoleRoute allowedRoles={[...CLUSTER, ...PLATFORM]}><ClusterTrainees /></RoleRoute>} />
                   <Route path="intakes" element={<RoleRoute allowedRoles={[...UNIVERSITY, ...CLUSTER, ...HOSPITAL, ...ACADEMIC]}><AcademicIntakes /></RoleRoute>} />
                   <Route path="corrections" element={<RoleRoute allowedRoles={UNIVERSITY}><UniversityCorrections /></RoleRoute>} />
-                  <Route path="hospital-capacity" element={<RoleRoute allowedRoles={['hospital_administrator', ...PLATFORM]}><HospitalCapacity /></RoleRoute>} />
-                  <Route path="hospital-review" element={<RoleRoute allowedRoles={[...HOSPITAL, ...PLATFORM]}><HospitalReview /></RoleRoute>} />
+                  {/* Hospital operational workspace — the single hospital surface. */}
+                  <Route path="hospital" element={<RoleRoute allowedRoles={[...HOSPITAL, 'training_supervisor', ...PLATFORM]}><HospitalWorkspace /></RoleRoute>} />
+                  {/* The former standalone hospital pages now live as workspace
+                      sections. The routes are kept so existing links and
+                      bookmarks land on the right section instead of 404-ing. */}
+                  <Route path="hospital-capacity" element={<Navigate to="/hospital?tab=capacity" replace />} />
+                  <Route path="hospital-review" element={<Navigate to="/hospital?tab=requests" replace />} />
                   <Route path="acceptance-chain" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, 'training_supervisor', ...PLATFORM]}><AcceptanceChain /></RoleRoute>} />
                   <Route path="incidents" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...CLUSTER, TRAINEE[0], ...PLATFORM]}><Incidents /></RoleRoute>} />
                   <Route path="graduation" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, 'training_supervisor', 'university_administrator', ...PLATFORM]}><Graduation /></RoleRoute>} />
 
                   {/* Hospital + Trainer */}
                   <Route path="org-members" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...UNIVERSITY]}><OrgMembersPage /></RoleRoute>} />
-                  <Route path="trainer-reassignment" element={<RoleRoute allowedRoles={[...HOSPITAL, ...PLATFORM]}><TrainerReassignment /></RoleRoute>} />
-                  <Route path="trainer-leaves" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...PLATFORM]}><TrainerLeaveManagement /></RoleRoute>} />
+                  <Route path="trainer-reassignment" element={<Navigate to="/hospital?tab=reassignment" replace />} />
+                  <Route path="trainer-leaves" element={<Navigate to="/hospital?tab=leaves" replace />} />
 
                   {/* Trainer + Trainee */}
                   <Route path="logbook" element={<RoleRoute allowedRoles={[...TRAINER, ...TRAINEE, ...HOSPITAL]}><LogbookPage /></RoleRoute>} />

@@ -201,9 +201,17 @@ export class TimelineService {
       orderBy: { createdAt: 'desc' },
     });
 
+    // Built in bounded batches rather than one at a time: each timeline is a
+    // handful of independent reads, and running a whole cohort sequentially made
+    // the hospital workspace wait seconds on round-trip latency alone. The cap
+    // keeps a large cohort from opening an unbounded number of connections.
+    const CONCURRENCY = 10;
     const timelines: Array<Awaited<ReturnType<TimelineService['getTraineeTimeline']>>['data']> = [];
-    for (const p of profiles) {
-      timelines.push((await this.getTraineeTimeline(p.id)).data);
+    for (let i = 0; i < profiles.length; i += CONCURRENCY) {
+      const batch = await Promise.all(
+        profiles.slice(i, i + CONCURRENCY).map((p) => this.getTraineeTimeline(p.id)),
+      );
+      timelines.push(...batch.map((t) => t.data));
     }
 
     // Aggregate from the same numbers the per-trainee view shows, so a dashboard

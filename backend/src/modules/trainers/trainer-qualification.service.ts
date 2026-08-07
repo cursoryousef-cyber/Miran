@@ -68,6 +68,120 @@ export class TrainerQualificationService {
     return { data };
   }
 
+  /**
+   * Every trainer in a hospital as a workspace card: qualification, capacity,
+   * occupancy, current trainees and leave state.
+   *
+   * Purely an aggregation of records the individual endpoints already expose —
+   * it exists so the workspace renders one call instead of four per trainer.
+   * Batched throughout: a hospital with 200 trainers still costs a fixed number
+   * of queries.
+   */
+  async listWorkspaceCards(organizationId: string) {
+    const trainers = await this.prisma.trainerProfile.findMany({
+      where: { organizationId, isActive: true },
+      include: {
+        person: { select: { nameAr: true, nameEn: true, phone: true, email: true } },
+        department: { select: { id: true, nameAr: true, code: true } },
+        qualifiedPrograms: {
+          where: { isActive: true },
+          include: { program: { select: { id: true, code: true, nameAr: true } } },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (trainers.length === 0) return { data: [] };
+
+    const ids = trainers.map((t) => t.id);
+    const today = new Date();
+
+    const [rotations, leaves] = await Promise.all([
+      this.prisma.rotation.findMany({
+        where: { trainerProfileId: { in: ids }, status: { in: ['active', 'scheduled'] } },
+        select: {
+          id: true, trainerProfileId: true, status: true, startDate: true, endDate: true,
+          department: { select: { nameAr: true } },
+          traineeProfile: {
+            select: { id: true, traineeNumber: true, person: { select: { nameAr: true } } },
+          },
+        },
+      }),
+      // The leave that is in force now, if any.
+      this.prisma.trainerLeave.findMany({
+        where: {
+          trainerProfileId: { in: ids },
+          status: { in: ['approved', 'active'] },
+          startDate: { lte: today },
+          endDate: { gte: today },
+        },
+        include: {
+          replacementTrainer: { include: { person: { select: { nameAr: true } } } },
+        },
+      }),
+    ]);
+
+    const rotationsByTrainer = new Map<string, typeof rotations>();
+    for (const r of rotations) {
+      const list = rotationsByTrainer.get(r.trainerProfileId) ?? [];
+      list.push(r);
+      rotationsByTrainer.set(r.trainerProfileId, list);
+    }
+    const leaveByTrainer = new Map(leaves.map((l) => [l.trainerProfileId, l]));
+
+    const data = trainers.map((t) => {
+      const mine = rotationsByTrainer.get(t.id) ?? [];
+      // Occupancy counts active rotations only, matching CapacityService.
+      const occupied = mine.filter((r) => r.status === 'active').length;
+      const leave = leaveByTrainer.get(t.id);
+
+      return {
+        id: t.id,
+        nameAr: t.person.nameAr,
+        nameEn: t.person.nameEn,
+        titleAr: t.titleAr,
+        phone: t.person.phone,
+        email: t.person.email,
+        department: t.department,
+        qualifiedPrograms: t.qualifiedPrograms.map((q) => ({
+          id: q.program.id,
+          code: q.program.code,
+          nameAr: q.program.nameAr,
+          maxTrainees: q.maxTrainees,
+        })),
+        maxTrainees: t.maxTrainees,
+        occupied,
+        available: Math.max(0, t.maxTrainees - occupied),
+        occupancyPercentage: t.maxTrainees > 0 ? Math.min(100, Math.round((occupied / t.maxTrainees) * 100)) : 0,
+        rotationCount: mine.length,
+        currentTrainees: mine
+          .filter((r) => r.status === 'active')
+          .map((r) => ({
+            rotationId: r.id,
+            traineeProfileId: r.traineeProfile?.id,
+            nameAr: r.traineeProfile?.person?.nameAr ?? null,
+            traineeNumber: r.traineeProfile?.traineeNumber ?? null,
+            departmentNameAr: r.department?.nameAr ?? null,
+            startDate: r.startDate,
+            endDate: r.endDate,
+          })),
+        leave: leave
+          ? {
+              id: leave.id,
+              leaveType: leave.leaveType,
+              startDate: leave.startDate,
+              endDate: leave.endDate,
+              status: leave.status,
+              autoReassigned: leave.autoReassigned,
+              replacementTrainerNameAr: leave.replacementTrainer?.person?.nameAr ?? null,
+            }
+          : null,
+        onLeave: Boolean(leave),
+      };
+    });
+
+    return { data };
+  }
+
   async addQualification(
     trainerProfileId: string,
     dto: { programId: string; maxTrainees?: number },

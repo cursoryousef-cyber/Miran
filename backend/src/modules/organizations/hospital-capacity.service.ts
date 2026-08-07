@@ -76,6 +76,22 @@ export class HospitalCapacityService {
       })),
     );
 
+    // Program-scoped seats, surfaced alongside the other scopes so the hospital
+    // workspace can show program occupancy without a second round of calls.
+    const programAllocations = allocations.filter((a) => a.scopeType === 'program' && a.programId !== '');
+    const programs = await this.prisma.program.findMany({
+      where: { id: { in: programAllocations.map((a) => a.programId) } },
+      select: { id: true, code: true, nameAr: true },
+    });
+    const programById = new Map(programs.map((p) => [p.id, p]));
+    const programBreakdown = await Promise.all(
+      programAllocations.map(async (a) => ({
+        allocation: a,
+        program: programById.get(a.programId) ?? null,
+        occupancy: await this.capacityService.getProgramOccupancy(hospitalId, a.programId),
+      })),
+    );
+
     const trainerAllocations = allocations.filter((a) => a.scopeType === 'trainer');
     const supervisorAllocations = allocations.filter((a) => a.scopeType === 'supervisor');
     const supervisorBreakdown = await Promise.all(
@@ -88,6 +104,7 @@ export class HospitalCapacityService {
     return {
       hospital: hospital,
       departments: departmentBreakdown,
+      programs: programBreakdown,
       specialties: specialtyBreakdown,
       trainerRules: trainerAllocations,
       supervisors: supervisorBreakdown,

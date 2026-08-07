@@ -67,18 +67,14 @@ const clusterNav: NavItem[] = [
 ];
 
 // Hospital Supervisor / Director
+// Capacity, acceptance, incoming review, trainer reassignment, leave, logbook,
+// incidents and graduation are all sections of the workspace now, so they are
+// no longer separate destinations here.
 const hospitalNav: NavItem[] = [
   { name: 'لوحة المستشفى', path: '/', icon: Stethoscope },
-  { name: 'الطاقة الاستيعابية', path: '/hospital-capacity', icon: BedDouble },
-  { name: 'سلسلة القبول', path: '/acceptance-chain', icon: CheckSquare },
-  { name: 'مراجعة المتدربين الواردين', path: '/hospital-review', icon: ShieldCheck },
+  { name: 'مساحة عمل المستشفى', path: '/hospital', icon: BedDouble },
   { name: 'الروتيشنات والأقسام', path: '/intakes', icon: ClipboardList },
   { name: 'المتدربون والمدربون', path: '/org-members', icon: UserCog },
-  { name: 'إعادة إسناد المدربين', path: '/trainer-reassignment', icon: ArrowRightLeft },
-  { name: 'إجازات المدربين', path: '/trainer-leaves', icon: Calendar },
-  { name: 'السجل السريري (Logbook)', path: '/logbook', icon: BookOpen },
-  { name: 'البلاغات والحوادث', path: '/incidents', icon: AlertTriangle },
-  { name: 'إدارة التخرج', path: '/graduation', icon: GraduationCap },
 ];
 
 // Trainer
