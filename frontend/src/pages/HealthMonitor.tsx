@@ -52,9 +52,11 @@ export const HealthMonitor: React.FC = () => {
         style={{
           padding: '24px',
           background: data?.overallStatus === 'HEALTHY'
-            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(15, 23, 42, 0.9) 100%)'
-            : 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(15, 23, 42, 0.9) 100%)',
-          border: `1px solid ${data?.overallStatus === 'HEALTHY' ? '#10b981' : '#ef4444'}`,
+            ? 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)'
+            : 'linear-gradient(135deg, #DC2626 0%, #B91C1C 100%)',
+          color: '#FFFFFF',
+          borderRadius: '16px',
+          boxShadow: '0 4px 14px rgba(15, 118, 110, 0.2)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -62,15 +64,15 @@ export const HealthMonitor: React.FC = () => {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           {data?.overallStatus === 'HEALTHY' ? (
-            <CheckCircle2 size={40} color="#10b981" />
+            <CheckCircle2 size={40} color="#CCFBF1" />
           ) : (
-            <AlertTriangle size={40} color="#ef4444" />
+            <AlertTriangle size={40} color="#FEE2E2" />
           )}
           <div>
-            <div style={{ fontSize: '20px', fontWeight: 800, color: '#fff' }}>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: '#FFFFFF' }}>
               الحالة العامة للبنية التحتية: {data?.overallStatus === 'HEALTHY' ? 'جميع الخدمات تعمل بكفاءة عالية (OPERATIONAL)' : 'وجود تنبيهات في بعض الخدمات'}
             </div>
-            <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '4px' }}>
+            <div style={{ fontSize: '12px', color: '#F0FDF4', marginTop: '4px', opacity: 0.9 }}>
               تاريخ آخر فحص آلي: {data?.checkedAt ? new Date(data.checkedAt).toLocaleString('ar-SA') : '—'}
             </div>
           </div>

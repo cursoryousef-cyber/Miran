@@ -598,10 +598,10 @@ export const LogbookPage: React.FC = () => {
 
       {/* Modal Dialog */}
       <Dialog open={openModal} onClose={() => setOpenModal(false)} maxWidth="sm" fullWidth>
-        <DialogTitle style={{ background: '#0f172a', color: '#fff', fontWeight: 800 }}>
+        <DialogTitle style={{ backgroundColor: '#FFFFFF', color: '#0F172A', fontWeight: 800, borderBottom: '1px solid #E2E8F0' }}>
           تسجيل حالة أو إجراء سريري جديد
         </DialogTitle>
-        <DialogContent style={{ background: '#0f172a', display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '16px' }}>
+        <DialogContent style={{ backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '20px' }}>
           <TextField
             label="التشخيص أو وصف الحالة (Diagnosis)"
             variant="outlined"
@@ -668,9 +668,9 @@ export const LogbookPage: React.FC = () => {
             onChange={(e) => setNotes(e.target.value)}
           />
         </DialogContent>
-        <DialogActions style={{ background: '#0f172a', padding: '16px' }}>
-          <Button onClick={() => setOpenModal(false)} style={{ color: '#94a3b8' }}>إلغاء</Button>
-          <Button onClick={handleCreateLog} variant="contained" style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', fontWeight: 700 }}>
+        <DialogActions style={{ backgroundColor: '#FFFFFF', padding: '16px 24px', borderTop: '1px solid #E2E8F0' }}>
+          <Button onClick={() => setOpenModal(false)} style={{ color: '#64748B' }}>إلغاء</Button>
+          <Button onClick={handleCreateLog} variant="contained" style={{ background: '#0F766E', fontWeight: 700, borderRadius: '10px' }}>
             تسجيل وتوثيق الحالة
           </Button>
         </DialogActions>

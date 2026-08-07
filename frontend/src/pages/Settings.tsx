@@ -2,106 +2,125 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, LinearProgress, Alert } from '@mui/material';
+import { Button, TextField, Switch, FormControlLabel, LinearProgress, Alert } from '@mui/material';
+import { Save } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
   const { user } = useAuth();
 
-  const { data: settings, isLoading: isLoadingSettings, isError: isErrorSettings } = useQuery({
-    queryKey: ['settings'],
+  const { data: systemSettings, isLoading: isLoadingSettings, isError: isErrorSettings } = useQuery({
+    queryKey: ['system-settings'],
     queryFn: async () => {
-      const res = await apiClient.get('/settings');
-      return res.data;
+      const res = await apiClient.get('/system-settings');
+      return res.data?.data || res.data;
     },
   });
 
   const { data: license, isLoading: isLoadingLicense } = useQuery({
-    queryKey: ['license', user?.activeOrganization?.id],
+    queryKey: ['org-license', user?.activeOrganization?.id],
+    enabled: Boolean(user?.activeOrganization?.id),
     queryFn: async () => {
-      if (!user?.activeOrganization?.id) return null;
-      const res = await apiClient.get(`/licenses/organization/${user.activeOrganization.id}`);
-      return res.data;
+      const res = await apiClient.get(`/organizations/${user?.activeOrganization?.id}/license`);
+      return res.data?.data || res.data;
     },
-    enabled: !!user?.activeOrganization?.id,
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div>
-        <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
           مركز إعدادات المنصة والتراخيص (Settings & Subscription Quotas)
         </h1>
-        <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
+        <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>
           الإعدادات الديناميكية المحفوظة بقاعدة البيانات وتراخيص السعات التخزينية والأدوار
         </p>
       </div>
 
-      {(isLoadingSettings || isLoadingLicense) && <LinearProgress sx={{ borderRadius: 1 }} />}
+      {(isLoadingSettings || isLoadingLicense) && <LinearProgress sx={{ borderRadius: 1, backgroundColor: '#E2E8F0', '& .MuiLinearProgress-bar': { backgroundColor: '#0F766E' } }} />}
       {isErrorSettings && <Alert severity="error">تعذر تحميل الإعدادات من الخادم</Alert>}
 
       {/* License Quota Summary Card */}
-      <div className="glass-card" style={{ padding: '24px', background: 'linear-gradient(135deg, rgba(5, 150, 105, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%)' }}>
-        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc', marginBottom: '16px' }}>
+      <div className="glass-card" style={{ padding: '24px', background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)', color: '#FFFFFF', borderRadius: '16px' }}>
+        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#FFFFFF', marginBottom: '16px' }}>
           ترخيص وسعة الجهة الحالية: {user?.activeOrganization?.nameAr}
         </h3>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-          <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px' }}>
-            <div style={{ fontSize: '12px', color: '#94a3b8' }}>الباقة التشغيلية</div>
-            <div style={{ fontSize: '18px', fontWeight: 800, color: '#10b981', textTransform: 'uppercase' }}>
+          <div style={{ backgroundColor: 'rgba(255,255,255,0.15)', padding: '16px', borderRadius: '12px' }}>
+            <div style={{ fontSize: '12px', color: '#CCFBF1', fontWeight: 600 }}>الباقة التشغيلية</div>
+            <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFFFFF', textTransform: 'uppercase', marginTop: 4 }}>
               {license?.plan ? String(license.plan) : 'ENTERPRISE'}
             </div>
           </div>
 
-          <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px' }}>
-            <div style={{ fontSize: '12px', color: '#94a3b8' }}>سعة المستخدمين والإداريين</div>
-            <div style={{ fontSize: '18px', fontWeight: 800, color: '#06b6d4' }}>
+          <div style={{ backgroundColor: 'rgba(255,255,255,0.15)', padding: '16px', borderRadius: '12px' }}>
+            <div style={{ fontSize: '12px', color: '#CCFBF1', fontWeight: 600 }}>سعة المستخدمين والإداريين</div>
+            <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFFFFF', marginTop: 4 }}>
               {license?.maxUsers ? Number(license.maxUsers) : 100} مستخدم
             </div>
           </div>
 
-          <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px' }}>
-            <div style={{ fontSize: '12px', color: '#94a3b8' }}>سعة المتدربين</div>
-            <div style={{ fontSize: '18px', fontWeight: 800, color: '#6366f1' }}>
-              {license?.maxTrainees ? Number(license.maxTrainees) : 500} متدرب
-            </div>
-          </div>
-
-          <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px' }}>
-            <div style={{ fontSize: '12px', color: '#94a3b8' }}>المساحة التخزينية المتاحة</div>
-            <div style={{ fontSize: '18px', fontWeight: 800, color: '#f59e0b' }}>
-              {license?.maxStorageGb ? Number(license.maxStorageGb) : 50} GB
+          <div style={{ backgroundColor: 'rgba(255,255,255,0.15)', padding: '16px', borderRadius: '12px' }}>
+            <div style={{ fontSize: '12px', color: '#CCFBF1', fontWeight: 600 }}>حالة الترخيص السنوي</div>
+            <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFFFFF', marginTop: 4 }}>
+              {license?.status ? String(license.status).toUpperCase() : 'ACTIVE'}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Database Backed Settings Table */}
-      <div>
-        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc', marginBottom: '16px' }}>الإعدادات الديناميكية (Database-Backed Settings)</h3>
-        <TableContainer component={Paper} className="glass-card">
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>مفتاح الإعداد (Setting Key)</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الوصف</TableCell>
-                <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>القيمة (JSON Value)</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {settings?.map((st: any) => (
-                <TableRow key={st.id}>
-                  <TableCell style={{ fontFamily: 'monospace', fontWeight: 700, color: '#06b6d4' }}>{st.key}</TableCell>
-                  <TableCell>{st.descriptionAr || 'إعداد تشغيلي'}</TableCell>
-                  <TableCell style={{ fontFamily: 'monospace', fontSize: '12px', color: '#34d399' }}>
-                    {JSON.stringify(st.value)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+      {/* Dynamic Global System Settings Card */}
+      <div className="glass-card" style={{ padding: '24px' }}>
+        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', marginBottom: '16px' }}>
+          الإعدادات العامة للنظام (Dynamic System Key-Values)
+        </h3>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '600px' }}>
+          <TextField
+            label="اسم المنصة بالعربية"
+            defaultValue={systemSettings?.site_name_ar || 'منصة مِران الوطنية للتدريب الصحي'}
+            variant="outlined"
+            fullWidth
+          />
+
+          <TextField
+            label="الحد الأقصى لطلبات التدوير السنوية"
+            type="number"
+            defaultValue={systemSettings?.max_rotations_per_year || 12}
+            variant="outlined"
+            fullWidth
+          />
+
+          <FormControlLabel
+            control={<Switch defaultChecked={systemSettings?.enable_qr_verification !== false} color="primary" />}
+            label="تفعيل التحقق من الهوية عبر بطاقات الـ QR والكروت السريرية"
+            sx={{ color: '#0F172A', fontWeight: 600 }}
+          />
+
+          <FormControlLabel
+            control={<Switch defaultChecked={systemSettings?.enable_auto_allocation !== false} color="primary" />}
+            label="تفعيل الخوارزمية الآلية لتوزيع أطباء الامتياز على المستشفيات"
+            sx={{ color: '#0F172A', fontWeight: 600 }}
+          />
+
+          <Button
+            variant="contained"
+            startIcon={<Save size={18} />}
+            style={{
+              alignSelf: 'flex-start',
+              height: '44px',
+              padding: '0 24px',
+              background: '#0F766E',
+              fontWeight: 700,
+              borderRadius: '12px',
+            }}
+          >
+            حفظ التغييرات
+          </Button>
+        </div>
       </div>
     </div>
   );
 };
+
+export default SettingsPage;

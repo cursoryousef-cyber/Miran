@@ -208,10 +208,10 @@ export const OrganizationWizard: React.FC = () => {
         {activeStep === 4 && resultData && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', textAlign: 'center' }}>
             <CheckCircle2 size={64} color="#10b981" style={{ margin: '0 auto' }} />
-            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#f8fafc' }}>تم إنشاء الجهة والحساب الإداري بنجاح!</h2>
+            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>تم إنشاء الجهة والحساب الإداري بنجاح!</h2>
 
-            <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '20px', borderRadius: '12px', textAlign: 'right' }}>
-              <div style={{ fontSize: '13px', color: '#94a3b8' }}>رابط تفعيل الحساب الصادر لمدير الجهة:</div>
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '20px', borderRadius: '12px', textAlign: 'right' }}>
+              <div style={{ fontSize: '13px', color: '#64748B' }}>رابط تفعيل الحساب الصادر لمدير الجهة:</div>
               <div style={{ display: 'flex', gap: '12px', marginTop: '8px', alignItems: 'center' }}>
                 <TextField
                   value={resultData.activationLink}

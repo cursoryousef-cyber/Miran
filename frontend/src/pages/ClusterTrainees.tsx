@@ -368,8 +368,8 @@ export const ClusterTrainees: React.FC = () => {
               <Grid item xs={12} sm={6} md={4} key={hosp.id}>
                 <Paper
                   style={{
-                    background: 'rgba(30, 41, 59, 0.7)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #E2E8F0',
                     borderRadius: '12px',
                     padding: '16px',
                     display: 'flex',

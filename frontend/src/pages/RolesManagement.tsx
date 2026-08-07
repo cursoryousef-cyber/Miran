@@ -130,10 +130,10 @@ export const RolesManagement: React.FC = () => {
 
       {/* Create Role Modal */}
       <Dialog open={openModal} onClose={() => setOpenModal(false)} maxWidth="md" fullWidth>
-        <DialogTitle style={{ background: '#0f172a', color: '#fff', fontWeight: 800 }}>
+        <DialogTitle style={{ backgroundColor: '#FFFFFF', color: '#0F172A', fontWeight: 800, borderBottom: '1px solid #E2E8F0' }}>
           إنشاء دور جديد وتخصيص الصلاحيات
         </DialogTitle>
-        <DialogContent style={{ background: '#0f172a', display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '16px' }}>
+        <DialogContent style={{ backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '20px' }}>
           <TextField
             label="رمز الدور (Code e.g. custom_supervisor)"
             variant="outlined"
@@ -152,7 +152,7 @@ export const RolesManagement: React.FC = () => {
           />
 
           <div style={{ marginTop: '12px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc', marginBottom: '8px' }}>اختيار الصلاحيات المرتبطة:</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', marginBottom: '8px' }}>اختيار الصلاحيات المرتبطة:</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', maxHeight: '240px', overflowY: 'auto' }}>
               {permsData?.data?.map((p: any) => (
                 <FormControlLabel
@@ -161,18 +161,19 @@ export const RolesManagement: React.FC = () => {
                     <Checkbox
                       checked={selectedPermissions.includes(p.code)}
                       onChange={() => togglePermission(p.code)}
-                      style={{ color: '#10b981' }}
+                      style={{ color: '#0F766E' }}
                     />
                   }
                   label={`${p.nameAr} (${p.code})`}
+                  sx={{ color: '#0F172A' }}
                 />
               ))}
             </div>
           </div>
         </DialogContent>
-        <DialogActions style={{ background: '#0f172a', padding: '16px' }}>
-          <Button onClick={() => setOpenModal(false)} style={{ color: '#94a3b8' }}>إلغاء</Button>
-          <Button onClick={handleCreateRole} variant="contained" style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', fontWeight: 700 }}>
+        <DialogActions style={{ backgroundColor: '#FFFFFF', padding: '16px 24px', borderTop: '1px solid #E2E8F0' }}>
+          <Button onClick={() => setOpenModal(false)} style={{ color: '#64748B' }}>إلغاء</Button>
+          <Button onClick={handleCreateRole} variant="contained" style={{ background: '#0F766E', fontWeight: 700, borderRadius: '10px' }}>
             حفظ الدور
           </Button>
         </DialogActions>

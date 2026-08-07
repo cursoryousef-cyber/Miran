@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Stethoscope, Users, ClipboardList, BookOpen, RefreshCw } from 'lucide-react';
+import { Stethoscope, RefreshCw } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../api/client';
 import { Button, IconButton, Tooltip } from '@mui/material';
@@ -34,89 +34,85 @@ export const HospitalDashboard: React.FC = () => {
     },
   });
 
-  const { data: notifications } = useQuery({
-    queryKey: ['hosp-notifications'],
-    queryFn: async () => {
-      const res = await apiClient.get('/notifications/unread-count').catch(() => ({ data: { data: { count: 0 } } }));
-      return res.data?.data || { count: 0 };
-    },
-  });
-
   const trainers = members?.filter((m: any) => m.roles?.some((r: any) => r.code === 'trainer')) || [];
   const trainees = members?.filter((m: any) => m.roles?.some((r: any) => r.code === 'trainee')) || [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-      <div className="glass-card" style={{
+      <div style={{
         padding: '32px',
-        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(15, 23, 42, 0.9) 100%)',
-        border: '1px solid rgba(245, 158, 11, 0.3)',
+        background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)',
+        borderRadius: '16px',
+        color: '#FFFFFF',
+        boxShadow: '0 4px 14px rgba(15, 118, 110, 0.25)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-              <Stethoscope size={20} color="#f59e0b" />
-              <span style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 700 }}>Hospital Supervisor Dashboard</span>
+              <Stethoscope size={20} color="#CCFBF1" />
+              <span style={{ fontSize: '12px', color: '#CCFBF1', fontWeight: 700, letterSpacing: '1px' }}>
+                HOSPITAL SUPERVISOR DASHBOARD
+              </span>
             </div>
-            <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+            <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
               مرحباً، {user?.nameAr} 👋
             </h1>
-            <p style={{ fontSize: '14px', color: '#cbd5e1', marginTop: '8px' }}>
-              {user?.activeOrganization?.nameAr} — إدارة الروتيشنات والمتدربين والمدربين
+            <p style={{ fontSize: '14px', color: '#F0FDF4', marginTop: '8px', opacity: 0.9 }}>
+              {user?.activeOrganization?.nameAr} — الإشراف السريري وتوزيع الروتيشنات والمدربين
             </p>
           </div>
-          <Tooltip title="تحديث البيانات">
-            <IconButton onClick={() => refetchMembers()} style={{ color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
+          <Tooltip title="تحديث">
+            <IconButton onClick={() => refetchMembers()} style={{ color: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.15)' }}>
               <RefreshCw size={18} />
             </IconButton>
           </Tooltip>
         </div>
-        <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-          <Button variant="contained" onClick={() => navigate('/intakes')}
-            style={{ background: 'linear-gradient(135deg, #d97706, #f59e0b)', fontWeight: 700 }}>
-            إدارة الروتيشنات
+        <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
+          <Button variant="contained" onClick={() => navigate('/hospital')}
+            style={{ background: '#FFFFFF', color: '#0F766E', fontWeight: 800, borderRadius: 12 }}>
+            مساحة عمل المستشفى الشاملة
+          </Button>
+          <Button variant="outlined" onClick={() => navigate('/intakes')}
+            style={{ borderColor: '#CCFBF1', color: '#FFFFFF', fontWeight: 700, borderRadius: 12 }}>
+            إدارة الروتيشنات الأكاديمية
           </Button>
           <Button variant="outlined" onClick={() => navigate('/org-members')}
-            style={{ borderColor: '#f59e0b', color: '#f59e0b', fontWeight: 700 }}>
+            style={{ borderColor: '#CCFBF1', color: '#FFFFFF', fontWeight: 700, borderRadius: 12 }}>
             المتدربون والمدربون
           </Button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
         <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>الروتيشنات النشطة</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#f59e0b' }}>{rotations?.length || 0}</div>
+          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>الأطباء المتدربون</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#0F766E' }}>{trainees.length}</div>
         </div>
         <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>المتدربون الحاليون</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#10b981' }}>{trainees.length}</div>
+          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>المدربون السريريون</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#0891B2' }}>{trainers.length}</div>
         </div>
         <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>المدربون السريريون</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#8b5cf6' }}>{trainers.length}</div>
+          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>الأقسام المفعّلة</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#F59E0B' }}>{departments?.length || 0}</div>
         </div>
         <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>الأقسام السريرية</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#06b6d4' }}>{departments?.length || 0}</div>
+          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>الروتيشنات النشطة</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#7E22CE' }}>{rotations?.length || 0}</div>
         </div>
-        {notifications && (
-          <div className="glass-card" style={{ padding: '24px' }}>
-            <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>إشعارات غير مقروءة</div>
-            <div style={{ fontSize: '32px', fontWeight: 800, color: notifications.count > 0 ? '#f59e0b' : '#10b981' }}>{notifications.count}</div>
-          </div>
-        )}
       </div>
 
       <div className="glass-card" style={{ padding: '24px' }}>
-        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc', marginBottom: '16px' }}>🔄 الروتيشنات الجارية</h3>
-        {rotations && rotations.length > 0 ? rotations.map((r: any) => (
-          <div key={r.id} style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', marginBottom: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc' }}>{r.department?.nameAr || 'روتيشن نشط'}</div>
-            <div style={{ fontSize: '11px', color: '#64748b' }}>الحالة: {r.status} • {r.traineeProfile?.person?.nameAr || ''}</div>
+        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', marginBottom: '16px' }}>🏥 الأقسام السريرية المسجلة</h3>
+        {departments && departments.length > 0 ? departments.map((d: any) => (
+          <div key={d.id} style={{ padding: '12px 16px', backgroundColor: '#F8FAFC', borderRadius: '12px', marginBottom: '8px', border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>{d.nameAr}</div>
+            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>{d.code || 'DEPT'}</span>
           </div>
-        )) : <div style={{ color: '#94a3b8', fontSize: '13px' }}>لا توجد روتيشنات حالياً</div>}
+        )) : <div style={{ color: '#64748B', fontSize: '13px', padding: '16px', textAlign: 'center' }}>لا توجد أقسام مفعّلة حالياً</div>}
       </div>
     </div>
   );
 };
+
+export default HospitalDashboard;

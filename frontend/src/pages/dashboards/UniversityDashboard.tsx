@@ -28,57 +28,65 @@ export const UniversityDashboard: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-      <div className="glass-card" style={{
+      <div style={{
         padding: '32px',
-        background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(15, 23, 42, 0.9) 100%)',
-        border: '1px solid rgba(139, 92, 246, 0.3)',
+        background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)',
+        borderRadius: '16px',
+        color: '#FFFFFF',
+        boxShadow: '0 4px 14px rgba(15, 118, 110, 0.25)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <GraduationCap size={20} color="#8b5cf6" />
-          <span style={{ fontSize: '12px', color: '#8b5cf6', fontWeight: 700 }}>University Admin Dashboard</span>
+          <GraduationCap size={20} color="#CCFBF1" />
+          <span style={{ fontSize: '12px', color: '#CCFBF1', fontWeight: 700, letterSpacing: '1px' }}>
+            UNIVERSITY ADMIN DASHBOARD
+          </span>
         </div>
-        <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+        <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
           مرحباً، {user?.nameAr} 👋
         </h1>
-        <p style={{ fontSize: '14px', color: '#cbd5e1', marginTop: '8px' }}>
+        <p style={{ fontSize: '14px', color: '#F0FDF4', marginTop: '8px', opacity: 0.9 }}>
           {user?.activeOrganization?.nameAr} — إدارة البرامج والدفعات وطلبات التدريب
         </p>
-        <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
           <Button variant="contained" startIcon={<Send size={16} />} onClick={() => navigate('/affiliations')}
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #8b5cf6)', fontWeight: 700 }}>
+            style={{ background: '#FFFFFF', color: '#0F766E', fontWeight: 800, borderRadius: 12 }}>
             إرسال طلب تدريب جديد
           </Button>
           <Button variant="outlined" startIcon={<ClipboardList size={16} />} onClick={() => navigate('/intakes')}
-            style={{ borderColor: '#8b5cf6', color: '#8b5cf6', fontWeight: 700 }}>
+            style={{ borderColor: '#CCFBF1', color: '#FFFFFF', fontWeight: 700, borderRadius: 12 }}>
             إدارة الدفعات
           </Button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
         <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>الدفعات الأكاديمية</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#8b5cf6' }}>{intakes?.length || 0}</div>
+          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>الدفعات الأكاديمية</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#0F766E' }}>{intakes?.length || 0}</div>
         </div>
         <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>أعضاء الجامعة</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#06b6d4' }}>{members?.length || 0}</div>
+          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>أعضاء الجامعة</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#0891B2' }}>{members?.length || 0}</div>
         </div>
         <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>طلبات تدريب مرسلة</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#f59e0b' }}>0</div>
+          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>طلبات تدريب مرسلة</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#F59E0B' }}>0</div>
         </div>
       </div>
 
       <div className="glass-card" style={{ padding: '24px' }}>
-        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc', marginBottom: '16px' }}>📋 الدفعات الأكاديمية النشطة</h3>
+        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', marginBottom: '16px' }}>📋 الدفعات الأكاديمية النشطة</h3>
         {intakes && intakes.length > 0 ? intakes.map((i: any) => (
-          <div key={i.id} style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', marginBottom: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc' }}>{i.nameAr || i.code}</div>
-            <div style={{ fontSize: '11px', color: '#64748b' }}>{i.status || 'نشط'}</div>
+          <div key={i.id} style={{ padding: '12px 16px', backgroundColor: '#F8FAFC', borderRadius: '12px', marginBottom: '8px', border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>{i.nameAr || i.code}</div>
+            <span style={{ fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '8px', backgroundColor: '#DCFCE7', color: '#15803D' }}>
+              {i.status || 'نشط'}
+            </span>
           </div>
-        )) : <div style={{ color: '#94a3b8', fontSize: '13px' }}>لا توجد دفعات — استخدم "إدارة الدفعات" لإنشاء واحدة</div>}
+        )) : <div style={{ color: '#64748B', fontSize: '13px', padding: '16px', textAlign: 'center' }}>لا توجد دفعات — استخدم "إدارة الدفعات" لإنشاء واحدة</div>}
       </div>
     </div>
   );
 };
+
+export default UniversityDashboard;
