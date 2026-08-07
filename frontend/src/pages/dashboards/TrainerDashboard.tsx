@@ -45,10 +45,14 @@ export const TrainerDashboard: React.FC = () => {
             style={{ borderColor: '#10b981', color: '#10b981', fontWeight: 700 }}>
             مراجعة الـ Logbook
           </Button>
+          <Button variant="outlined" onClick={() => navigate('/logbook?tab=3')}
+            style={{ borderColor: '#f59e0b', color: '#f59e0b', fontWeight: 700 }}>
+            التقييمات
+          </Button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
         <div className="glass-card" style={{ padding: '24px' }}>
           <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>المتدربون المسندون</div>
           <div style={{ fontSize: '32px', fontWeight: 800, color: '#10b981' }}>{stats?.assignedTrainees ?? 0}</div>
@@ -61,7 +65,29 @@ export const TrainerDashboard: React.FC = () => {
           <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>Logbook ينتظر اعتماد</div>
           <div style={{ fontSize: '32px', fontWeight: 800, color: '#ef4444' }}>{stats?.pendingLogbook ?? 0}</div>
         </div>
+        <div className="glass-card" style={{ padding: '24px' }}>
+          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>الروتيشنات النشطة</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#06b6d4' }}>{stats?.activeRotations ?? 0}</div>
+        </div>
+        <div className="glass-card" style={{ padding: '24px' }}>
+          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>نداءات مفتوحة</div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: '#8b5cf6' }}>{stats?.openCalls ?? 0}</div>
+        </div>
       </div>
+
+      {/* Evaluation alert — shown when logbook is pending (proxy for needing evaluation attention) */}
+      {(stats?.pendingLogbook ?? 0) > 0 && (
+        <div className="glass-card" style={{
+          padding: '16px 20px', border: '1px solid rgba(245,158,11,0.35)',
+          background: 'rgba(245,158,11,0.07)', display: 'flex', alignItems: 'center', gap: 12
+        }}>
+          <ClipboardCheck size={18} color="#f59e0b" />
+          <span style={{ fontSize: 14, color: '#fbbf24', fontWeight: 700 }}>
+            {stats.pendingLogbook} سجل سريري ينتظر اعتمادك — انتقل إلى الـ Logbook {'>'} التقييمات لإتمام اجتماعات منتصف الدورة والتقييمات النهائية.
+          </span>
+        </div>
+      )}
     </div>
   );
 };
+

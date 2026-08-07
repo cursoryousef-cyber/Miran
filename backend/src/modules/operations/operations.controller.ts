@@ -6,6 +6,7 @@ import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TimelineService } from '../timeline/timeline.service';
+import { EvaluationService } from './evaluation.service';
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
@@ -24,6 +25,7 @@ export class OperationsController {
   constructor(
     private prisma: PrismaService,
     private timelineService: TimelineService,
+    private evaluationService: EvaluationService,
   ) {}
 
   @Get('trainer/dashboard')
@@ -197,25 +199,67 @@ export class OperationsController {
     return { data };
   }
 
+  // ── POST /operations/evaluations  — trainer submits evaluation with all guards ──
   @Post('evaluations')
   @RequireRoles('trainer', 'academic_supervisor', 'training_supervisor', 'org_manager', 'platform_owner')
+  @ApiOperation({ summary: 'إرسال تقييم المدرب للمتدرب — مع تطبيق القفل المتبادل وحارس اجتماع منتصف الدورة' })
   async createEvaluation(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
-    const data = await this.prisma.evaluation.create({
-      data: {
-        organizationId: user.organizationId,
-        formId: dto.formId,
-        rotationId: dto.rotationId,
-        evaluatorId: user.accountId,
-        evaluateeId: dto.evaluateeId,
-        evaluationType: dto.evaluationType,
-        scores: (dto.scores || {}) as Prisma.InputJsonValue,
-        totalScore: dto.totalScore,
-        comments: dto.comments,
-        secondsSpent: dto.secondsSpent,
-      },
-    });
-    await this.notify(user.organizationId, dto.evaluateeId, 'تقييم جديد', dto.comments || '', 'evaluation', 'Evaluation', data.id);
-    return { success: true, data };
+    return this.evaluationService.submitTrainerEvaluation(dto, user);
+  }
+
+  // ── POST /operations/evaluations/department  — trainee rates dept (anonymous) ──
+  @Post('evaluations/department')
+  @RequireRoles('trainee')
+  @ApiOperation({ summary: 'تقييم المتدرب للقسم — مجهول الهوية تجاه القسم، ظاهر للشؤون الأكاديمية فقط' })
+  async submitDepartmentEvaluation(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
+    return this.evaluationService.submitDepartmentEvaluation(dto, user);
+  }
+
+  // ── GET /operations/evaluations/midpoint/:rotationId  — midpoint meeting status ──
+  @Get('evaluations/midpoint/:rotationId')
+  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner', 'trainee')
+  @ApiOperation({ summary: 'حالة اجتماع منتصف الدورة للروتيشن' })
+  async midpointStatus(@Param('rotationId') rotationId: string) {
+    return this.evaluationService.midpointStatus(rotationId);
+  }
+
+  // ── PATCH /operations/evaluations/midpoint/:rotationId/complete  — record meeting ──
+  @Patch('evaluations/midpoint/:rotationId/complete')
+  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  @ApiOperation({ summary: 'تسجيل اجتماع منتصف الدورة كمكتمل — شرط مسبق للتقييم النهائي' })
+  async completeMidpointMeeting(
+    @Param('rotationId') rotationId: string,
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body() dto: { notes?: string },
+  ) {
+    return this.evaluationService.completeMidpointMeeting(rotationId, dto.notes, user);
+  }
+
+  // ── GET /operations/evaluations/mutual-lock — mutual lock status ──────────
+  @Get('evaluations/mutual-lock')
+  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner', 'trainee')
+  @ApiOperation({ summary: 'حالة القفل المتبادل للتقييم — كلا الطرفين يجب أن يكمل تقييمه' })
+  async mutualLockStatus(
+    @Query('rotationId') rotationId: string,
+    @Query('traineeAccountId') traineeAccountId: string,
+  ) {
+    return this.evaluationService.mutualLockStatus(rotationId, traineeAccountId);
+  }
+
+  // ── GET /operations/evaluations/slow-evaluators  — academic supervisor report ──
+  @Get('evaluations/slow-evaluators')
+  @RequireRoles('academic_supervisor', 'training_supervisor', 'hospital_administrator', 'org_manager', 'platform_owner')
+  @ApiOperation({ summary: 'تقرير كاشف التقييم الآلي — المدربون الذين أرسلوا تقييمات مشبوهة (أقل من 40 ثانية)' })
+  async slowEvaluators(@CurrentUser() user: IAuthenticatedUser) {
+    return this.evaluationService.slowEvaluatorReport(user.organizationId);
+  }
+
+  // ── GET /operations/evaluations/my-pending  — trainee's pending evals ────
+  @Get('evaluations/my-pending')
+  @RequireRoles('trainee')
+  @ApiOperation({ summary: 'التقييمات المعلقة للمتدرب — القسم الذي لم يُقيَّم + التقييمات الواردة' })
+  async myPendingEvaluations(@CurrentUser() user: IAuthenticatedUser) {
+    return this.evaluationService.myPendingEvaluations(user);
   }
 
   @Get('tasks')

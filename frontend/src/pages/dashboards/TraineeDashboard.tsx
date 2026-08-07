@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { BookOpen, Clock, Activity, CheckCircle2, QrCode, Calendar } from 'lucide-react';
+import { BookOpen, Clock, Activity, CheckCircle2, QrCode, Calendar, ClipboardList } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../api/client';
 import { Button, LinearProgress } from '@mui/material';
@@ -27,6 +27,17 @@ export const TraineeDashboard: React.FC = () => {
     },
   });
 
+  const { data: pendingEvals } = useQuery({
+    queryKey: ['my-pending-evals-dashboard'],
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/evaluations/my-pending').catch(() => ({ data: { data: null } }));
+      return res.data?.data ?? null;
+    },
+    refetchInterval: 30000,
+  });
+
+  const pendingDeptCount = pendingEvals?.pendingDepartmentEvals?.length ?? 0;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
       <div className="glass-card" style={{
@@ -51,6 +62,28 @@ export const TraineeDashboard: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* Pending department evaluation alert */}
+      {pendingDeptCount > 0 && (
+        <div className="glass-card" style={{
+          padding: '16px 20px',
+          border: '1px solid rgba(245,158,11,0.4)',
+          background: 'rgba(245,158,11,0.08)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ClipboardList size={18} color="#f59e0b" />
+            <span style={{ fontSize: 14, color: '#fbbf24', fontWeight: 700 }}>
+              لديك {pendingDeptCount} قسم بحاجة لتقييمك — تقييم القسم شرط للقفل المتبادل وإتمام التخرج.
+            </span>
+          </div>
+          <Button size="small" variant="outlined"
+            onClick={() => navigate('/logbook')}
+            style={{ borderColor: '#f59e0b', color: '#f59e0b', fontWeight: 700, whiteSpace: 'nowrap' }}>
+            تقييم الآن
+          </Button>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
         <div className="glass-card" style={{ padding: '24px' }}>
