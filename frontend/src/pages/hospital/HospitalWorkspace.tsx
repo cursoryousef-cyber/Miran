@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Tabs, Tab, Box } from '@mui/material';
+import { Tabs, Tab, Box, CircularProgress } from '@mui/material';
 import { Stethoscope } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 import { WorkspaceOverview } from './WorkspaceOverview';
 import { TrainerCards } from './TrainerCards';
-import { CallsHub } from './CallsHub';
+const CallsHub = lazy(() => import('./CallsHub').then(m => ({ default: m.CallsHub })));
 
 // Existing pages are mounted as sections rather than reimplemented, so every
 // workflow they own — capacity editing, acceptance, reassignment, leave,
@@ -100,7 +100,15 @@ export const HospitalWorkspace: React.FC = () => {
         </Tabs>
       </Box>
 
-      <div>{section.render(goTo)}</div>
+      <div>
+        <Suspense fallback={
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
+            <CircularProgress size={30} style={{ color: '#f59e0b' }} />
+          </div>
+        }>
+          {section.render(goTo)}
+        </Suspense>
+      </div>
     </div>
   );
 };
