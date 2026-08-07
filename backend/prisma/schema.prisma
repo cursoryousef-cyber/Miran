@@ -671,6 +671,7 @@ model Program {
   rotations       Rotation[]
   academicIntakes AcademicIntake[]
   trainingRequests TrainingRequest[]
+  qualifiedTrainers TrainerProgram[]
 
   @@index([organizationId])
   @@map("programs")
@@ -923,6 +924,7 @@ model TrainerProfile {
   replacementLeaves    TrainerLeave[]          @relation("ReplacementLeaves")
   reassignmentsFrom    TrainerReassignment[]   @relation("ReassignmentFrom")
   reassignmentsTo      TrainerReassignment[]   @relation("ReassignmentTo")
+  qualifiedPrograms    TrainerProgram[]
 
   @@map("trainer_profiles")
 }
@@ -1379,10 +1381,15 @@ model Setting {
 model CapacityAllocation {
   id             String    @id @default(uuid()) @db.Uuid
   organizationId String    @map("organization_id") @db.Uuid
-  /// 'hospital' | 'department' | 'specialty' | 'trainer' | 'supervisor'
+  /// 'hospital' | 'department' | 'specialty' | 'trainer' | 'supervisor' | 'program'
   scopeType      String    @map("scope_type") @db.VarChar(20)
   /// معرف القسم/المدرب/المشرف حسب scopeType، أو '' لسعة المستشفى الكلية
   scopeId        String    @default("") @map("scope_id") @db.VarChar(64)
+  /// معرف البرنامج التدريبي من الكتالوج الوطني، أو '' لعدم التقييد ببرنامج.
+  /// يُستخدم مع scopeType='program' لسعة البرنامج في المستشفى، ومع
+  /// scopeType='department'/'trainer' لتقسيم مقاعد البرنامج على الأقسام والمدربين.
+  /// نص وليس مفتاحاً خارجياً — اتساقاً مع scopeId ولتفادي دلالات NULL في قيد التفرد.
+  programId      String    @default("") @map("program_id") @db.VarChar(64)
   /// رمز التخصص من LookupTable، أو '' لعدم التقييد بتخصص
   specialtyCode  String    @default("") @map("specialty_code") @db.VarChar(100)
   /// 'male' | 'female' أو '' لعدم التقييد بالجنس
@@ -1402,10 +1409,33 @@ model CapacityAllocation {
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
-  @@unique([organizationId, scopeType, scopeId, specialtyCode, gender, trainingPeriod])
+  @@unique([organizationId, scopeType, scopeId, programId, specialtyCode, gender, trainingPeriod])
   @@index([organizationId, scopeType])
+  @@index([organizationId, programId])
   @@index([trainingStartDate, trainingEndDate])
   @@map("capacity_allocations")
+}
+
+/// تأهيل المدرب للبرامج التدريبية — علاقة متعدد إلى متعدد
+/// المدرب لا يشرف إلا على البرامج المُسندة إليه (قيد صارم في محرك التوزيع).
+model TrainerProgram {
+  id               String   @id @default(uuid()) @db.Uuid
+  trainerProfileId String   @map("trainer_profile_id") @db.Uuid
+  programId        String   @map("program_id") @db.Uuid
+  /// سعة المدرب ضمن هذا البرنامج تحديداً — إن تُركت فارغة تُستخدم سعة المدرب العامة
+  maxTrainees      Int?     @map("max_trainees")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdById      String?  @map("created_by") @db.Uuid
+  updatedById      String?  @map("updated_by") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  trainerProfile TrainerProfile @relation(fields: [trainerProfileId], references: [id], onDelete: Cascade)
+  program        Program        @relation(fields: [programId], references: [id])
+
+  @@unique([trainerProfileId, programId])
+  @@index([programId])
+  @@map("trainer_programs")
 }
 
 model LookupTable {

@@ -29,6 +29,11 @@ interface TraineeRow {
   trainingPeriod: string | null;
   universityOrgId: string | null;
   status: string;
+  /// Training program, taken from the request the university submitted.
+  /// Null for legacy requests that predate the program catalog.
+  programId: string | null;
+  startDate: Date | null;
+  endDate: Date | null;
 }
 
 interface HospitalCandidate {
@@ -132,7 +137,7 @@ export class AllocationEngineService {
   ): Promise<RowAllocationResult> {
     const row = await this.prisma.trainingRequestTrainee.findUnique({
       where: { id: rowId },
-      include: { trainingRequest: { select: { targetOrgId: true } } },
+      include: { trainingRequest: { select: { targetOrgId: true, programId: true } } },
     });
     if (!row) throw new Error('الصف غير موجود');
 
@@ -147,6 +152,9 @@ export class AllocationEngineService {
       trainingPeriod: row.trainingPeriod,
       universityOrgId: row.universityOrgId,
       status: row.status,
+      programId: row.trainingRequest?.programId ?? null,
+      startDate: row.startDate,
+      endDate: row.endDate,
     };
 
     const result = await this.allocateSingleRow(traineeRow, hospitals, weights, clusterId);
@@ -220,13 +228,53 @@ export class AllocationEngineService {
       return fail('المستشفى غير مفعّل أو موقوف');
     }
 
-    // Guard 2: hospital total capacity
+    // Guard 2: training program — the primary allocation axis.
+    //
+    // Only enforced against hospitals that have declared program capacity. A
+    // hospital that has declared none keeps its previous behaviour, so turning
+    // this on does not block allocation into hospitals not yet configured.
+    let programOcc: { capacity: number; occupied: number; available: number } | null = null;
+    if (row.programId) {
+      const declaresPrograms = await this.capacityService.declaresAnyProgram(hosp.id);
+      if (declaresPrograms) {
+        programOcc = await this.capacityService.getProgramOccupancy(hosp.id, row.programId);
+        if (programOcc.capacity <= 0) {
+          return fail('المستشفى لا يستقبل هذا البرنامج التدريبي');
+        }
+        if (programOcc.available <= 0) {
+          return fail(
+            `مقاعد البرنامج ممتلئة (${programOcc.occupied}/${programOcc.capacity})`,
+          );
+        }
+      }
+    }
+
+    // Guard 3: training period — the allocation must sit inside any declared window.
+    if (row.programId && row.startDate) {
+      const windowed = await this.prisma.capacityAllocation.findFirst({
+        where: {
+          organizationId: hosp.id,
+          scopeType: 'program',
+          programId: row.programId,
+          trainingStartDate: { not: null },
+        },
+      });
+      if (windowed?.trainingStartDate && windowed?.trainingEndDate) {
+        const rowStart = new Date(row.startDate);
+        const rowEnd = row.endDate ? new Date(row.endDate) : rowStart;
+        if (rowStart < windowed.trainingStartDate || rowEnd > windowed.trainingEndDate) {
+          return fail('فترة التدريب خارج الفترة المعتمدة لهذا البرنامج في المستشفى');
+        }
+      }
+    }
+
+    // Guard 4: hospital total capacity
     const hospOcc = await this.capacityService.getHospitalOccupancy(hosp.id);
     if (hospOcc.available <= 0) {
       return fail(`الطاقة الاستيعابية الإجمالية ممتلئة (${hospOcc.occupied}/${hospOcc.capacity})`);
     }
 
-    // Guard 3: specialty allocation (if one exists, must have space)
+    // Guard 5: specialty allocation (if one exists, must have space)
     if (row.specialty) {
       const specOcc = await this.capacityService.getSpecialtyOccupancy(hosp.id, {
         specialtyCode: row.specialty,
@@ -252,7 +300,7 @@ export class AllocationEngineService {
       }
     }
 
-    // Guard 5: department availability — find any active dept with open capacity
+    // Guard 6: department availability — find any active dept with open capacity
     const activeDepts = hosp.departments.filter((d) => d.isActive && d.capacity > 0);
     if (activeDepts.length === 0) {
       return fail('لا توجد أقسام سريرية مفعّلة بطاقة محددة');
@@ -260,13 +308,33 @@ export class AllocationEngineService {
 
     let candidateDept: (typeof activeDepts)[0] | undefined;
     let candidateTrainer: { id: string; maxTrainees: number } | undefined;
+    // Distinguishes "no qualified trainer anywhere" from "qualified but full",
+    // so the cluster sees why a hospital was skipped.
+    let sawQualifiedTrainer = false;
 
     for (const dept of activeDepts) {
       const deptOcc = await this.capacityService.getDepartmentOccupancy(dept.id);
       if (deptOcc.available <= 0) continue;
 
-      // Guard 6: trainer availability within this dept
-      const availableTrainer = await this.findAvailableTrainer(dept.trainerProfiles);
+      // Guard 7: a department may hold a slice of the program's seats.
+      if (row.programId) {
+        const deptProgOcc = await this.capacityService.getDepartmentProgramOccupancy(
+          hosp.id,
+          dept.id,
+          row.programId,
+        );
+        if (deptProgOcc.capacity > 0 && deptProgOcc.available <= 0) continue;
+      }
+
+      // Guard 8: qualified trainer — a hard constraint. A trainer may only take
+      // trainees of a program they are qualified for, so nursing can never land
+      // on a medical trainer regardless of free capacity.
+      const qualified = await this.filterQualifiedTrainers(dept.trainerProfiles, row.programId);
+      if (qualified.length === 0) continue;
+      sawQualifiedTrainer = true;
+
+      // Guard 9: trainer capacity — per-program slice first, general cap otherwise.
+      const availableTrainer = await this.findAvailableTrainer(qualified, hosp.id, row.programId);
       if (!availableTrainer) continue;
 
       candidateDept = dept;
@@ -275,7 +343,11 @@ export class AllocationEngineService {
     }
 
     if (!candidateDept) {
-      return fail('جميع الأقسام والمدربين ممتلئون');
+      return fail(
+        sawQualifiedTrainer
+          ? 'جميع الأقسام والمدربين المؤهلين ممتلئون'
+          : 'لا يوجد مدرب مؤهل لهذا البرنامج التدريبي في المستشفى',
+      );
     }
 
     // All guards passed — compute score
@@ -294,6 +366,16 @@ export class AllocationEngineService {
       (1 - trainerOcc.occupied / Math.max(trainerOcc.capacity, 1)) * weights.trainerLoad,
     );
     breakdown.trainerLoad = trainerScore;
+
+    // Prefer hospitals that explicitly declared seats for this program, and among
+    // them the ones with the most program headroom.
+    let programScore = 0;
+    if (programOcc && programOcc.capacity > 0) {
+      programScore = Math.round(
+        (programOcc.available / programOcc.capacity) * weights.capacityRatio,
+      );
+    }
+    breakdown.programCapacity = programScore;
 
     let specScore = 0;
     if (row.specialty) {
@@ -335,10 +417,52 @@ export class AllocationEngineService {
     };
   }
 
+  /**
+   * Keeps only trainers qualified for the program — the hard constraint that
+   * prevents cross-program supervision (nursing on a medical trainer, and so on).
+   *
+   * With no program on the row (legacy requests that predate the catalog) there is
+   * nothing to check against, so every trainer stays eligible.
+   */
+  private async filterQualifiedTrainers(
+    trainers: Array<{ id: string; maxTrainees: number }>,
+    programId: string | null,
+  ): Promise<Array<{ id: string; maxTrainees: number }>> {
+    if (!programId || trainers.length === 0) return trainers;
+
+    const qualified = await this.prisma.trainerProgram.findMany({
+      where: {
+        programId,
+        isActive: true,
+        trainerProfileId: { in: trainers.map((t) => t.id) },
+      },
+      select: { trainerProfileId: true },
+    });
+    const allowed = new Set(qualified.map((q) => q.trainerProfileId));
+    return trainers.filter((t) => allowed.has(t.id));
+  }
+
+  /**
+   * First trainer with a free seat. A per-program allocation, when the hospital
+   * has declared one, takes precedence over the trainer's general cap.
+   */
   private async findAvailableTrainer(
     trainers: Array<{ id: string; maxTrainees: number }>,
+    organizationId?: string,
+    programId?: string | null,
   ): Promise<{ id: string; maxTrainees: number } | undefined> {
     for (const t of trainers) {
+      if (organizationId && programId) {
+        const progOcc = await this.capacityService.getTrainerProgramOccupancy(
+          organizationId,
+          t.id,
+          programId,
+        );
+        if (progOcc.capacity > 0) {
+          if (progOcc.available > 0) return t;
+          continue; // explicit program slice is full — the general cap must not override it
+        }
+      }
       const occ = await this.capacityService.getTrainerOccupancy(t.id);
       if (occ.available > 0) return t;
     }
@@ -450,10 +574,17 @@ export class AllocationEngineService {
         trainingPeriod: true,
         universityOrgId: true,
         status: true,
+        startDate: true,
+        endDate: true,
+        // The program is chosen once by the university, on the request itself.
+        trainingRequest: { select: { programId: true } },
       },
       orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
     });
-    return rows;
+    return rows.map(({ trainingRequest, ...r }) => ({
+      ...r,
+      programId: trainingRequest?.programId ?? null,
+    }));
   }
 
   private async fetchHospitalCandidates(

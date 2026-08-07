@@ -154,9 +154,23 @@ export class HospitalCapacityService {
     await this.requireHospital(hospitalId);
 
     const scopeId = dto.scopeId || '';
+    const programId = dto.programId || '';
     const specialtyCode = dto.specialtyCode || '';
     const gender = dto.gender || '';
     const trainingPeriod = dto.trainingPeriod || '';
+
+    // A program allocation without a program would be indistinguishable from the
+    // hospital's overall capacity row.
+    if (dto.scopeType === 'program' && !programId) {
+      throw new BadRequestException('يجب تحديد البرنامج التدريبي عند ضبط سعة برنامج');
+    }
+    if (programId) {
+      const program = await this.prisma.program.findFirst({
+        where: { id: programId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!program) throw new NotFoundException('البرنامج التدريبي غير موجود في الكتالوج');
+    }
 
     // منع تخفيض السعة تحت الإشغال الحالي لنفس نطاق القيد بالضبط
     if (dto.scopeType === 'specialty') {
@@ -173,14 +187,29 @@ export class HospitalCapacityService {
           `لا يمكن ضبط سعة المشرف على ${dto.totalCapacity} — لديه حالياً ${occ.occupied} روتيشن نشط`,
         );
       }
+    } else if (programId) {
+      // Program seats, and any department/trainer slice of them, may not be set
+      // below what is already occupied — that would strand placed trainees.
+      const occ =
+        dto.scopeType === 'department' && scopeId
+          ? await this.capacityService.getDepartmentProgramOccupancy(hospitalId, scopeId, programId)
+          : dto.scopeType === 'trainer' && scopeId
+            ? await this.capacityService.getTrainerProgramOccupancy(hospitalId, scopeId, programId)
+            : await this.capacityService.getProgramOccupancy(hospitalId, programId);
+      if (occ.occupied > dto.totalCapacity) {
+        throw new BadRequestException(
+          `لا يمكن ضبط السعة على ${dto.totalCapacity} — يوجد حالياً ${occ.occupied} متدرب ضمن هذا البرنامج`,
+        );
+      }
     }
 
     const allocation = await this.prisma.capacityAllocation.upsert({
       where: {
-        organizationId_scopeType_scopeId_specialtyCode_gender_trainingPeriod: {
+        organizationId_scopeType_scopeId_programId_specialtyCode_gender_trainingPeriod: {
           organizationId: hospitalId,
           scopeType: dto.scopeType,
           scopeId,
+          programId,
           specialtyCode,
           gender,
           trainingPeriod,
@@ -190,6 +219,7 @@ export class HospitalCapacityService {
         organizationId: hospitalId,
         scopeType: dto.scopeType,
         scopeId,
+        programId,
         specialtyCode,
         gender,
         trainingPeriod,

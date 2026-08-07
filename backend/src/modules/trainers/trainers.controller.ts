@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
@@ -6,6 +6,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TrainerReassignmentService } from './trainer-reassignment.service';
 import { TrainerLeaveService } from './trainer-leave.service';
+import { TrainerQualificationService } from './trainer-qualification.service';
 
 @ApiTags('Trainers (المدربون)')
 @Controller('trainers')
@@ -16,7 +17,71 @@ export class TrainersController {
     private prisma: PrismaService,
     private reassignmentService: TrainerReassignmentService,
     private leaveService: TrainerLeaveService,
+    private qualificationService: TrainerQualificationService,
   ) {}
+
+  // ─── Program Qualification ──────────────────────────────────────────────────
+  // Registered before the parameterised trainer routes below so that the literal
+  // segments are not swallowed by ':id'.
+
+  @Get('qualified')
+  @RequireRoles(
+    'training_supervisor', 'hospital_administrator', 'cluster_administrator',
+    'training_director', 'platform_owner',
+  )
+  @ApiOperation({ summary: 'المدربون المؤهلون لبرنامج تدريبي في الجهة' })
+  async listQualifiedTrainers(
+    @Query('programId') programId: string,
+    @CurrentUser() user: IAuthenticatedUser,
+    @Query('organizationId') organizationId?: string,
+  ) {
+    return this.qualificationService.listQualifiedTrainers(
+      organizationId || user.organizationId,
+      programId,
+    );
+  }
+
+  @Get(':id/qualifications')
+  @RequireRoles(
+    'training_supervisor', 'hospital_administrator', 'cluster_administrator',
+    'training_director', 'trainer', 'platform_owner',
+  )
+  @ApiOperation({ summary: 'برامج المدرب المؤهل لها مع السعة والإشغال' })
+  async listQualifications(@Param('id') trainerProfileId: string) {
+    return this.qualificationService.listForTrainer(trainerProfileId);
+  }
+
+  @Post(':id/qualifications')
+  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
+  @ApiOperation({ summary: 'تأهيل مدرب لبرنامج تدريبي' })
+  async addQualification(
+    @Param('id') trainerProfileId: string,
+    @Body() dto: { programId: string; maxTrainees?: number },
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    return this.qualificationService.addQualification(trainerProfileId, dto, user);
+  }
+
+  @Patch('qualifications/:qualificationId')
+  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
+  @ApiOperation({ summary: 'تعديل سعة أو حالة تأهيل المدرب' })
+  async updateQualification(
+    @Param('qualificationId') qualificationId: string,
+    @Body() dto: { maxTrainees?: number; isActive?: boolean },
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    return this.qualificationService.updateQualification(qualificationId, dto, user);
+  }
+
+  @Delete('qualifications/:qualificationId')
+  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
+  @ApiOperation({ summary: 'حذف تأهيل مدرب لبرنامج' })
+  async removeQualification(
+    @Param('qualificationId') qualificationId: string,
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    return this.qualificationService.removeQualification(qualificationId, user);
+  }
 
   // ─── Profile Endpoints ──────────────────────────────────────────────────────
 

@@ -1,15 +1,23 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class UpsertCapacityAllocationDto {
-  @ApiProperty({ enum: ['hospital', 'department', 'specialty', 'trainer', 'supervisor'] })
-  @IsIn(['hospital', 'department', 'specialty', 'trainer', 'supervisor'])
+  @ApiProperty({ enum: ['hospital', 'department', 'specialty', 'trainer', 'supervisor', 'program'] })
+  @IsIn(['hospital', 'department', 'specialty', 'trainer', 'supervisor', 'program'])
   scopeType!: string;
 
   @ApiPropertyOptional({ description: 'معرف القسم/المدرب/المشرف حسب scopeType — فارغ لسعة المستشفى الكلية' })
   @IsOptional()
   @IsString()
   scopeId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'معرف البرنامج التدريبي — إلزامي مع scopeType=program، واختياري مع department/trainer لتقسيم مقاعد البرنامج',
+  })
+  @IsOptional()
+  @IsUUID()
+  programId?: string;
 
   @ApiPropertyOptional({ description: 'رمز التخصص من LookupTable — فارغ لعدم التقييد بتخصص' })
   @IsOptional()
