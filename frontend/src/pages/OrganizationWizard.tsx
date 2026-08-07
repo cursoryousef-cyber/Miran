@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { Wand2, CheckCircle2, Building2, User, ShieldCheck, Copy, ArrowRight, ArrowLeft } from 'lucide-react';
-import { Button, TextField, MenuItem, Stepper, Step, StepLabel, Alert } from '@mui/material';
+import { Button, TextField, MenuItem, Stepper, Step, StepLabel, Alert, LinearProgress } from '@mui/material';
 
 export const OrganizationWizard: React.FC = () => {
   const [activeStep, setActiveStep] = useState(0);
@@ -27,7 +27,7 @@ export const OrganizationWizard: React.FC = () => {
   });
 
   // Fetch Org Types & Existing Parent Orgs
-  const { data: orgTypes } = useQuery({
+  const { data: orgTypes, isLoading: isLoadingOrgTypes, isError: isErrorOrgTypes } = useQuery({
     queryKey: ['orgTypes'],
     queryFn: async () => {
       const res = await apiClient.get('/organizations');
@@ -98,10 +98,13 @@ export const OrganizationWizard: React.FC = () => {
         <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
           معالج تزويد الجهات آلياً (Auto Provisioning Wizard)
         </h1>
-        <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '6px' }}>
-          تزويد آلي كامل: الجهة + الشجرة + الحساب الإداري + ترخيص الباقة + إرسال رابط التفعيل
+        <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
+          إنشاء وتزويد الجهات بالتراخيص، الحسابات الإدارية، الهيكل التنظيمي، وباقاتها بضغطة زر واحدة
         </p>
       </div>
+
+      {isLoadingOrgTypes && <LinearProgress sx={{ borderRadius: 1 }} />}
+      {isErrorOrgTypes && <Alert severity="error">تعذر تحميل أنواع الجهات من الخادم</Alert>}
 
       {/* Stepper */}
       <Stepper activeStep={activeStep} alternativeLabel style={{ backgroundColor: 'transparent' }}>

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import CircularProgress from '@mui/material/CircularProgress';
 
 import { theme } from './theme/theme';
 import { RtlProvider } from './theme/RtlProvider';
@@ -10,7 +11,6 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppLayout } from './components/layout/AppLayout';
 
 import { Login } from './pages/Login';
-import { Dashboard } from './pages/Dashboard';
 import { Organizations } from './pages/Organizations';
 import { OrganizationWizard } from './pages/OrganizationWizard';
 import { Affiliations } from './pages/Affiliations';
@@ -23,20 +23,23 @@ import { Declarations } from './pages/Declarations';
 import { Workflows } from './pages/Workflows';
 import { Policies } from './pages/Policies';
 import { Integrations } from './pages/Integrations';
-import { Reports } from './pages/Reports';
 import { SettingsPage } from './pages/Settings';
 import { OrgMembersPage } from './pages/OrgMembers';
 import { HealthMonitor } from './pages/HealthMonitor';
 import { AuditLogs } from './pages/AuditLogs';
 import { RolesManagement } from './pages/RolesManagement';
-import { LogbookPage } from './pages/Logbook';
 import { HospitalReview } from './pages/HospitalReview';
 import { AcceptanceChain } from './pages/AcceptanceChain';
 import { Incidents } from './pages/Incidents';
 import { Graduation } from './pages/Graduation';
-import { TrainerReassignment } from './pages/TrainerReassignment';
-import { TrainerLeaveManagement } from './pages/TrainerLeaveManagement';
-import { HospitalWorkspace } from './pages/hospital/HospitalWorkspace';
+
+// ─── Code-Split Major Pages via React.lazy ────────────────────────────────
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const LogbookPage = lazy(() => import('./pages/Logbook'));
+const Reports = lazy(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
+const HospitalWorkspace = lazy(() => import('./pages/hospital/HospitalWorkspace'));
+const TrainerReassignment = lazy(() => import('./pages/TrainerReassignment').then(m => ({ default: m.TrainerReassignment })));
+const TrainerLeaveManagement = lazy(() => import('./pages/TrainerLeaveManagement').then(m => ({ default: m.TrainerLeaveManagement })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -86,7 +89,13 @@ export const App: React.FC = () => {
                   path="/"
                   element={
                     <ProtectedRoute>
-                      <AppLayout />
+                      <Suspense fallback={
+                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#0f172a' }}>
+                          <CircularProgress size={40} style={{ color: '#f59e0b' }} />
+                        </div>
+                      }>
+                        <AppLayout />
+                      </Suspense>
                     </ProtectedRoute>
                   }
                 >

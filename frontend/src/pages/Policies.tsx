@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { ShieldCheck, Plus, Play, CheckCircle2, XCircle } from 'lucide-react';
-import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, TextField, Alert } from '@mui/material';
+import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, TextField, Alert, LinearProgress } from '@mui/material';
 
 export const Policies: React.FC = () => {
   const [testResource, setTestResource] = useState('organization');
   const [testAction, setTestAction] = useState('create');
   const [evalResult, setEvalResult] = useState<any>(null);
 
-  const { data } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['policies'],
     queryFn: async () => {
       const res = await apiClient.get('/policies');
@@ -49,6 +49,9 @@ export const Policies: React.FC = () => {
           إضافة سياسة وصول جديدة
         </Button>
       </div>
+
+      {isLoading && <LinearProgress sx={{ borderRadius: 1 }} />}
+      {isError && <Alert severity="error">تعذر تحميل السياسات من الخادم</Alert>}
 
       {/* Policy Evaluator Debugger Card */}
       <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>

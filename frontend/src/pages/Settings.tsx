@@ -2,12 +2,12 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
+import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, LinearProgress, Alert } from '@mui/material';
 
 export const SettingsPage: React.FC = () => {
   const { user } = useAuth();
 
-  const { data: settings } = useQuery({
+  const { data: settings, isLoading: isLoadingSettings, isError: isErrorSettings } = useQuery({
     queryKey: ['settings'],
     queryFn: async () => {
       const res = await apiClient.get('/settings');
@@ -15,7 +15,7 @@ export const SettingsPage: React.FC = () => {
     },
   });
 
-  const { data: license } = useQuery({
+  const { data: license, isLoading: isLoadingLicense } = useQuery({
     queryKey: ['license', user?.activeOrganization?.id],
     queryFn: async () => {
       if (!user?.activeOrganization?.id) return null;
@@ -35,6 +35,9 @@ export const SettingsPage: React.FC = () => {
           الإعدادات الديناميكية المحفوظة بقاعدة البيانات وتراخيص السعات التخزينية والأدوار
         </p>
       </div>
+
+      {(isLoadingSettings || isLoadingLicense) && <LinearProgress sx={{ borderRadius: 1 }} />}
+      {isErrorSettings && <Alert severity="error">تعذر تحميل الإعدادات من الخادم</Alert>}
 
       {/* License Quota Summary Card */}
       <div className="glass-card" style={{ padding: '24px', background: 'linear-gradient(135deg, rgba(5, 150, 105, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%)' }}>

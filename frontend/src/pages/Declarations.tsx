@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { FileSignature, Plus, CheckCircle2, ShieldCheck, FileText } from 'lucide-react';
-import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Alert } from '@mui/material';
+import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Alert, LinearProgress } from '@mui/material';
 
 export const Declarations: React.FC = () => {
   const queryClient = useQueryClient();
@@ -11,7 +11,7 @@ export const Declarations: React.FC = () => {
   const [titleAr, setTitleAr] = useState('');
   const [contentAr, setContentAr] = useState('');
 
-  const { data: declarations } = useQuery({
+  const { data: declarations, isLoading: isLoadingDecls, isError: isErrorDecls } = useQuery({
     queryKey: ['declarations'],
     queryFn: async () => {
       const res = await apiClient.get('/declarations');
@@ -19,7 +19,7 @@ export const Declarations: React.FC = () => {
     },
   });
 
-  const { data: statistics } = useQuery({
+  const { data: statistics, isLoading: isLoadingStats } = useQuery({
     queryKey: ['declarations-statistics'],
     queryFn: async () => {
       const res = await apiClient.get('/declarations/statistics');
@@ -66,6 +66,9 @@ export const Declarations: React.FC = () => {
           إنشاء إقرار وتعهد جديد
         </Button>
       </div>
+
+      {(isLoadingDecls || isLoadingStats) && <LinearProgress sx={{ borderRadius: 1 }} />}
+      {isErrorDecls && <Alert severity="error">تعذر تحميل الإقرارات من الخادم</Alert>}
 
       {/* Compliance Stats Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>

@@ -2,10 +2,10 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { Zap, Plus, Globe, CheckCircle2 } from 'lucide-react';
-import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip } from '@mui/material';
+import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, LinearProgress, Alert } from '@mui/material';
 
 export const Integrations: React.FC = () => {
-  const { data: configs } = useQuery({
+  const { data: configs, isLoading: isLoadingConfigs, isError: isErrorConfigs } = useQuery({
     queryKey: ['integrations-configs'],
     queryFn: async () => {
       const res = await apiClient.get('/integrations/configs');
@@ -13,7 +13,7 @@ export const Integrations: React.FC = () => {
     },
   });
 
-  const { data: webhooks } = useQuery({
+  const { data: webhooks, isLoading: isLoadingWebhooks } = useQuery({
     queryKey: ['integrations-webhooks'],
     queryFn: async () => {
       const res = await apiClient.get('/integrations/webhooks');
@@ -41,6 +41,9 @@ export const Integrations: React.FC = () => {
           إضافة ربط تكاملي جديد
         </Button>
       </div>
+
+      {(isLoadingConfigs || isLoadingWebhooks) && <LinearProgress sx={{ borderRadius: 1 }} />}
+      {isErrorConfigs && <Alert severity="error">تعذر تحميل إعدادات التكامل من الخادم</Alert>}
 
       {/* External Integration Configs */}
       <div>

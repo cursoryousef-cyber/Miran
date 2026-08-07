@@ -19,6 +19,8 @@ import {
   FormGroup,
   FormControlLabel,
   Checkbox,
+  LinearProgress,
+  Alert,
 } from '@mui/material';
 import { apiClient } from '../api/client';
 
@@ -28,7 +30,7 @@ export const RolesManagement: React.FC = () => {
   const [newRoleName, setNewRoleName] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
 
-  const { data: rolesData, refetch: refetchRoles } = useQuery({
+  const { data: rolesData, refetch: refetchRoles, isLoading: isLoadingRoles, isError: isErrorRoles } = useQuery({
     queryKey: ['roles'],
     queryFn: async () => {
       const res = await apiClient.get('/roles-permissions/roles');
@@ -36,7 +38,7 @@ export const RolesManagement: React.FC = () => {
     },
   });
 
-  const { data: permsData } = useQuery({
+  const { data: permsData, isLoading: isLoadingPerms } = useQuery({
     queryKey: ['permissions'],
     queryFn: async () => {
       const res = await apiClient.get('/roles-permissions/permissions');
@@ -88,9 +90,12 @@ export const RolesManagement: React.FC = () => {
           onClick={() => setOpenModal(true)}
           style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', fontWeight: 700 }}
         >
-          إضافة دور جديد (Create Role)
+          إنشاء دور جديد (Custom Role)
         </Button>
       </div>
+
+      {(isLoadingRoles || isLoadingPerms) && <LinearProgress sx={{ borderRadius: 1 }} />}
+      {isErrorRoles && <Alert severity="error">تعذر تحميل الأدوار من الخادم</Alert>}
 
       {/* Roles Table */}
       <TableContainer component={Paper} className="glass-card">

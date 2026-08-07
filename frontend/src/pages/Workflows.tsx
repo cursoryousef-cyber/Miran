@@ -2,10 +2,10 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { GitMerge, Plus, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
-import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip } from '@mui/material';
+import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, LinearProgress, Alert } from '@mui/material';
 
 export const Workflows: React.FC = () => {
-  const { data } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['workflows'],
     queryFn: async () => {
       const res = await apiClient.get('/workflows/definitions');
@@ -33,6 +33,9 @@ export const Workflows: React.FC = () => {
           إنشاء سير عمل جديد
         </Button>
       </div>
+
+      {isLoading && <LinearProgress sx={{ borderRadius: 1 }} />}
+      {isError && <Alert severity="error">تعذر تحميل سير العمل من الخادم</Alert>}
 
       <TableContainer component={Paper} className="glass-card">
         <Table>

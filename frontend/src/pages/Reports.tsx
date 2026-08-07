@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { FileSpreadsheet, Download, RefreshCw, CheckCircle2 } from 'lucide-react';
-import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Alert } from '@mui/material';
+import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Alert, LinearProgress } from '@mui/material';
 
 export const Reports: React.FC = () => {
   const [generatedMsg, setGeneratedMsg] = useState<string | null>(null);
 
-  const { data: definitions } = useQuery({
+  const { data: definitions, isLoading: isLoadingDefs, isError: isErrorDefs } = useQuery({
     queryKey: ['report-definitions'],
     queryFn: async () => {
       const res = await apiClient.get('/reports/definitions');
@@ -15,7 +15,7 @@ export const Reports: React.FC = () => {
     },
   });
 
-  const { data: myReports, refetch } = useQuery({
+  const { data: myReports, refetch, isLoading: isLoadingReports } = useQuery({
     queryKey: ['my-reports'],
     queryFn: async () => {
       const res = await apiClient.get('/reports/my-reports');
@@ -46,6 +46,9 @@ export const Reports: React.FC = () => {
           توليد التقرير الأكاديمية ومؤشرات الانضباط اللا تزامنية وتصديرها بصيغ PDF و Excel
         </p>
       </div>
+
+      {(isLoadingDefs || isLoadingReports) && <LinearProgress sx={{ borderRadius: 1 }} />}
+      {isErrorDefs && <Alert severity="error">تعذر تحميل قوالب التقارير من الخادم</Alert>}
 
       {generatedMsg && <Alert severity="success" onClose={() => setGeneratedMsg(null)}>{generatedMsg}</Alert>}
 
