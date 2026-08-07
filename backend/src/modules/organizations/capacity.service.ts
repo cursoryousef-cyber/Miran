@@ -26,6 +26,175 @@ export interface CapacityScope {
  */
 const OCCUPYING_ROW_STATUSES = ['allocated', 'hospital_review', 'on_hold', 'active'];
 
+/**
+ * An in-memory view of every capacity figure for a set of hospitals, built once
+ * per allocation run by `CapacityService.buildAllocationSnapshot`.
+ *
+ * Occupancy formulas here are deliberately identical to the per-entity getters;
+ * this class exists to remove query round-trips, not to introduce a second set
+ * of rules. Committed allocations are folded back in with `occupy()` so later
+ * trainees in the same batch see the seats their predecessors took.
+ */
+export class AllocationCapacitySnapshot {
+  hospitalCapacity = new Map<string, number>();
+  hospitalOccupied = new Map<string, number>();
+  deptCapacity = new Map<string, number>();
+  deptOccupied = new Map<string, number>();
+  trainerCapacity = new Map<string, number>();
+  trainerOccupied = new Map<string, number>();
+  programOccupied = new Map<string, number>();
+  programDeptOccupied = new Map<string, number>();
+  programTrainerOccupied = new Map<string, number>();
+  allocations: Array<{
+    organizationId: string; scopeType: string; scopeId: string; programId: string;
+    specialtyCode: string; gender: string; trainingPeriod: string; totalCapacity: number;
+    trainingStartDate: Date | null; trainingEndDate: Date | null;
+  }> = [];
+
+  bump(map: Map<string, number>, key: string, by: number) {
+    map.set(key, (map.get(key) ?? 0) + by);
+  }
+
+  private result(capacity: number, occupied: number, fallback: number): OccupancyResult {
+    const safeCapacity = capacity > 0 ? capacity : fallback;
+    const available = Math.max(0, safeCapacity - occupied);
+    return {
+      capacity: safeCapacity,
+      occupied,
+      available,
+      occupancyPercentage: safeCapacity > 0 ? Math.min(100, Math.round((occupied / safeCapacity) * 100)) : 0,
+    };
+  }
+
+  hospital(hospitalId: string): OccupancyResult {
+    return this.result(
+      this.hospitalCapacity.get(hospitalId) ?? 0,
+      this.hospitalOccupied.get(hospitalId) ?? 0,
+      DEFAULT_HOSPITAL_CAPACITY_FALLBACK,
+    );
+  }
+
+  department(departmentId: string): OccupancyResult {
+    return this.result(
+      this.deptCapacity.get(departmentId) ?? 0,
+      this.deptOccupied.get(departmentId) ?? 0,
+      DEFAULT_HOSPITAL_CAPACITY_FALLBACK,
+    );
+  }
+
+  trainer(trainerProfileId: string): OccupancyResult {
+    return this.result(
+      this.trainerCapacity.get(trainerProfileId) ?? 0,
+      this.trainerOccupied.get(trainerProfileId) ?? 0,
+      DEFAULT_HOSPITAL_CAPACITY_FALLBACK,
+    );
+  }
+
+  /** Declared seats only — an undeclared program reads as zero, never as a default. */
+  private explicit(capacity: number, occupied: number): OccupancyResult {
+    const available = Math.max(0, capacity - occupied);
+    return {
+      capacity,
+      occupied,
+      available,
+      occupancyPercentage: capacity > 0 ? Math.min(100, Math.round((occupied / capacity) * 100)) : 0,
+    };
+  }
+
+  private allocationFor(organizationId: string, scopeType: string, scopeId: string, programId: string) {
+    return this.allocations.find(
+      (a) =>
+        a.organizationId === organizationId &&
+        a.scopeType === scopeType &&
+        a.scopeId === scopeId &&
+        a.programId === programId,
+    );
+  }
+
+  declaresAnyProgram(hospitalId: string): boolean {
+    return this.allocations.some(
+      (a) => a.organizationId === hospitalId && a.scopeType === 'program' && a.programId !== '',
+    );
+  }
+
+  program(hospitalId: string, programId: string): OccupancyResult {
+    const alloc = this.allocationFor(hospitalId, 'program', '', programId);
+    return this.explicit(alloc?.totalCapacity ?? 0, this.programOccupied.get(`${hospitalId}|${programId}`) ?? 0);
+  }
+
+  programWindow(hospitalId: string, programId: string) {
+    const alloc = this.allocations.find(
+      (a) =>
+        a.organizationId === hospitalId &&
+        a.scopeType === 'program' &&
+        a.programId === programId &&
+        a.trainingStartDate !== null,
+    );
+    return alloc ? { start: alloc.trainingStartDate, end: alloc.trainingEndDate } : null;
+  }
+
+  departmentProgram(hospitalId: string, departmentId: string, programId: string): OccupancyResult {
+    const alloc = this.allocationFor(hospitalId, 'department', departmentId, programId);
+    return this.explicit(
+      alloc?.totalCapacity ?? 0,
+      this.programDeptOccupied.get(`${hospitalId}|${programId}|${departmentId}`) ?? 0,
+    );
+  }
+
+  trainerProgram(hospitalId: string, trainerProfileId: string, programId: string): OccupancyResult {
+    const alloc = this.allocationFor(hospitalId, 'trainer', trainerProfileId, programId);
+    return this.explicit(
+      alloc?.totalCapacity ?? 0,
+      this.programTrainerOccupied.get(`${hospitalId}|${programId}|${trainerProfileId}`) ?? 0,
+    );
+  }
+
+  /** Specialty allocations carry the '' program sentinel. */
+  specialty(
+    hospitalId: string,
+    filter: { specialtyCode?: string; gender?: string; trainingPeriod?: string },
+  ): { capacity: number; declared: boolean } {
+    const alloc = this.allocations.find(
+      (a) =>
+        a.organizationId === hospitalId &&
+        a.scopeType === 'specialty' &&
+        a.scopeId === '' &&
+        a.programId === '' &&
+        a.specialtyCode === (filter.specialtyCode || '') &&
+        a.gender === (filter.gender || '') &&
+        a.trainingPeriod === (filter.trainingPeriod || ''),
+    );
+    return { capacity: alloc?.totalCapacity ?? 0, declared: Boolean(alloc) };
+  }
+
+  hasSpecialtyAllocation(hospitalId: string, specialtyCode: string): boolean {
+    return this.allocations.some(
+      (a) => a.organizationId === hospitalId && a.scopeType === 'specialty' && a.specialtyCode === specialtyCode,
+    );
+  }
+
+  /** Folds a committed allocation back in so the next trainee sees the taken seat. */
+  occupy(params: {
+    hospitalId: string;
+    departmentId?: string;
+    trainerProfileId?: string;
+    programId?: string | null;
+  }) {
+    this.bump(this.hospitalOccupied, params.hospitalId, 1);
+    if (params.departmentId) this.bump(this.deptOccupied, params.departmentId, 1);
+    if (params.trainerProfileId) this.bump(this.trainerOccupied, params.trainerProfileId, 1);
+    if (params.programId) {
+      this.bump(this.programOccupied, `${params.hospitalId}|${params.programId}`, 1);
+      if (params.departmentId) {
+        this.bump(this.programDeptOccupied, `${params.hospitalId}|${params.programId}|${params.departmentId}`, 1);
+      }
+      if (params.trainerProfileId) {
+        this.bump(this.programTrainerOccupied, `${params.hospitalId}|${params.programId}|${params.trainerProfileId}`, 1);
+      }
+    }
+  }
+}
+
 export interface OccupancyResult {
   capacity: number;
   occupied: number;
@@ -184,6 +353,113 @@ export class CapacityService {
       }),
     ]);
     return profiles + rows;
+  }
+
+  // ─── Batch snapshot for the allocation engine ───────────────────────────────
+
+  /**
+   * Loads every capacity figure the allocation engine needs for a set of
+   * hospitals in a fixed number of grouped queries, instead of one query per
+   * hospital/department/trainer per trainee.
+   *
+   * The snapshot mirrors the per-entity getters above exactly — same fallbacks,
+   * same occupancy definitions — so batching changes performance, not meaning.
+   * It is read fresh at the start of every allocation run, so a capacity edit a
+   * hospital makes is picked up on the next allocation with no sync step.
+   */
+  async buildAllocationSnapshot(hospitalIds: string[], programIds: string[] = []) {
+    if (hospitalIds.length === 0) return new AllocationCapacitySnapshot();
+
+    const [orgs, departments, trainers, allocations, deptRotations, trainerRotations, stagingRows, programProfiles, programRotations] =
+      await Promise.all([
+        this.prisma.organization.findMany({
+          where: { id: { in: hospitalIds } },
+          select: { id: true, capacity: true, _count: { select: { traineeProfiles: true } } },
+        }),
+        this.prisma.department.findMany({
+          where: { organizationId: { in: hospitalIds }, deletedAt: null },
+          select: { id: true, organizationId: true, capacity: true },
+        }),
+        this.prisma.trainerProfile.findMany({
+          where: { organizationId: { in: hospitalIds } },
+          select: { id: true, maxTrainees: true },
+        }),
+        this.prisma.capacityAllocation.findMany({ where: { organizationId: { in: hospitalIds } } }),
+        this.prisma.rotation.groupBy({
+          by: ['departmentId'],
+          where: { organizationId: { in: hospitalIds }, status: 'active' },
+          _count: true,
+        }),
+        this.prisma.rotation.groupBy({
+          by: ['trainerProfileId'],
+          where: { organizationId: { in: hospitalIds }, status: 'active' },
+          _count: true,
+        }),
+        // Staging rows already committed to a hospital occupy a seat even though
+        // no trainee profile exists yet — mirrors countProgramOccupancy.
+        programIds.length
+          ? this.prisma.trainingRequestTrainee.findMany({
+              where: {
+                assignedHospitalId: { in: hospitalIds },
+                status: { in: OCCUPYING_ROW_STATUSES },
+                trainingRequest: { programId: { in: programIds } },
+              },
+              select: {
+                assignedHospitalId: true,
+                assignedDepartmentId: true,
+                assignedTrainerProfileId: true,
+                trainingRequest: { select: { programId: true } },
+              },
+            })
+          : Promise.resolve([]),
+        programIds.length
+          ? this.prisma.traineeProfile.groupBy({
+              by: ['organizationId', 'programId'],
+              where: { organizationId: { in: hospitalIds }, programId: { in: programIds }, deletedAt: null },
+              _count: true,
+            })
+          : Promise.resolve([]),
+        programIds.length
+          ? this.prisma.rotation.groupBy({
+              by: ['organizationId', 'programId', 'departmentId', 'trainerProfileId'],
+              where: { organizationId: { in: hospitalIds }, programId: { in: programIds }, status: 'active' },
+              _count: true,
+            })
+          : Promise.resolve([]),
+      ]);
+
+    const snap = new AllocationCapacitySnapshot();
+    for (const o of orgs) {
+      snap.hospitalCapacity.set(o.id, o.capacity);
+      snap.hospitalOccupied.set(o.id, o._count.traineeProfiles);
+    }
+    for (const d of departments) snap.deptCapacity.set(d.id, d.capacity);
+    for (const t of trainers) snap.trainerCapacity.set(t.id, t.maxTrainees);
+    for (const g of deptRotations) snap.deptOccupied.set(g.departmentId, g._count);
+    for (const g of trainerRotations) snap.trainerOccupied.set(g.trainerProfileId, g._count);
+    snap.allocations = allocations;
+
+    for (const g of programProfiles) {
+      if (!g.programId) continue;
+      snap.bump(snap.programOccupied, `${g.organizationId}|${g.programId}`, g._count);
+    }
+    for (const g of programRotations) {
+      if (!g.programId) continue;
+      snap.bump(snap.programDeptOccupied, `${g.organizationId}|${g.programId}|${g.departmentId}`, g._count);
+      snap.bump(snap.programTrainerOccupied, `${g.organizationId}|${g.programId}|${g.trainerProfileId}`, g._count);
+    }
+    for (const r of stagingRows as any[]) {
+      const pid = r.trainingRequest?.programId;
+      if (!pid || !r.assignedHospitalId) continue;
+      snap.bump(snap.programOccupied, `${r.assignedHospitalId}|${pid}`, 1);
+      if (r.assignedDepartmentId) {
+        snap.bump(snap.programDeptOccupied, `${r.assignedHospitalId}|${pid}|${r.assignedDepartmentId}`, 1);
+      }
+      if (r.assignedTrainerProfileId) {
+        snap.bump(snap.programTrainerOccupied, `${r.assignedHospitalId}|${pid}|${r.assignedTrainerProfileId}`, 1);
+      }
+    }
+    return snap;
   }
 
   /**

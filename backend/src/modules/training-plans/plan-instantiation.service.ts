@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { canonicalDepartmentCode, departmentMatchesTemplate } from '../../common/department-code';
 
 /**
  * Turns a training plan version into a trainee's personal rotation schedule.
@@ -14,33 +15,6 @@ export class PlanInstantiationService {
   private readonly logger = new Logger(PlanInstantiationService.name);
 
   constructor(private prisma: PrismaService) {}
-
-  /**
-   * Department codes differ per hospital for the same clinical unit
-   * ('ER' vs 'EMERGENCY', 'INT-MED' vs 'INTERNAL_MED', tower prefixes like 'NT-'),
-   * so codes are matched on a canonical form rather than literally.
-   */
-  private static readonly DEPARTMENT_ALIASES: Record<string, string> = {
-    ER: 'EMERGENCY', EMERGENCY: 'EMERGENCY', ACCIDENTEMERGENCY: 'EMERGENCY',
-    INTMED: 'INTERNAL_MED', INTERNALMED: 'INTERNAL_MED', INTERNALMEDICINE: 'INTERNAL_MED',
-    SURGERY: 'SURGERY', GENERALSURGERY: 'SURGERY',
-    PED: 'PEDIATRICS', PEDS: 'PEDIATRICS', PEDMED: 'PEDIATRICS', PEDIATRICS: 'PEDIATRICS',
-    OBGYN: 'OBGYN', OBSGYN: 'OBGYN',
-    ICU: 'ICU', CRITICALCARE: 'ICU',
-    OR: 'OR', OPERATINGROOM: 'OR',
-    LAB: 'LAB', LABORATORY: 'LAB',
-    RADIOLOGY: 'RADIOLOGY', XRAY: 'RADIOLOGY',
-    PHARMACY: 'PHARMACY',
-  };
-
-  /** Strips punctuation and hospital/tower prefixes, then maps through the alias table. */
-  private canonicalDepartmentCode(code: string | null | undefined): string {
-    if (!code) return '';
-    let normalized = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    // Tower/building prefixes ('NT-ER' → 'ER') carry no clinical meaning.
-    normalized = normalized.replace(/^(NT|ST|WT|ET|B\d)/, '') || normalized;
-    return PlanInstantiationService.DEPARTMENT_ALIASES[normalized] ?? normalized;
-  }
 
   /**
    * Creates the rotation schedule for one trainee.
@@ -170,15 +144,10 @@ export class PlanInstantiationService {
     tpl: { departmentCode: string; departmentNameAr: string },
     fallbackDepartmentId?: string | null,
   ) {
-    const target = this.canonicalDepartmentCode(tpl.departmentCode);
-    const byCode = departments.find((d) => this.canonicalDepartmentCode(d.code) === target);
-    if (byCode) return byCode;
-
-    const needle = tpl.departmentNameAr.replace(/^قسم\s+/, '').trim();
-    const byName = departments.find(
-      (d) => d.nameAr.includes(needle) || (needle.length > 3 && needle.includes(d.nameAr.replace(/^قسم\s+/, '').trim())),
-    );
-    if (byName) return byName;
+    // Same matcher the allocation engine used to accept this hospital, so a
+    // hospital that passed the timeline guard can actually host the rotation.
+    const matched = departments.find((d) => departmentMatchesTemplate(d, tpl));
+    if (matched) return matched;
 
     return departments.find((d) => d.id === fallbackDepartmentId) ?? null;
   }

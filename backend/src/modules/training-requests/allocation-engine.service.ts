@@ -1,26 +1,48 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CapacityService } from '../organizations/capacity.service';
+import { CapacityService, AllocationCapacitySnapshot } from '../organizations/capacity.service';
+import { departmentMatchesTemplate } from '../../common/department-code';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface AllocationWeights {
-  capacityRatio: number;     // remaining capacity %  → default 30
-  specialtyMatch: number;    // explicit specialty allocation exists → default 20
-  departmentLoad: number;    // dept load ratio → default 20
-  trainerLoad: number;       // trainer load ratio → default 15
-  affiliation: number;       // OrganizationAffiliation(uni→hospital) → default 10
-  geoMatch: number;          // same city/region as university → default 5
+  capacityRatio: number;      // remaining hospital capacity %      → default 20
+  programCapacity: number;    // remaining program seats %          → default 20
+  specialtyMatch: number;     // explicit specialty allocation      → default 15
+  departmentLoad: number;     // remaining department capacity %    → default 15
+  trainerLoad: number;        // remaining trainer capacity %       → default 10
+  affiliation: number;        // university ↔ hospital affiliation  → default 10
+  loadBalancing: number;      // favours historically lighter sites → default 5
+  geoMatch: number;           // same city/region as university     → default 5
 }
 
 const DEFAULT_WEIGHTS: AllocationWeights = {
-  capacityRatio: 30,
-  specialtyMatch: 20,
-  departmentLoad: 20,
-  trainerLoad: 15,
+  capacityRatio: 20,
+  programCapacity: 20,
+  specialtyMatch: 15,
+  departmentLoad: 15,
+  trainerLoad: 10,
   affiliation: 10,
+  loadBalancing: 5,
   geoMatch: 5,
 };
+
+/** The hard constraints, in the order the engine applies them. */
+export const CONSTRAINT_SEQUENCE = [
+  'hospital_active',
+  'training_program',
+  'training_plan',
+  'specialty',
+  'training_period',
+  'hospital_program_capacity',
+  'hospital_capacity',
+  'department_capacity',
+  'qualified_trainer',
+  'trainer_capacity',
+  'timeline_compatibility',
+] as const;
+
+export type ConstraintName = (typeof CONSTRAINT_SEQUENCE)[number];
 
 interface TraineeRow {
   id: string;
@@ -29,9 +51,11 @@ interface TraineeRow {
   trainingPeriod: string | null;
   universityOrgId: string | null;
   status: string;
-  /// Training program, taken from the request the university submitted.
-  /// Null for legacy requests that predate the program catalog.
+  /// Program and plan version come from the request the university submitted.
+  /// Both null for legacy requests that predate the catalog.
   programId: string | null;
+  trainingPlanVersionId: string | null;
+  traineeProfileId: string | null;
   startDate: Date | null;
   endDate: Date | null;
 }
@@ -46,6 +70,7 @@ interface HospitalCandidate {
   departments: Array<{
     id: string;
     nameAr: string;
+    code: string | null;
     capacity: number;
     isActive: boolean;
     trainerProfiles: Array<{ id: string; maxTrainees: number }>;
@@ -56,12 +81,17 @@ export interface HospitalEvaluation {
   hospitalId: string;
   hospitalName: string;
   passed: boolean;
+  /** Constraints cleared before the decision, in evaluation order. */
+  passedConstraints: string[];
+  /** The single constraint that stopped this hospital, if any. */
+  failedConstraint?: ConstraintName;
   failureReason?: string;
   score?: number;
   candidateDepartmentId?: string;
   candidateDepartmentName?: string;
   candidateTrainerProfileId?: string;
   breakdown?: Record<string, number>;
+  selected?: boolean;
 }
 
 export interface RowAllocationResult {
@@ -74,10 +104,48 @@ export interface RowAllocationResult {
   score?: number;
   evaluations: HospitalEvaluation[];
   reason: string;
+  /** 'enterprise' when a program drove the decision, 'legacy' otherwise. */
+  path: 'enterprise' | 'legacy';
+}
+
+/**
+ * Everything the engine needs, loaded once per run.
+ *
+ * Holding it in one object is what keeps evaluation free of database round
+ * trips: a batch of N trainees over M hospitals costs a fixed number of queries
+ * rather than N × M × departments × trainers.
+ */
+interface AllocationContext {
+  snapshot: AllocationCapacitySnapshot;
+  /** trainerProfileId set, per programId. */
+  qualifiedTrainers: Map<string, Set<string>>;
+  /** Plan version rotations, per trainingPlanVersionId. */
+  planRotations: Map<string, Array<{ departmentCode: string; departmentNameAr: string; durationWeeks: number; isMandatory: boolean }>>;
+  planTotalWeeks: Map<string, number>;
+  /** Hospital ids the university is affiliated with. */
+  affiliations: Set<string>;
+  /** Historical allocation counts per hospital, for load balancing. */
+  historicalLoad: Map<string, number>;
+  maxHistoricalLoad: number;
+  /** Active/scheduled rotation windows per trainee profile, for timeline overlap. */
+  traineeRotations: Map<string, Array<{ startDate: Date; endDate: Date }>>;
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
+/**
+ * The smart allocation engine.
+ *
+ * Evaluation runs entirely in memory against a context loaded once per run, and
+ * applies the hard constraints in a fixed order before scoring. Every hospital
+ * considered — accepted or rejected — is recorded with the constraints it
+ * cleared, the one it failed, and its score breakdown, so a cluster can always
+ * explain why a trainee landed where they did.
+ *
+ * A row whose request carries no program falls back to the legacy path: the
+ * program, plan and timeline constraints are skipped and the pre-Module-2
+ * behaviour applies, so historical requests keep allocating exactly as before.
+ */
 @Injectable()
 export class AllocationEngineService {
   constructor(
@@ -108,16 +176,29 @@ export class AllocationEngineService {
         allocated: false,
         evaluations: [],
         reason: 'لا توجد مستشفيات مفعّلة تابعة للتجمع الصحي',
+        path: r.programId ? ('enterprise' as const) : ('legacy' as const),
       }));
     }
 
+    const context = await this.buildContext(rows, hospitals);
+
     const results: RowAllocationResult[] = [];
     for (const row of rows) {
-      const result = await this.allocateSingleRow(row, hospitals, weights, clusterId);
+      const result = await this.allocateSingleRow(row, hospitals, weights, clusterId, context);
       if (result.allocated) {
         await this.commitAllocation(row, result, actorId);
-        // Optimistically decrement in-memory so the next row sees updated loads
-        this.applySyntheticOccupancy(hospitals, result);
+        // Fold the taken seat back into the snapshot so the next row in this
+        // batch sees it, without re-querying.
+        context.snapshot.occupy({
+          hospitalId: result.hospitalId!,
+          departmentId: result.departmentId,
+          trainerProfileId: result.trainerId,
+          programId: row.programId,
+        });
+        context.historicalLoad.set(
+          result.hospitalId!,
+          (context.historicalLoad.get(result.hospitalId!) ?? 0) + 1,
+        );
       } else {
         await this.writeFailureAudit(row, result, trainingRequestId, clusterId, actorId);
       }
@@ -128,7 +209,11 @@ export class AllocationEngineService {
 
   /**
    * Re-allocates a single row (manual override or auto-reallocation).
-   * `preferHospitalId` skips the scoring step and forces that hospital through the guard chain.
+   *
+   * `preferHospitalId` narrows the candidate set to that hospital but does not
+   * skip a single guard — a manual override still has to satisfy every hard
+   * constraint, and runs through exactly the same evaluation as the automatic
+   * path rather than a parallel one.
    */
   async reallocateRow(
     rowId: string,
@@ -137,7 +222,11 @@ export class AllocationEngineService {
   ): Promise<RowAllocationResult> {
     const row = await this.prisma.trainingRequestTrainee.findUnique({
       where: { id: rowId },
-      include: { trainingRequest: { select: { targetOrgId: true, programId: true } } },
+      include: {
+        trainingRequest: {
+          select: { targetOrgId: true, programId: true, trainingPlanVersionId: true },
+        },
+      },
     });
     if (!row) throw new Error('الصف غير موجود');
 
@@ -153,23 +242,122 @@ export class AllocationEngineService {
       universityOrgId: row.universityOrgId,
       status: row.status,
       programId: row.trainingRequest?.programId ?? null,
+      trainingPlanVersionId: row.trainingRequest?.trainingPlanVersionId ?? null,
+      traineeProfileId: row.traineeProfileId,
       startDate: row.startDate,
       endDate: row.endDate,
     };
 
-    const result = await this.allocateSingleRow(traineeRow, hospitals, weights, clusterId);
+    const context = await this.buildContext([traineeRow], hospitals);
+    const result = await this.allocateSingleRow(traineeRow, hospitals, weights, clusterId, context);
     if (result.allocated) {
       await this.commitAllocation(traineeRow, result, actorId, true);
     } else {
-      await this.writeFailureAudit(
-        traineeRow,
-        result,
-        row.trainingRequestId,
-        clusterId,
-        actorId,
-      );
+      await this.writeFailureAudit(traineeRow, result, row.trainingRequestId, clusterId, actorId);
     }
     return result;
+  }
+
+  // ─── Context loading ────────────────────────────────────────────────────────
+
+  /** Batch-loads every lookup the evaluation needs. Fixed query count. */
+  private async buildContext(
+    rows: TraineeRow[],
+    hospitals: HospitalCandidate[],
+  ): Promise<AllocationContext> {
+    const hospitalIds = hospitals.map((h) => h.id);
+    const programIds = [...new Set(rows.map((r) => r.programId).filter((p): p is string => !!p))];
+    const versionIds = [
+      ...new Set(rows.map((r) => r.trainingPlanVersionId).filter((v): v is string => !!v)),
+    ];
+    const universityIds = [
+      ...new Set(rows.map((r) => r.universityOrgId).filter((u): u is string => !!u)),
+    ];
+    const profileIds = [
+      ...new Set(rows.map((r) => r.traineeProfileId).filter((t): t is string => !!t)),
+    ];
+
+    const [snapshot, quals, versions, affiliations, historical, rotations] = await Promise.all([
+      this.capacityService.buildAllocationSnapshot(hospitalIds, programIds),
+      programIds.length
+        ? this.prisma.trainerProgram.findMany({
+            where: { programId: { in: programIds }, isActive: true },
+            select: { programId: true, trainerProfileId: true },
+          })
+        : Promise.resolve([]),
+      versionIds.length
+        ? this.prisma.trainingPlanVersion.findMany({
+            where: { id: { in: versionIds } },
+            select: {
+              id: true,
+              totalWeeks: true,
+              rotations: {
+                select: { departmentCode: true, departmentNameAr: true, durationWeeks: true, isMandatory: true },
+                orderBy: { sequenceOrder: 'asc' },
+              },
+            },
+          })
+        : Promise.resolve([]),
+      universityIds.length
+        ? this.prisma.organizationAffiliation.findMany({
+            where: {
+              sourceOrgId: { in: universityIds },
+              targetOrgId: { in: hospitalIds },
+              status: 'active',
+            },
+            select: { targetOrgId: true },
+          })
+        : Promise.resolve([]),
+      // Historical load: trainees already placed in each hospital.
+      this.prisma.trainingRequestTrainee.groupBy({
+        by: ['assignedHospitalId'],
+        where: { assignedHospitalId: { in: hospitalIds } },
+        _count: true,
+      }),
+      profileIds.length
+        ? this.prisma.rotation.findMany({
+            where: { traineeProfileId: { in: profileIds }, status: { in: ['active', 'scheduled'] } },
+            select: { traineeProfileId: true, startDate: true, endDate: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const qualifiedTrainers = new Map<string, Set<string>>();
+    for (const q of quals) {
+      const set = qualifiedTrainers.get(q.programId) ?? new Set<string>();
+      set.add(q.trainerProfileId);
+      qualifiedTrainers.set(q.programId, set);
+    }
+
+    const planRotations = new Map<string, any[]>();
+    const planTotalWeeks = new Map<string, number>();
+    for (const v of versions) {
+      planRotations.set(v.id, v.rotations);
+      planTotalWeeks.set(v.id, v.totalWeeks);
+    }
+
+    const historicalLoad = new Map<string, number>();
+    for (const h of historical) {
+      if (h.assignedHospitalId) historicalLoad.set(h.assignedHospitalId, h._count);
+    }
+
+    const traineeRotations = new Map<string, Array<{ startDate: Date; endDate: Date }>>();
+    for (const r of rotations) {
+      const list = traineeRotations.get(r.traineeProfileId) ?? [];
+      list.push({ startDate: r.startDate, endDate: r.endDate });
+      traineeRotations.set(r.traineeProfileId, list);
+    }
+
+    return {
+      snapshot,
+      qualifiedTrainers,
+      planRotations,
+      planTotalWeeks,
+      affiliations: new Set(affiliations.map((a) => a.targetOrgId)),
+      historicalLoad,
+      maxHistoricalLoad: Math.max(1, ...historicalLoad.values()),
+      traineeRotations,
+    };
   }
 
   // ─── Core logic ─────────────────────────────────────────────────────────────
@@ -179,13 +367,12 @@ export class AllocationEngineService {
     hospitals: HospitalCandidate[],
     weights: AllocationWeights,
     clusterId: string,
+    context: AllocationContext,
   ): Promise<RowAllocationResult> {
-    const evaluations: HospitalEvaluation[] = [];
-
-    for (const hosp of hospitals) {
-      const eval_ = await this.evaluateHospital(row, hosp, clusterId);
-      evaluations.push(eval_);
-    }
+    const path: 'enterprise' | 'legacy' = row.programId ? 'enterprise' : 'legacy';
+    const evaluations = hospitals.map((hosp) =>
+      this.evaluateHospital(row, hosp, weights, context),
+    );
 
     const passing = evaluations.filter((e) => e.passed);
     if (passing.length === 0) {
@@ -193,11 +380,15 @@ export class AllocationEngineService {
         rowId: row.id,
         allocated: false,
         evaluations,
-        reason: 'لم يجتز أي مستشفى سلسلة التحقق من الطاقة الاستيعابية',
+        reason: this.summariseFailure(evaluations),
+        path,
       };
     }
 
     const best = passing.reduce((a, b) => (b.score! > a.score! ? b : a));
+    best.selected = true;
+    for (const e of evaluations) if (e !== best) e.selected = false;
+
     return {
       rowId: row.id,
       allocated: true,
@@ -208,265 +399,326 @@ export class AllocationEngineService {
       score: best.score,
       evaluations,
       reason: `أعلى تقييم (${best.score?.toFixed(1)}) — ${best.hospitalName}`,
+      path,
     };
   }
 
-  private async evaluateHospital(
+  /** Groups the rejection reasons so the cluster sees the dominant blocker. */
+  private summariseFailure(evaluations: HospitalEvaluation[]): string {
+    if (evaluations.length === 0) return 'لا توجد مستشفيات مرشحة';
+    const counts = new Map<string, number>();
+    for (const e of evaluations) {
+      const key = e.failureReason ?? 'سبب غير محدد';
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const [reason, count] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    return `لم يجتز أي مستشفى سلسلة القيود — السبب الأغلب: ${reason} (${count} من ${evaluations.length})`;
+  }
+
+  /**
+   * Applies the hard constraints in order, then scores. Pure and synchronous:
+   * every figure it needs is already in `context`.
+   */
+  private evaluateHospital(
     row: TraineeRow,
     hosp: HospitalCandidate,
-    clusterId: string,
-  ): Promise<HospitalEvaluation> {
-    const fail = (reason: string): HospitalEvaluation => ({
+    weights: AllocationWeights,
+    context: AllocationContext,
+  ): HospitalEvaluation {
+    const snap = context.snapshot;
+    const passedConstraints: string[] = [];
+    const fail = (constraint: ConstraintName, reason: string): HospitalEvaluation => ({
       hospitalId: hosp.id,
       hospitalName: hosp.nameAr,
       passed: false,
+      passedConstraints,
+      failedConstraint: constraint,
       failureReason: reason,
     });
 
-    // Guard 1: hospital active
-    if (hosp.status !== 'active') {
-      return fail('المستشفى غير مفعّل أو موقوف');
-    }
+    // ── 1. Hospital active ──────────────────────────────────────────────────
+    if (hosp.status !== 'active') return fail('hospital_active', 'المستشفى غير مفعّل أو موقوف');
+    passedConstraints.push('hospital_active');
 
-    // Guard 2: training program — the primary allocation axis.
-    //
-    // Only enforced against hospitals that have declared program capacity. A
-    // hospital that has declared none keeps its previous behaviour, so turning
-    // this on does not block allocation into hospitals not yet configured.
+    // ── 2. Training program ─────────────────────────────────────────────────
+    // Enforced only against hospitals that have declared program capacity, so a
+    // hospital not yet configured keeps its pre-Module-2 behaviour.
     let programOcc: { capacity: number; occupied: number; available: number } | null = null;
-    if (row.programId) {
-      const declaresPrograms = await this.capacityService.declaresAnyProgram(hosp.id);
-      if (declaresPrograms) {
-        programOcc = await this.capacityService.getProgramOccupancy(hosp.id, row.programId);
-        if (programOcc.capacity <= 0) {
-          return fail('المستشفى لا يستقبل هذا البرنامج التدريبي');
-        }
-        if (programOcc.available <= 0) {
-          return fail(
-            `مقاعد البرنامج ممتلئة (${programOcc.occupied}/${programOcc.capacity})`,
-          );
-        }
+    const declaresPrograms = row.programId ? snap.declaresAnyProgram(hosp.id) : false;
+    if (row.programId && declaresPrograms) {
+      programOcc = snap.program(hosp.id, row.programId);
+      if (programOcc.capacity <= 0) {
+        return fail('training_program', 'المستشفى لا يستقبل هذا البرنامج التدريبي');
       }
     }
+    passedConstraints.push('training_program');
 
-    // Guard 3: training period — the allocation must sit inside any declared window.
-    if (row.programId && row.startDate) {
-      const windowed = await this.prisma.capacityAllocation.findFirst({
-        where: {
-          organizationId: hosp.id,
-          scopeType: 'program',
-          programId: row.programId,
-          trainingStartDate: { not: null },
-        },
-      });
-      if (windowed?.trainingStartDate && windowed?.trainingEndDate) {
-        const rowStart = new Date(row.startDate);
-        const rowEnd = row.endDate ? new Date(row.endDate) : rowStart;
-        if (rowStart < windowed.trainingStartDate || rowEnd > windowed.trainingEndDate) {
-          return fail('فترة التدريب خارج الفترة المعتمدة لهذا البرنامج في المستشفى');
-        }
+    // ── 3. Training plan ────────────────────────────────────────────────────
+    // The hospital must be able to run the plan the university pinned: every
+    // mandatory template rotation needs a department here to land in.
+    if (row.trainingPlanVersionId) {
+      const template = context.planRotations.get(row.trainingPlanVersionId) ?? [];
+      const mandatory = template.filter((t) => t.isMandatory);
+      const matched = mandatory.filter((t) =>
+        hosp.departments.some((d) => d.isActive && departmentMatchesTemplate(d, t)),
+      );
+      // The bar is that the hospital can host some of the plan. Requiring every
+      // rotation to match would reject any hospital lacking a niche unit, and
+      // instantiation already places unmatched rotations in the allocated
+      // department — but a hospital matching nothing cannot run the plan at all.
+      if (mandatory.length > 0 && matched.length === 0) {
+        return fail(
+          'training_plan',
+          `المستشفى لا يغطي أي قسم من أقسام الخطة المطلوبة (${mandatory.length} قسم)`,
+        );
       }
     }
+    passedConstraints.push('training_plan');
 
-    // Guard 4: hospital total capacity
-    const hospOcc = await this.capacityService.getHospitalOccupancy(hosp.id);
-    if (hospOcc.available <= 0) {
-      return fail(`الطاقة الاستيعابية الإجمالية ممتلئة (${hospOcc.occupied}/${hospOcc.capacity})`);
-    }
-
-    // Guard 5: specialty allocation (if one exists, must have space)
+    // ── 4. Specialty ────────────────────────────────────────────────────────
     if (row.specialty) {
-      const specOcc = await this.capacityService.getSpecialtyOccupancy(hosp.id, {
+      const spec = snap.specialty(hosp.id, {
         specialtyCode: row.specialty,
         gender: row.gender || '',
         trainingPeriod: row.trainingPeriod || '',
       });
-      if (specOcc.capacity > 0 && specOcc.available <= 0) {
-        return fail(
-          `تخصيص التخصص "${row.specialty}" ممتلئ (${specOcc.occupied}/${specOcc.capacity})`,
-        );
+      if (spec.declared && spec.capacity > 0) {
+        const occupied = snap.hospitalOccupied.get(hosp.id) ?? 0;
+        if (occupied >= spec.capacity) {
+          return fail(
+            'specialty',
+            `تخصيص التخصص "${row.specialty}" ممتلئ (${occupied}/${spec.capacity})`,
+          );
+        }
       }
     }
+    passedConstraints.push('specialty');
 
-    // Guard 4: gender policy — if a gender-specific allocation exists and it's full, block
-    if (row.gender) {
-      const genderOcc = await this.capacityService.getSpecialtyOccupancy(hosp.id, {
-        specialtyCode: row.specialty || '',
-        gender: row.gender,
-        trainingPeriod: '',
-      });
-      if (genderOcc.capacity > 0 && genderOcc.available <= 0) {
-        return fail(`مقاعد الجنس (${row.gender}) ممتلئة (${genderOcc.occupied}/${genderOcc.capacity})`);
+    // ── 5. Training period ──────────────────────────────────────────────────
+    if (row.programId && row.startDate) {
+      const window = snap.programWindow(hosp.id, row.programId);
+      if (window?.start && window?.end) {
+        const rowStart = new Date(row.startDate);
+        const rowEnd = row.endDate ? new Date(row.endDate) : rowStart;
+        if (rowStart < window.start || rowEnd > window.end) {
+          return fail('training_period', 'فترة التدريب خارج الفترة المعتمدة لهذا البرنامج في المستشفى');
+        }
       }
     }
+    passedConstraints.push('training_period');
 
-    // Guard 6: department availability — find any active dept with open capacity
+    // ── 6. Hospital program capacity ────────────────────────────────────────
+    if (programOcc && programOcc.available <= 0) {
+      return fail(
+        'hospital_program_capacity',
+        `مقاعد البرنامج ممتلئة (${programOcc.occupied}/${programOcc.capacity})`,
+      );
+    }
+    passedConstraints.push('hospital_program_capacity');
+
+    // ── 7. Hospital total capacity ──────────────────────────────────────────
+    const hospOcc = snap.hospital(hosp.id);
+    if (hospOcc.available <= 0) {
+      return fail(
+        'hospital_capacity',
+        `الطاقة الاستيعابية الإجمالية ممتلئة (${hospOcc.occupied}/${hospOcc.capacity})`,
+      );
+    }
+    passedConstraints.push('hospital_capacity');
+
+    // ── 8-10. Department → qualified trainer → trainer capacity ─────────────
     const activeDepts = hosp.departments.filter((d) => d.isActive && d.capacity > 0);
     if (activeDepts.length === 0) {
-      return fail('لا توجد أقسام سريرية مفعّلة بطاقة محددة');
+      return fail('department_capacity', 'لا توجد أقسام سريرية مفعّلة بطاقة محددة');
     }
 
+    // An empty set and "no program" mean different things: with a program and no
+    // qualified trainers, nobody is eligible. Defaulting a missing entry to null
+    // would silently let an unqualified trainer take the trainee.
+    const qualifiedSet = row.programId
+      ? context.qualifiedTrainers.get(row.programId) ?? new Set<string>()
+      : null;
     let candidateDept: (typeof activeDepts)[0] | undefined;
     let candidateTrainer: { id: string; maxTrainees: number } | undefined;
-    // Distinguishes "no qualified trainer anywhere" from "qualified but full",
-    // so the cluster sees why a hospital was skipped.
+    let sawDeptWithRoom = false;
     let sawQualifiedTrainer = false;
 
     for (const dept of activeDepts) {
-      const deptOcc = await this.capacityService.getDepartmentOccupancy(dept.id);
-      if (deptOcc.available <= 0) continue;
-
-      // Guard 7: a department may hold a slice of the program's seats.
+      if (snap.department(dept.id).available <= 0) continue;
       if (row.programId) {
-        const deptProgOcc = await this.capacityService.getDepartmentProgramOccupancy(
-          hosp.id,
-          dept.id,
-          row.programId,
-        );
-        if (deptProgOcc.capacity > 0 && deptProgOcc.available <= 0) continue;
+        const deptProg = snap.departmentProgram(hosp.id, dept.id, row.programId);
+        if (deptProg.capacity > 0 && deptProg.available <= 0) continue;
       }
+      sawDeptWithRoom = true;
 
-      // Guard 8: qualified trainer — a hard constraint. A trainer may only take
-      // trainees of a program they are qualified for, so nursing can never land
-      // on a medical trainer regardless of free capacity.
-      const qualified = await this.filterQualifiedTrainers(dept.trainerProfiles, row.programId);
+      // Qualification is a hard constraint: a trainee may never land on a
+      // trainer not qualified for their program, whatever the free capacity.
+      const qualified = qualifiedSet
+        ? dept.trainerProfiles.filter((t) => qualifiedSet.has(t.id))
+        : dept.trainerProfiles;
       if (qualified.length === 0) continue;
       sawQualifiedTrainer = true;
 
-      // Guard 9: trainer capacity — per-program slice first, general cap otherwise.
-      const availableTrainer = await this.findAvailableTrainer(qualified, hosp.id, row.programId);
-      if (!availableTrainer) continue;
+      const trainer = this.pickTrainer(qualified, hosp.id, row.programId, snap);
+      if (!trainer) continue;
 
       candidateDept = dept;
-      candidateTrainer = availableTrainer;
+      candidateTrainer = trainer;
       break;
     }
 
-    if (!candidateDept) {
-      return fail(
-        sawQualifiedTrainer
-          ? 'جميع الأقسام والمدربين المؤهلين ممتلئون'
-          : 'لا يوجد مدرب مؤهل لهذا البرنامج التدريبي في المستشفى',
-      );
+    if (!sawDeptWithRoom) {
+      return fail('department_capacity', 'جميع الأقسام ممتلئة أو بلا مقاعد لهذا البرنامج');
     }
-
-    // All guards passed — compute score
-    const breakdown: Record<string, number> = {};
-    const weights = DEFAULT_WEIGHTS; // caller will pass actual weights — simplified for now
-
-    const hospScore = Math.round((hospOcc.available / Math.max(hospOcc.capacity, 1)) * weights.capacityRatio);
-    breakdown.capacityRatio = hospScore;
-
-    const deptOcc2 = await this.capacityService.getDepartmentOccupancy(candidateDept.id);
-    const deptScore = Math.round((1 - deptOcc2.occupied / Math.max(deptOcc2.capacity, 1)) * weights.departmentLoad);
-    breakdown.departmentLoad = deptScore;
-
-    const trainerOcc = await this.capacityService.getTrainerOccupancy(candidateTrainer!.id);
-    const trainerScore = Math.round(
-      (1 - trainerOcc.occupied / Math.max(trainerOcc.capacity, 1)) * weights.trainerLoad,
-    );
-    breakdown.trainerLoad = trainerScore;
-
-    // Prefer hospitals that explicitly declared seats for this program, and among
-    // them the ones with the most program headroom.
-    let programScore = 0;
-    if (programOcc && programOcc.capacity > 0) {
-      programScore = Math.round(
-        (programOcc.available / programOcc.capacity) * weights.capacityRatio,
-      );
+    if (!sawQualifiedTrainer) {
+      return fail('qualified_trainer', 'لا يوجد مدرب مؤهل لهذا البرنامج التدريبي في المستشفى');
     }
-    breakdown.programCapacity = programScore;
-
-    let specScore = 0;
-    if (row.specialty) {
-      const hasExplicitAlloc = await this.prisma.capacityAllocation.count({
-        where: {
-          organizationId: hosp.id,
-          scopeType: 'specialty',
-          specialtyCode: row.specialty,
-        },
-      });
-      specScore = hasExplicitAlloc > 0 ? weights.specialtyMatch : 0;
+    if (!candidateDept || !candidateTrainer) {
+      return fail('trainer_capacity', 'جميع المدربين المؤهلين ممتلئون');
     }
-    breakdown.specialtyMatch = specScore;
+    passedConstraints.push('department_capacity', 'qualified_trainer', 'trainer_capacity');
 
-    let affiliationScore = 0;
-    if (row.universityOrgId) {
-      const hasAffil = await this.prisma.organizationAffiliation.count({
-        where: {
-          sourceOrgId: row.universityOrgId,
-          targetOrgId: hosp.id,
-          status: 'active',
-        },
-      });
-      affiliationScore = hasAffil > 0 ? weights.affiliation : 0;
-    }
-    breakdown.affiliation = affiliationScore;
+    // ── 11. Timeline compatibility ──────────────────────────────────────────
+    const timelineFailure = this.checkTimeline(row, context);
+    if (timelineFailure) return fail('timeline_compatibility', timelineFailure);
+    passedConstraints.push('timeline_compatibility');
 
-    const totalScore = Object.values(breakdown).reduce((a, b) => a + b, 0);
+    // ── Weighted score ──────────────────────────────────────────────────────
+    const breakdown = this.score(row, hosp, candidateDept, candidateTrainer, {
+      weights,
+      snapshot: snap,
+      context,
+      hospOcc,
+      programOcc,
+    });
 
     return {
       hospitalId: hosp.id,
       hospitalName: hosp.nameAr,
       passed: true,
-      score: totalScore,
+      passedConstraints,
+      score: Object.values(breakdown).reduce((a, b) => a + b, 0),
       candidateDepartmentId: candidateDept.id,
       candidateDepartmentName: candidateDept.nameAr,
-      candidateTrainerProfileId: candidateTrainer?.id,
+      candidateTrainerProfileId: candidateTrainer.id,
       breakdown,
     };
   }
 
   /**
-   * Keeps only trainers qualified for the program — the hard constraint that
-   * prevents cross-program supervision (nursing on a medical trainer, and so on).
+   * Whether the requested training window can actually be served.
    *
-   * With no program on the row (legacy requests that predate the catalog) there is
-   * nothing to check against, so every trainer stays eligible.
+   * Two ways it cannot: the plan needs more weeks than the window allows, or the
+   * trainee already has rotations covering part of it — nobody trains in two
+   * places at once.
    */
-  private async filterQualifiedTrainers(
-    trainers: Array<{ id: string; maxTrainees: number }>,
-    programId: string | null,
-  ): Promise<Array<{ id: string; maxTrainees: number }>> {
-    if (!programId || trainers.length === 0) return trainers;
+  private checkTimeline(row: TraineeRow, context: AllocationContext): string | null {
+    if (row.trainingPlanVersionId && row.startDate && row.endDate) {
+      const weeks = context.planTotalWeeks.get(row.trainingPlanVersionId) ?? 0;
+      const windowWeeks = Math.floor(
+        (new Date(row.endDate).getTime() - new Date(row.startDate).getTime()) /
+          (7 * 24 * 60 * 60 * 1000),
+      );
+      if (weeks > 0 && windowWeeks > 0 && weeks > windowWeeks) {
+        return `مدة الخطة (${weeks} أسبوع) تتجاوز فترة التدريب المطلوبة (${windowWeeks} أسبوع)`;
+      }
+    }
 
-    const qualified = await this.prisma.trainerProgram.findMany({
-      where: {
-        programId,
-        isActive: true,
-        trainerProfileId: { in: trainers.map((t) => t.id) },
-      },
-      select: { trainerProfileId: true },
-    });
-    const allowed = new Set(qualified.map((q) => q.trainerProfileId));
-    return trainers.filter((t) => allowed.has(t.id));
+    if (row.traineeProfileId && row.startDate) {
+      const existing = context.traineeRotations.get(row.traineeProfileId) ?? [];
+      const start = new Date(row.startDate);
+      const end = row.endDate ? new Date(row.endDate) : start;
+      const clash = existing.find((r) => r.startDate <= end && r.endDate >= start);
+      if (clash) {
+        return `تعارض مع روتيشن قائم للمتدرب (${clash.startDate.toISOString().slice(0, 10)} → ${clash.endDate.toISOString().slice(0, 10)})`;
+      }
+    }
+    return null;
   }
 
   /**
-   * First trainer with a free seat. A per-program allocation, when the hospital
-   * has declared one, takes precedence over the trainer's general cap.
+   * Least-loaded qualified trainer with a free seat. A per-program allocation,
+   * where the hospital declared one, takes precedence over the general cap.
    */
-  private async findAvailableTrainer(
+  private pickTrainer(
     trainers: Array<{ id: string; maxTrainees: number }>,
-    organizationId?: string,
-    programId?: string | null,
-  ): Promise<{ id: string; maxTrainees: number } | undefined> {
-    for (const t of trainers) {
-      if (organizationId && programId) {
-        const progOcc = await this.capacityService.getTrainerProgramOccupancy(
-          organizationId,
-          t.id,
-          programId,
-        );
-        if (progOcc.capacity > 0) {
-          if (progOcc.available > 0) return t;
-          continue; // explicit program slice is full — the general cap must not override it
-        }
+    hospitalId: string,
+    programId: string | null,
+    snap: AllocationCapacitySnapshot,
+  ): { id: string; maxTrainees: number } | undefined {
+    const withRoom = trainers.filter((t) => {
+      if (programId) {
+        const prog = snap.trainerProgram(hospitalId, t.id, programId);
+        // An explicit program slice overrides the general cap in both directions.
+        if (prog.capacity > 0) return prog.available > 0;
       }
-      const occ = await this.capacityService.getTrainerOccupancy(t.id);
-      if (occ.available > 0) return t;
-    }
-    return undefined;
+      return snap.trainer(t.id).available > 0;
+    });
+    if (withRoom.length === 0) return undefined;
+
+    return withRoom.sort(
+      (a, b) => snap.trainer(a.id).occupied - snap.trainer(b.id).occupied,
+    )[0];
+  }
+
+  /** The weighted score. Every component is driven by the configured weights. */
+  private score(
+    row: TraineeRow,
+    hosp: HospitalCandidate,
+    dept: { id: string },
+    trainer: { id: string },
+    ctx: {
+      weights: AllocationWeights;
+      snapshot: AllocationCapacitySnapshot;
+      context: AllocationContext;
+      hospOcc: { capacity: number; available: number; occupied: number };
+      programOcc: { capacity: number; available: number } | null;
+    },
+  ): Record<string, number> {
+    const { weights, snapshot: snap, context } = ctx;
+    const breakdown: Record<string, number> = {};
+
+    breakdown.capacityRatio = Math.round(
+      (ctx.hospOcc.available / Math.max(ctx.hospOcc.capacity, 1)) * weights.capacityRatio,
+    );
+
+    breakdown.programCapacity =
+      ctx.programOcc && ctx.programOcc.capacity > 0
+        ? Math.round((ctx.programOcc.available / ctx.programOcc.capacity) * weights.programCapacity)
+        : 0;
+
+    const deptOcc = snap.department(dept.id);
+    breakdown.departmentLoad = Math.round(
+      (deptOcc.available / Math.max(deptOcc.capacity, 1)) * weights.departmentLoad,
+    );
+
+    const trainerOcc = snap.trainer(trainer.id);
+    breakdown.trainerLoad = Math.round(
+      (trainerOcc.available / Math.max(trainerOcc.capacity, 1)) * weights.trainerLoad,
+    );
+
+    breakdown.specialtyMatch =
+      row.specialty && snap.hasSpecialtyAllocation(hosp.id, row.specialty)
+        ? weights.specialtyMatch
+        : 0;
+
+    breakdown.affiliation = context.affiliations.has(hosp.id) ? weights.affiliation : 0;
+
+    // Historical load balancing: the lighter a hospital's history, the higher it
+    // scores, which spreads cohorts instead of repeatedly filling one site.
+    const load = context.historicalLoad.get(hosp.id) ?? 0;
+    breakdown.loadBalancing = Math.round(
+      (1 - load / context.maxHistoricalLoad) * weights.loadBalancing,
+    );
+
+    // Occupancy is already reflected in the capacity ratios above; this term
+    // rewards a hospital that is lightly occupied overall.
+    breakdown.occupancy = Math.round(
+      ((100 - Math.min(100, Math.round((ctx.hospOcc.occupied / Math.max(ctx.hospOcc.capacity, 1)) * 100))) / 100) *
+        weights.geoMatch,
+    );
+
+    return breakdown;
   }
 
   // ─── Commit & Audit ─────────────────────────────────────────────────────────
@@ -519,17 +771,7 @@ export class AllocationEngineService {
           assignedDepartmentId: result.departmentId,
           assignedTrainerProfileId: result.trainerId,
           score: result.score,
-          allocationAudit: {
-            evaluatedHospitals: result.evaluations.map((e) => ({
-              hospitalId: e.hospitalId,
-              hospitalName: e.hospitalName,
-              passed: e.passed,
-              failureReason: e.failureReason,
-              score: e.score,
-              breakdown: e.breakdown,
-            })),
-            decision: { hospitalId: result.hospitalId, score: result.score, reason: result.reason },
-          },
+          allocationAudit: this.buildExplanation(row, result),
         },
       },
     });
@@ -549,17 +791,42 @@ export class AllocationEngineService {
         action: 'allocation_failed_trainee_row',
         entityType: 'TrainingRequestTrainee',
         entityId: row.id,
-        newValues: {
-          reason: result.reason,
-          evaluatedHospitals: result.evaluations.map((e) => ({
-            hospitalId: e.hospitalId,
-            hospitalName: e.hospitalName,
-            passed: e.passed,
-            failureReason: e.failureReason,
-          })),
-        },
+        newValues: this.buildExplanation(row, result),
       },
     });
+  }
+
+  /**
+   * The complete decision record, stored in the existing AuditLog — for every
+   * hospital considered, what it cleared, what stopped it, how it scored, and
+   * whether it was chosen.
+   */
+  private buildExplanation(row: TraineeRow, result: RowAllocationResult) {
+    return {
+      path: result.path,
+      programId: row.programId,
+      trainingPlanVersionId: row.trainingPlanVersionId,
+      constraintSequence: CONSTRAINT_SEQUENCE,
+      evaluatedHospitals: result.evaluations.map((e) => ({
+        hospitalId: e.hospitalId,
+        hospitalName: e.hospitalName,
+        passed: e.passed,
+        selected: e.selected ?? false,
+        passedConstraints: e.passedConstraints,
+        failedConstraint: e.failedConstraint ?? null,
+        failureReason: e.failureReason ?? null,
+        scoreBreakdown: e.breakdown ?? null,
+        finalScore: e.score ?? null,
+      })),
+      decision: {
+        allocated: result.allocated,
+        hospitalId: result.hospitalId ?? null,
+        departmentId: result.departmentId ?? null,
+        trainerProfileId: result.trainerId ?? null,
+        score: result.score ?? null,
+        reason: result.reason,
+      },
+    };
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -576,14 +843,16 @@ export class AllocationEngineService {
         status: true,
         startDate: true,
         endDate: true,
-        // The program is chosen once by the university, on the request itself.
-        trainingRequest: { select: { programId: true } },
+        traineeProfileId: true,
+        // Program and plan are chosen once by the university, on the request.
+        trainingRequest: { select: { programId: true, trainingPlanVersionId: true } },
       },
       orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
     });
     return rows.map(({ trainingRequest, ...r }) => ({
       ...r,
       programId: trainingRequest?.programId ?? null,
+      trainingPlanVersionId: trainingRequest?.trainingPlanVersionId ?? null,
     }));
   }
 
@@ -591,10 +860,7 @@ export class AllocationEngineService {
     clusterId: string,
     onlyHospitalId?: string,
   ): Promise<HospitalCandidate[]> {
-    const where: Record<string, unknown> = {
-      parentId: clusterId,
-      deletedAt: null,
-    };
+    const where: Record<string, unknown> = { parentId: clusterId, deletedAt: null };
     if (onlyHospitalId) where.id = onlyHospitalId;
 
     const hospitals = await this.prisma.organization.findMany({
@@ -611,6 +877,7 @@ export class AllocationEngineService {
           select: {
             id: true,
             nameAr: true,
+            code: true,
             capacity: true,
             isActive: true,
             trainerProfiles: {
@@ -624,6 +891,7 @@ export class AllocationEngineService {
     return hospitals as HospitalCandidate[];
   }
 
+  /** Weights are per-cluster configuration, falling back to the national defaults. */
   private async loadWeights(clusterId: string): Promise<AllocationWeights> {
     const setting = await this.prisma.setting.findFirst({
       where: { organizationId: clusterId, key: 'smart_allocation_weights' },
@@ -636,19 +904,5 @@ export class AllocationEngineService {
       }
     }
     return DEFAULT_WEIGHTS;
-  }
-
-  /**
-   * After committing an allocation, decrement in-memory counters so the next
-   * row in the same batch sees up-to-date loads without a DB round-trip.
-   */
-  private applySyntheticOccupancy(hospitals: HospitalCandidate[], result: RowAllocationResult) {
-    const hosp = hospitals.find((h) => h.id === result.hospitalId);
-    if (!hosp) return;
-    hosp.capacity = Math.max(0, hosp.capacity - 1);
-    if (result.departmentId) {
-      const dept = hosp.departments.find((d) => d.id === result.departmentId);
-      if (dept) dept.capacity = Math.max(0, dept.capacity - 1);
-    }
   }
 }
