@@ -9,9 +9,10 @@ import { GraduationService } from './graduation.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
+import { TrainingPlansModule } from '../training-plans/training-plans.module';
 
 @Module({
-  imports: [PrismaModule, NotificationsModule, OrganizationsModule],
+  imports: [PrismaModule, NotificationsModule, OrganizationsModule, TrainingPlansModule],
   controllers: [TrainingRequestsController],
   providers: [
     TrainingRequestsService,

@@ -677,27 +677,116 @@ model Program {
   @@map("programs")
 }
 
+/// قالب الخطة التدريبية — الهوية الثابتة للخطة.
+/// لا يحمل محتوى تدريبياً بنفسه؛ المحتوى يعيش في الإصدارات (TrainingPlanVersion)
+/// وهي غير قابلة للتعديل بعد الاعتماد. تعديل خطة معتمدة يُنشئ إصداراً جديداً.
 model TrainingPlan {
   id             String   @id @default(uuid()) @db.Uuid
   programId      String   @map("program_id") @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  trainingYear   String   @map("training_year") @db.VarChar(20)
+  /// فارغ = قالب وطني مرتبط بالكتالوج المركزي. غير فارغ = خطة خاصة بجهة (إرث).
+  organizationId String?  @map("organization_id") @db.Uuid
+  /// رمز القالب داخل البرنامج — مستقر عبر الإصدارات
+  code           String?  @db.VarChar(50)
+  trainingYear   String?  @map("training_year") @db.VarChar(20)
   nameAr         String   @map("name_ar") @db.VarChar(200)
   nameEn         String?  @map("name_en") @db.VarChar(200)
-  startDate      DateTime @map("start_date") @db.Date
-  endDate        DateTime @map("end_date") @db.Date
+  startDate      DateTime? @map("start_date") @db.Date
+  endDate        DateTime? @map("end_date") @db.Date
   status         String   @default("draft") @db.VarChar(20)
+  isActive       Boolean  @default(true) @map("is_active")
   createdById    String?  @map("created_by") @db.Uuid
   updatedById    String?  @map("updated_by") @db.Uuid
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   program         Program        @relation(fields: [programId], references: [id])
-  organization    Organization   @relation(fields: [organizationId], references: [id])
+  organization    Organization?  @relation(fields: [organizationId], references: [id])
   createdBy       UserAccount?   @relation(fields: [createdById], references: [id])
   traineeProfiles TraineeProfile[]
+  versions        TrainingPlanVersion[]
+  trainingRequests TrainingRequest[]
 
+  @@unique([programId, code])
+  @@index([programId])
   @@map("training_plans")
+}
+
+/// إصدار خطة تدريبية — غير قابل للتعديل بعد الاعتماد (immutable).
+/// المتدرب يبقى مرتبطاً بالإصدار الذي بدأ به، وتقارير الأداء التاريخية
+/// ترجع دائماً إلى الإصدار الأصلي ولا يُعاد كتابتها أبداً.
+model TrainingPlanVersion {
+  id                    String    @id @default(uuid()) @db.Uuid
+  trainingPlanId        String    @map("training_plan_id") @db.Uuid
+  versionNumber         Int       @map("version_number")
+  /// وصف الإصدار كما يظهر في التقارير — مثال: «الإصدار 1 (2026)»
+  label                 String?   @db.VarChar(200)
+  /// draft = قابل للتعديل | active = معتمد وغير قابل للتعديل | archived = تاريخي
+  status                String    @default("draft") @db.VarChar(20)
+  effectiveFrom         DateTime? @map("effective_from") @db.Date
+  effectiveTo           DateTime? @map("effective_to") @db.Date
+  /// مدة الخطة بالأسابيع — محسوبة من مجموع مدد الروتيشنات
+  totalWeeks            Int       @default(0) @map("total_weeks")
+  notes                 String?   @db.Text
+  /// الإصدار الذي حلّ محل هذا الإصدار — يحفظ سلسلة النسب للتقارير
+  supersededByVersionId String?   @map("superseded_by_version_id") @db.Uuid
+  /// الإصدار الذي نُسخ عنه هذا الإصدار عند التعديل
+  clonedFromVersionId   String?   @map("cloned_from_version_id") @db.Uuid
+  publishedAt           DateTime? @map("published_at") @db.Timestamptz
+  publishedById         String?   @map("published_by") @db.Uuid
+  archivedAt            DateTime? @map("archived_at") @db.Timestamptz
+  createdById           String?   @map("created_by") @db.Uuid
+  updatedById           String?   @map("updated_by") @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  trainingPlan    TrainingPlan          @relation(fields: [trainingPlanId], references: [id], onDelete: Cascade)
+  supersededBy    TrainingPlanVersion?  @relation("PlanVersionSupersede", fields: [supersededByVersionId], references: [id])
+  supersedes      TrainingPlanVersion[] @relation("PlanVersionSupersede")
+  clonedFrom      TrainingPlanVersion?  @relation("PlanVersionClone", fields: [clonedFromVersionId], references: [id])
+  clones          TrainingPlanVersion[] @relation("PlanVersionClone")
+  rotations       TrainingPlanRotation[]
+  traineeProfiles TraineeProfile[]
+  trainingRequests TrainingRequest[]
+
+  @@unique([trainingPlanId, versionNumber])
+  @@index([trainingPlanId, status])
+  @@map("training_plan_versions")
+}
+
+/// روتيشن ضمن قالب الخطة — ينتمي إلى إصدار محدد ولا يُعدَّل تاريخياً أبداً.
+/// تعديل روتيشن في إصدار معتمد يُنشئ إصداراً جديداً بدل الكتابة فوق القديم.
+model TrainingPlanRotation {
+  id                    String  @id @default(uuid()) @db.Uuid
+  trainingPlanVersionId String  @map("training_plan_version_id") @db.Uuid
+  /// ترتيب الروتيشن داخل الخطة — يحدد التسلسل الزمني عند الإنشاء
+  sequenceOrder         Int     @map("sequence_order")
+  /// القسم كرمز وليس كمفتاح خارجي: القوالب وطنية بينما الأقسام تخص كل مستشفى،
+  /// فيُحل الرمز إلى قسم فعلي في المستشفى المخصص عند إنشاء جدول المتدرب.
+  departmentCode        String  @map("department_code") @db.VarChar(50)
+  departmentNameAr      String  @map("department_name_ar") @db.VarChar(200)
+  departmentNameEn      String? @map("department_name_en") @db.VarChar(200)
+  specialtyCode         String? @map("specialty_code") @db.VarChar(100)
+  durationWeeks         Int     @map("duration_weeks")
+  isMandatory           Boolean @default(true) @map("is_mandatory")
+  /// المتطلبات محفوظة كلقطة (snapshot) وليست مفاتيح خارجية: الإصدار غير قابل
+  /// للتعديل، فلا يجوز أن يتغير محتواه التاريخي إذا تغيّر الكتالوج لاحقاً.
+  requiredCompetencies  Json    @default("[]") @map("required_competencies") @db.JsonB
+  /// [{ code, titleAr, minCount }] — تُحل إلى ProcedureCatalog لبذر CompetencyProgress
+  requiredProcedures    Json    @default("[]") @map("required_procedures") @db.JsonB
+  requiredLogbookItems  Json    @default("[]") @map("required_logbook_items") @db.JsonB
+  /// [{ formType, titleAr, timing }] — تُحل إلى EvaluationForm الخاص بالمستشفى
+  requiredEvaluations   Json    @default("[]") @map("required_evaluations") @db.JsonB
+  objectives            Json    @default("[]") @db.JsonB
+  notes                 String? @db.Text
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  trainingPlanVersion TrainingPlanVersion @relation(fields: [trainingPlanVersionId], references: [id], onDelete: Cascade)
+  rotations           Rotation[]
+
+  @@unique([trainingPlanVersionId, sequenceOrder])
+  @@index([trainingPlanVersionId])
+  @@map("training_plan_rotations")
 }
 
 /// الدفعات الأكاديمية — Academic Intake
@@ -737,7 +826,14 @@ model TrainingRequest {
   sourceOrgId      String    @map("source_org_id") @db.Uuid
   targetOrgId      String    @map("target_org_id") @db.Uuid
   programId        String?   @map("program_id") @db.Uuid
+  /// قالب الخطة التدريبية الذي اختارته الجامعة عند التقديم
+  trainingPlanId   String?   @map("training_plan_id") @db.Uuid
+  /// الإصدار المثبّت وقت التقديم — يبقى ثابتاً حتى لو صدر إصدار أحدث لاحقاً
+  trainingPlanVersionId String? @map("training_plan_version_id") @db.Uuid
   academicIntakeId String?   @map("academic_intake_id") @db.Uuid
+  trainingStartDate      DateTime? @map("training_start_date") @db.Date
+  trainingEndDate        DateTime? @map("training_end_date") @db.Date
+  expectedGraduationDate DateTime? @map("expected_graduation_date") @db.Date
   studentCount     Int       @default(0) @map("student_count")
   priority         String    @default("normal") @db.VarChar(20)
   status           String    @default("submitted") @db.VarChar(50)
@@ -751,6 +847,8 @@ model TrainingRequest {
   sourceOrg      Organization    @relation("TrainingReqSourceOrg", fields: [sourceOrgId], references: [id])
   targetOrg      Organization    @relation("TrainingReqTargetOrg", fields: [targetOrgId], references: [id])
   program        Program?        @relation(fields: [programId], references: [id])
+  trainingPlan        TrainingPlan?        @relation(fields: [trainingPlanId], references: [id])
+  trainingPlanVersion TrainingPlanVersion? @relation(fields: [trainingPlanVersionId], references: [id])
   academicIntake AcademicIntake? @relation(fields: [academicIntakeId], references: [id])
   trainees       TrainingRequestTrainee[]
 
@@ -845,6 +943,10 @@ model TraineeProfile {
   photoApproved         Boolean   @default(false) @map("photo_approved")
   photoApprovedById     String?   @map("photo_approved_by") @db.Uuid
   photoApprovedAt       DateTime? @map("photo_approved_at") @db.Timestamptz
+  /// الإصدار الذي بدأ به المتدرب — يبقى ثابتاً مدى حياة المتدرب حتى بعد صدور
+  /// إصدارات أحدث، لتظل التقارير التاريخية مرتبطة بالخطة التي تدرب عليها فعلاً.
+  trainingPlanVersionId String?   @map("training_plan_version_id") @db.Uuid
+  expectedGraduationDate DateTime? @map("expected_graduation_date") @db.Date
   graduatedAt           DateTime? @map("graduated_at") @db.Timestamptz
   isLocked              Boolean   @default(false) @map("is_locked")
   archivedAt            DateTime? @map("archived_at") @db.Timestamptz
@@ -860,6 +962,7 @@ model TraineeProfile {
   sponsorOrganization Organization?  @relation("SponsorOrg", fields: [sponsorOrganizationId], references: [id])
   program             Program?       @relation(fields: [programId], references: [id])
   trainingPlan        TrainingPlan?  @relation(fields: [trainingPlanId], references: [id])
+  trainingPlanVersion TrainingPlanVersion? @relation(fields: [trainingPlanVersionId], references: [id])
   academicIntake      AcademicIntake? @relation(fields: [academicIntakeId], references: [id])
   cardIssuedBy        UserAccount?   @relation("CardIssuer", fields: [cardIssuedById], references: [id])
   photoApprovedBy     UserAccount?   @relation("PhotoApprover", fields: [photoApprovedById], references: [id])
@@ -937,6 +1040,10 @@ model Rotation {
   trainerProfileId     String    @map("trainer_profile_id") @db.Uuid
   supervisorAccountId  String?   @map("supervisor_account_id") @db.Uuid
   programId            String?   @map("program_id") @db.Uuid
+  /// روتيشن القالب الذي أنشأ هذا الروتيشن — فارغ للروتيشنات المُنشأة يدوياً
+  trainingPlanRotationId String? @map("training_plan_rotation_id") @db.Uuid
+  /// ترتيب الروتيشن ضمن جدول المتدرب — منسوخ من القالب وقت الإنشاء
+  sequenceOrder        Int?      @map("sequence_order")
   startDate            DateTime  @map("start_date") @db.Date
   endDate              DateTime  @map("end_date") @db.Date
   status               String    @default("scheduled") @db.VarChar(20)
@@ -955,6 +1062,7 @@ model Rotation {
   trainerProfile TrainerProfile @relation(fields: [trainerProfileId], references: [id])
   supervisorAccount UserAccount? @relation("RotationSupervisor", fields: [supervisorAccountId], references: [id])
   program        Program?       @relation(fields: [programId], references: [id])
+  trainingPlanRotation TrainingPlanRotation? @relation(fields: [trainingPlanRotationId], references: [id])
   evaluations       Evaluation[]
   objectiveProgress ObjectiveProgress[]
   caseLogs          ClinicalCaseLog[]

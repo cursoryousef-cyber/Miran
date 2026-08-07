@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, IsUUID, IsNumber, IsArray } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID, IsNumber, IsArray, IsDateString } from 'class-validator';
 
 export class CreateTrainingRequestDto {
   @ApiProperty({ description: 'معرف الجهة الهدف (التجمع الصحي)' })
@@ -11,6 +11,35 @@ export class CreateTrainingRequestDto {
   @IsOptional()
   @IsUUID('4')
   programId?: string;
+
+  @ApiPropertyOptional({
+    description: 'قالب الخطة التدريبية المختار — يُثبَّت إصداره النشط وقت التقديم',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  trainingPlanId?: string;
+
+  @ApiPropertyOptional({
+    description: 'إصدار خطة محدد — يُترك فارغاً ليُختار الإصدار النشط تلقائياً',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  trainingPlanVersionId?: string;
+
+  @ApiPropertyOptional({ description: 'تاريخ بداية التدريب' })
+  @IsOptional()
+  @IsDateString()
+  trainingStartDate?: string;
+
+  @ApiPropertyOptional({ description: 'تاريخ نهاية التدريب' })
+  @IsOptional()
+  @IsDateString()
+  trainingEndDate?: string;
+
+  @ApiPropertyOptional({ description: 'تاريخ التخرج المتوقع' })
+  @IsOptional()
+  @IsDateString()
+  expectedGraduationDate?: string;
 
   @ApiPropertyOptional({ description: 'معرف الدفعة الأكاديمية' })
   @IsOptional()

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationService } from '../notifications/notification.service';
+import { PlanInstantiationService } from '../training-plans/plan-instantiation.service';
 import { IAuthenticatedUser } from '../../common/interfaces';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class ActivationService {
   constructor(
     private prisma: PrismaService,
     private notificationService: NotificationService,
+    private planInstantiation: PlanInstantiationService,
   ) {}
 
   /**
@@ -41,6 +43,7 @@ export class ActivationService {
     }
 
     const activated: string[] = [];
+    const instantiated: Array<{ profileId: string; created: string[]; skipped: unknown[] }> = [];
 
     for (const row of rows) {
       // Find TraineeProfile linked to this staging row
@@ -62,30 +65,81 @@ export class ActivationService {
         data: { status: 'active' },
       });
 
-      // 3. Create a Rotation if the row has full assignment info
+      // 3. Build the trainee's rotation schedule.
       if (row.assignedHospitalId && row.assignedDepartmentId && row.assignedTrainerProfileId) {
-        const startDate = row.startDate ?? req.createdAt;
-        const endDate = row.endDate ?? new Date(startDate.getTime() + 180 * 24 * 60 * 60 * 1000);
+        const startDate = row.startDate ?? req.trainingStartDate ?? req.createdAt;
+        const endDate = row.endDate ?? req.trainingEndDate
+          ?? new Date(startDate.getTime() + 180 * 24 * 60 * 60 * 1000);
 
         const existing = await this.prisma.rotation.findFirst({
           where: { traineeProfileId: profile.id, organizationId: row.assignedHospitalId },
         });
 
         if (!existing) {
-          await this.prisma.rotation.create({
-            data: {
-              organizationId: row.assignedHospitalId,
+          // Pin the trainee to the version the request was submitted under, so a
+          // plan revised mid-cohort cannot retroactively change their schedule.
+          if (req.trainingPlanVersionId) {
+            await this.prisma.traineeProfile.update({
+              where: { id: profile.id },
+              data: {
+                trainingPlanId: req.trainingPlanId,
+                trainingPlanVersionId: req.trainingPlanVersionId,
+                expectedGraduationDate: req.expectedGraduationDate,
+              },
+            });
+
+            const result = await this.planInstantiation.instantiateForTrainee({
               traineeProfileId: profile.id,
-              departmentId: row.assignedDepartmentId,
-              trainerProfileId: row.assignedTrainerProfileId,
-              supervisorAccountId: row.assignedSupervisorAccountId ?? null,
-              programId: req.programId ?? null,
+              versionId: req.trainingPlanVersionId,
+              hospitalId: row.assignedHospitalId,
               startDate,
-              endDate,
-              status: 'active',
-              createdById: actorId,
-            },
+              programId: req.programId,
+              fallbackDepartmentId: row.assignedDepartmentId,
+              fallbackTrainerProfileId: row.assignedTrainerProfileId,
+              supervisorAccountId: row.assignedSupervisorAccountId,
+              actorId,
+            });
+            instantiated.push({ profileId: profile.id, ...result });
+
+            if (result.created.length > 0) {
+              await this.prisma.auditLog.create({
+                data: {
+                  organizationId: row.assignedHospitalId,
+                  actorId,
+                  action: 'training_plan_instantiated',
+                  entityType: 'TraineeProfile',
+                  entityId: profile.id,
+                  newValues: {
+                    trainingPlanVersionId: req.trainingPlanVersionId,
+                    rotationsCreated: result.created.length,
+                    rotationsSkipped: result.skipped,
+                  },
+                },
+              });
+            }
+          }
+
+          // No plan on the request, or the plan produced nothing placeable —
+          // fall back to the single rotation this service has always created.
+          const madeAny = await this.prisma.rotation.count({
+            where: { traineeProfileId: profile.id, organizationId: row.assignedHospitalId },
           });
+          if (madeAny === 0) {
+            await this.prisma.rotation.create({
+              data: {
+                organizationId: row.assignedHospitalId,
+                traineeProfileId: profile.id,
+                departmentId: row.assignedDepartmentId,
+                trainerProfileId: row.assignedTrainerProfileId,
+                supervisorAccountId: row.assignedSupervisorAccountId ?? null,
+                programId: req.programId ?? null,
+                startDate,
+                endDate,
+                status: 'active',
+                createdById: actorId,
+              },
+            });
+          }
         }
       }
 
@@ -149,6 +203,11 @@ export class ActivationService {
       });
     } catch (e) { console.warn('Activation notification error:', e); }
 
-    return { activated: activated.length, profileIds: activated };
+    return {
+      activated: activated.length,
+      profileIds: activated,
+      rotationsCreated: instantiated.reduce((n, i) => n + i.created.length, 0),
+      planInstantiation: instantiated,
+    };
   }
 }

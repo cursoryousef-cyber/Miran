@@ -35,6 +35,7 @@ import { OperationsModule } from './modules/operations/operations.module';
 import { IncidentsModule } from './modules/incidents/incidents.module';
 import { OrganizationAssignmentModule } from './modules/organization-assignments/organization-assignment.module';
 import { ProgramsModule } from './modules/programs/programs.module';
+import { TrainingPlansModule } from './modules/training-plans/training-plans.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { ProgramsModule } from './modules/programs/programs.module';
     LicensesModule,
     OrganizationAssignmentModule,
     ProgramsModule,
+    TrainingPlansModule,
     SettingsModule,
     DeclarationsModule,
 

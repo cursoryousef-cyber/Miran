@@ -75,10 +75,68 @@ export class TrainingRequestsService {
     return { data: request };
   }
 
+  /**
+   * Pins the plan version the request will run on.
+   *
+   * The version is resolved once, at submission, and stored — a plan revised
+   * later produces a new version, and this request keeps pointing at the one it
+   * was submitted under.
+   */
+  private async resolvePlanVersion(
+    dto: CreateTrainingRequestDto,
+    startDate: Date | null,
+  ): Promise<string | undefined> {
+    if (!dto.trainingPlanId) return undefined;
+
+    const plan = await this.prisma.trainingPlan.findUnique({
+      where: { id: dto.trainingPlanId },
+      select: { id: true, programId: true, isActive: true },
+    });
+    if (!plan) throw new NotFoundException('قالب الخطة التدريبية غير موجود');
+    if (!plan.isActive) throw new BadRequestException('قالب الخطة التدريبية غير مفعّل');
+    if (dto.programId && plan.programId !== dto.programId) {
+      throw new BadRequestException('قالب الخطة لا يتبع البرنامج التدريبي المختار');
+    }
+
+    if (dto.trainingPlanVersionId) {
+      const explicit = await this.prisma.trainingPlanVersion.findUnique({
+        where: { id: dto.trainingPlanVersionId },
+        select: { id: true, trainingPlanId: true, status: true, versionNumber: true },
+      });
+      if (!explicit || explicit.trainingPlanId !== plan.id) {
+        throw new NotFoundException('إصدار الخطة غير موجود ضمن هذا القالب');
+      }
+      if (explicit.status === 'draft') {
+        throw new BadRequestException(
+          `لا يمكن التقديم على إصدار مسودة (رقم ${explicit.versionNumber}) — يجب اعتماده أولاً`,
+        );
+      }
+      return explicit.id;
+    }
+
+    const active = await this.prisma.trainingPlanVersion.findFirst({
+      where: { trainingPlanId: plan.id, status: 'active' },
+      select: { id: true, effectiveFrom: true, effectiveTo: true },
+    });
+    if (!active) throw new BadRequestException('لا يوجد إصدار معتمد لهذا القالب');
+    if (startDate) {
+      if (active.effectiveFrom && startDate < active.effectiveFrom) {
+        throw new BadRequestException('تاريخ بداية التدريب يسبق بداية سريان الإصدار المعتمد');
+      }
+      if (active.effectiveTo && startDate > active.effectiveTo) {
+        throw new BadRequestException('تاريخ بداية التدريب بعد نهاية سريان الإصدار المعتمد');
+      }
+    }
+    return active.id;
+  }
+
   async create(dto: CreateTrainingRequestDto, user?: IAuthenticatedUser) {
     const reqCount = await this.prisma.trainingRequest.count();
     const requestNumber = `TR-${new Date().getFullYear()}-${(reqCount + 1).toString().padStart(4, '0')}`;
     const sourceOrgId = user?.organizationId || dto.targetOrgId;
+
+    const trainingStartDate = dto.trainingStartDate ? new Date(dto.trainingStartDate) : null;
+    const planVersionId = await this.resolvePlanVersion(dto, trainingStartDate);
 
     const created = await this.prisma.trainingRequest.create({
       data: {
@@ -86,6 +144,11 @@ export class TrainingRequestsService {
         sourceOrgId,
         targetOrgId: dto.targetOrgId,
         programId: dto.programId,
+        trainingPlanId: dto.trainingPlanId,
+        trainingPlanVersionId: planVersionId,
+        trainingStartDate,
+        trainingEndDate: dto.trainingEndDate ? new Date(dto.trainingEndDate) : null,
+        expectedGraduationDate: dto.expectedGraduationDate ? new Date(dto.expectedGraduationDate) : null,
         academicIntakeId: dto.academicIntakeId,
         studentCount: dto.studentCount,
         priority: dto.priority || 'normal',
@@ -544,6 +607,13 @@ export class TrainingRequestsService {
         sourceOrgId: req.sourceOrgId,
         targetOrgId: req.targetOrgId,
         programId: req.programId,
+        // The clone keeps the original's pinned version rather than jumping to the
+        // latest one, so a re-submitted batch trains on the plan it was built for.
+        trainingPlanId: req.trainingPlanId,
+        trainingPlanVersionId: req.trainingPlanVersionId,
+        trainingStartDate: req.trainingStartDate,
+        trainingEndDate: req.trainingEndDate,
+        expectedGraduationDate: req.expectedGraduationDate,
         academicIntakeId: req.academicIntakeId,
         studentCount: req.studentCount,
         priority: req.priority,
