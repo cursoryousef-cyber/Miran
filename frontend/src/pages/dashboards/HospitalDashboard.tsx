@@ -1,116 +1,215 @@
 import React from 'react';
-import { useAuth } from '../../context/AuthContext';
-import { Stethoscope, RefreshCw } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '../../api/client';
-import { Button, IconButton, Tooltip } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import {
+  Activity, AlertTriangle, BedDouble, CalendarCheck, ClipboardCheck, GraduationCap,
+  Inbox, Layers, PhoneCall, Stethoscope, UserCog, Users,
+} from 'lucide-react';
+import { apiClient } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
+import {
+  Badge, EmptyState, KpiCard, KpiGrid, ListRow, Panel, PanelGrid, PanelLink,
+  PanelSkeleton, PageHeader, QuickActions, SplitGrid, StatBar, colour, space,
+} from '../../components/ui';
 
+/**
+ * Hospital operations landing board.
+ *
+ * The hospital runs training day to day, so this board is about today: who is
+ * present, which departments are tight, what needs review, and who is falling
+ * behind. Depth lives in the workspace — every panel links into the section
+ * that owns it rather than repeating it here.
+ */
 export const HospitalDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const orgId = user?.activeOrganization?.id;
 
-  const { data: members, refetch: refetchMembers } = useQuery({
-    queryKey: ['hosp-members'],
+  const { data: timeline, isLoading: tlLoading } = useQuery({
+    queryKey: ['hd-timeline', orgId],
     queryFn: async () => {
-      const res = await apiClient.get('/org-members').catch(() => ({ data: { data: [] } }));
-      return res.data?.data || [];
+      const res = await apiClient
+        .get('/timeline/dashboard', { params: { scope: 'hospital', limit: 200 } })
+        .catch(() => ({ data: { data: null } }));
+      return res.data?.data ?? null;
     },
   });
 
-  const { data: rotations } = useQuery({
-    queryKey: ['hosp-rotations'],
+  const { data: capacity } = useQuery({
+    queryKey: ['hd-capacity', orgId],
+    enabled: Boolean(orgId),
     queryFn: async () => {
-      const res = await apiClient.get('/rotations').catch(() => ({ data: { data: [] } }));
-      return res.data?.data || [];
+      const res = await apiClient.get(`/organizations/${orgId}/capacity`).catch(() => ({ data: null }));
+      return res.data ?? null;
     },
   });
 
-  const { data: departments } = useQuery({
-    queryKey: ['hosp-departments'],
+  const { data: trainers } = useQuery({
+    queryKey: ['hd-trainers', orgId],
     queryFn: async () => {
-      const res = await apiClient.get('/org-members/departments').catch(() => ({ data: { data: [] } }));
-      return res.data?.data || [];
+      const res = await apiClient.get('/trainers/workspace-cards').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
     },
   });
 
-  const trainers = members?.filter((m: any) => m.roles?.some((r: any) => r.code === 'trainer')) || [];
-  const trainees = members?.filter((m: any) => m.roles?.some((r: any) => r.code === 'trainee')) || [];
+  const { data: analytics } = useQuery({
+    queryKey: ['hd-analytics', orgId],
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/analytics').catch(() => ({ data: { data: null } }));
+      return res.data?.data ?? null;
+    },
+  });
+
+  const { data: attendance } = useQuery({
+    queryKey: ['hd-attendance', orgId],
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/attendance').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const todayRows = (attendance ?? []).filter((a: any) => String(a.date).slice(0, 10) === today);
+  const present = todayRows.filter((a: any) => ['present', 'late'].includes(a.status)).length;
+
+  const activeRotations = (analytics?.rotations ?? []).find((r: any) => r.status === 'active')?._count ?? 0;
+  const openIncidents = Array.isArray(analytics?.incidents)
+    ? analytics.incidents.filter((i: any) => i.status !== 'resolved').length : 0;
+
+  const pendingEvaluations = (timeline?.trainees ?? [])
+    .reduce((s: number, t: any) => s + (t.readiness?.remaining?.evaluations ?? 0), 0);
+
+  const onLeave = (trainers ?? []).filter((t: any) => t.onLeave);
+  const fullTrainers = (trainers ?? []).filter((t: any) => t.available === 0 && t.maxTrainees > 0);
+  const behind = (timeline?.trainees ?? [])
+    .filter((t: any) => ['at_risk', 'off_track'].includes(t.readiness?.expectedGraduationStatus))
+    .slice(0, 5);
+
+  const departments = (capacity?.departments ?? [])
+    .map((d: any) => ({ ...d, pct: d.occupancy?.occupancyPercentage ?? 0 }))
+    .sort((a: any, b: any) => b.pct - a.pct);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-      <div style={{
-        padding: '32px',
-        background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)',
-        borderRadius: '16px',
-        color: '#FFFFFF',
-        boxShadow: '0 4px 14px rgba(15, 118, 110, 0.25)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-              <Stethoscope size={20} color="#CCFBF1" />
-              <span style={{ fontSize: '12px', color: '#CCFBF1', fontWeight: 700, letterSpacing: '1px' }}>
-                HOSPITAL SUPERVISOR DASHBOARD
-              </span>
-            </div>
-            <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
-              مرحباً، {user?.nameAr} 👋
-            </h1>
-            <p style={{ fontSize: '14px', color: '#F0FDF4', marginTop: '8px', opacity: 0.9 }}>
-              {user?.activeOrganization?.nameAr} — الإشراف السريري وتوزيع الروتيشنات والمدربين
-            </p>
-          </div>
-          <Tooltip title="تحديث">
-            <IconButton onClick={() => refetchMembers()} style={{ color: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.15)' }}>
-              <RefreshCw size={18} />
-            </IconButton>
-          </Tooltip>
-        </div>
-        <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
-          <Button variant="contained" onClick={() => navigate('/hospital')}
-            style={{ background: '#FFFFFF', color: '#0F766E', fontWeight: 800, borderRadius: 12 }}>
-            مساحة عمل المستشفى الشاملة
-          </Button>
-          <Button variant="outlined" onClick={() => navigate('/intakes')}
-            style={{ borderColor: '#CCFBF1', color: '#FFFFFF', fontWeight: 700, borderRadius: 12 }}>
-            إدارة الروتيشنات الأكاديمية
-          </Button>
-          <Button variant="outlined" onClick={() => navigate('/org-members')}
-            style={{ borderColor: '#CCFBF1', color: '#FFFFFF', fontWeight: 700, borderRadius: 12 }}>
-            المتدربون والمدربون
-          </Button>
-        </div>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'] }}>
+      <PageHeader
+        eyebrow="HOSPITAL OPERATIONS"
+        icon={Stethoscope}
+        title="لوحة المستشفى"
+        subtitle={`${user?.activeOrganization?.nameAr ?? ''} — العمليات اليومية للتدريب`}
+        actions={
+          <button
+            onClick={() => navigate('/hospital')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px',
+              borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              background: colour.primary, color: '#fff', fontWeight: 700, fontSize: 13,
+            }}
+          >
+            <BedDouble size={16} /> فتح مساحة العمل
+          </button>
+        }
+      />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>الأطباء المتدربون</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#0F766E' }}>{trainees.length}</div>
-        </div>
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>المدربون السريريون</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#0891B2' }}>{trainers.length}</div>
-        </div>
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>الأقسام المفعّلة</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#F59E0B' }}>{departments?.length || 0}</div>
-        </div>
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>الروتيشنات النشطة</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#7E22CE' }}>{rotations?.length || 0}</div>
-        </div>
-      </div>
+      <KpiGrid>
+        <KpiCard label="الروتيشنات النشطة" value={activeRotations} icon={Activity} tone="primary"
+          onClick={() => navigate('/hospital?tab=overview')} />
+        <KpiCard label="المتدربون الحاليون" value={timeline?.traineeCount ?? 0} icon={Users} tone="success"
+          hint={`متوسط الإنجاز ${timeline?.averageCompletion ?? 0}%`} loading={tlLoading} />
+        <KpiCard label="حضور اليوم" value={`${present}/${todayRows.length}`} icon={CalendarCheck} tone="violet" />
+        <KpiCard label="تقييمات معلّقة" value={pendingEvaluations} icon={ClipboardCheck} tone="warning"
+          loading={tlLoading} />
+        <KpiCard label="جاهزون للتخرج" value={timeline?.readyForGraduation ?? 0} icon={GraduationCap} tone="success"
+          hint={`متعثرون: ${(timeline?.atRisk ?? 0) + (timeline?.offTrack ?? 0)}`} loading={tlLoading}
+          onClick={() => navigate('/hospital?tab=graduation')} />
+        <KpiCard label="بلاغات مفتوحة" value={openIncidents} icon={AlertTriangle}
+          tone={openIncidents > 0 ? 'danger' : 'success'} onClick={() => navigate('/hospital?tab=incidents')} />
+      </KpiGrid>
 
-      <div className="glass-card" style={{ padding: '24px' }}>
-        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', marginBottom: '16px' }}>🏥 الأقسام السريرية المسجلة</h3>
-        {departments && departments.length > 0 ? departments.map((d: any) => (
-          <div key={d.id} style={{ padding: '12px 16px', backgroundColor: '#F8FAFC', borderRadius: '12px', marginBottom: '8px', border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>{d.nameAr}</div>
-            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>{d.code || 'DEPT'}</span>
-          </div>
-        )) : <div style={{ color: '#64748B', fontSize: '13px', padding: '16px', textAlign: 'center' }}>لا توجد أقسام مفعّلة حالياً</div>}
-      </div>
+      <SplitGrid>
+        <Panel
+          title="السعة اليومية للأقسام"
+          icon={BedDouble}
+          action={<PanelLink label="الطاقة الاستيعابية" onClick={() => navigate('/hospital?tab=capacity')} />}
+        >
+          {departments.length === 0 ? (
+            <EmptyState icon={BedDouble} title="لا توجد أقسام مفعّلة" hint="فعّل الأقسام السريرية لعرض السعة." />
+          ) : (
+            departments.slice(0, 7).map((d: any) => (
+              <StatBar key={d.id} label={d.nameAr} value={d.occupancy?.occupied ?? 0} max={d.occupancy?.capacity || 1} />
+            ))
+          )}
+        </Panel>
+
+        <Panel
+          title="المدربون"
+          icon={UserCog}
+          tone="violet"
+          action={<PanelLink label="بطاقات المدربين" onClick={() => navigate('/hospital?tab=trainers')} />}
+        >
+          {!trainers ? <PanelSkeleton rows={3} /> : trainers.length === 0 ? (
+            <EmptyState icon={UserCog} title="لا يوجد مدربون" />
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap', marginBottom: space.lg }}>
+                <Badge label={`${trainers.length} مدرب`} tone="violet" />
+                <Badge label={`${onLeave.length} في إجازة`} tone={onLeave.length ? 'warning' : 'neutral'} />
+                <Badge label={`${fullTrainers.length} مكتمل`} tone={fullTrainers.length ? 'danger' : 'neutral'} />
+              </div>
+              {trainers.slice(0, 5).map((t: any) => (
+                <ListRow
+                  key={t.id}
+                  title={t.nameAr}
+                  meta={`${t.department?.nameAr ?? 'بدون قسم'} · ${t.occupied}/${t.maxTrainees}`}
+                  trailing={t.onLeave ? <Badge label="إجازة" tone="warning" /> : undefined}
+                  onClick={() => navigate('/hospital?tab=trainers')}
+                />
+              ))}
+            </>
+          )}
+        </Panel>
+      </SplitGrid>
+
+      <PanelGrid>
+        <Panel title="الحالات المتأخرة" icon={AlertTriangle} tone={behind.length ? 'danger' : 'success'}
+          action={<PanelLink label="التخرج" onClick={() => navigate('/hospital?tab=graduation')} />}>
+          {tlLoading ? <PanelSkeleton /> : behind.length === 0 ? (
+            <EmptyState icon={GraduationCap} title="لا توجد حالات متأخرة" hint="جميع المتدربين ضمن المسار المتوقع." />
+          ) : (
+            behind.map((t: any) => (
+              <ListRow
+                key={t.trainee.id}
+                title={t.trainee.nameAr}
+                meta={`الإنجاز ${t.completionPercentage}% · ${t.current?.departmentNameAr ?? 'بلا روتيشن'}`}
+                trailing={<Badge label={t.readiness.expectedGraduationStatus === 'off_track' ? 'خارج المسار' : 'متأخر'}
+                  tone={t.readiness.expectedGraduationStatus === 'off_track' ? 'danger' : 'warning'} />}
+              />
+            ))
+          )}
+        </Panel>
+
+        <Panel title="الأعمال المعلقة" icon={Inbox} tone="warning">
+          <QuickActions
+            items={[
+              { label: 'الطلبات الواردة', icon: Inbox, onClick: () => navigate('/hospital?tab=requests'), tone: 'warning' },
+              { label: 'سلسلة القبول', icon: ClipboardCheck, onClick: () => navigate('/hospital?tab=acceptance'), tone: 'info' },
+              { label: 'النداءات', icon: PhoneCall, onClick: () => navigate('/hospital?tab=calls'), tone: 'danger' },
+              { label: 'التقييمات', icon: ClipboardCheck, onClick: () => navigate('/hospital?tab=logbook'), tone: 'violet' },
+            ]}
+          />
+        </Panel>
+
+        <Panel title="إشغال البرامج التدريبية" icon={Layers} tone="info"
+          action={<PanelLink label="التفاصيل" onClick={() => navigate('/hospital?tab=capacity')} />}>
+          {capacity?.programs?.length ? (
+            capacity.programs.slice(0, 5).map((p: any) => (
+              <StatBar key={p.allocation.id} label={p.program?.nameAr ?? 'برنامج'}
+                value={p.occupancy.occupied} max={p.occupancy.capacity || 1} />
+            ))
+          ) : (
+            <EmptyState icon={Layers} title="لم تُحدَّد سعة برامج" hint="حدّد سعة البرامج من قسم الطاقة الاستيعابية." />
+          )}
+        </Panel>
+      </PanelGrid>
     </div>
   );
 };

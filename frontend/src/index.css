@@ -76,3 +76,42 @@ body {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* ── Console layout utilities ──────────────────────────────────────────────
+   The split layout is main content beside a narrower rail on wide screens and
+   a single stacked column below 1100px, so no page ever scrolls sideways. */
+.split-grid { grid-template-columns: 1fr; }
+@media (min-width: 1100px) {
+  .split-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+}
+
+/* Tables inside cards scroll within their own box, never the page. */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Nothing is allowed to push the page wider than the viewport. */
+#root, main { max-width: 100%; }
+img, svg, table { max-width: 100%; }
+
+/* ── KPI grid ──────────────────────────────────────────────────────────────
+   Column counts are chosen so the row divides evenly for the number of tiles
+   on the page, instead of `auto-fit` leaving a half-empty final row. */
+.kpi-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+@media (min-width: 700px) {
+  .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .kpi-grid.cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1180px) {
+  .kpi-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .kpi-grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .kpi-grid.cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .kpi-grid.cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}

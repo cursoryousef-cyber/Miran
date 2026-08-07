@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Building, LogOut, User, ChevronDown, Menu as MenuIcon } from 'lucide-react';
-import { Menu, MenuItem, IconButton, Avatar, Chip } from '@mui/material';
+import { Menu, MenuItem, IconButton, Avatar, Chip, useMediaQuery, useTheme } from '@mui/material';
 import { NotificationCenter } from '../NotificationCenter';
 
 interface HeaderProps {
@@ -10,6 +10,11 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
   const { user, switchOrganization, logout } = useAuth();
+  const theme = useTheme();
+  // Below `sm` the header only has room for the essentials: menu, org switcher
+  // (name only) and the avatar. Labels and the email are dropped rather than
+  // allowed to wrap or clip.
+  const isCompact = useMediaQuery(theme.breakpoints.down('sm'));
   const [orgAnchorEl, setOrgAnchorEl] = useState<null | HTMLElement>(null);
   const [userAnchorEl, setUserAnchorEl] = useState<null | HTMLElement>(null);
 
@@ -36,12 +41,13 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: '0 24px',
+      padding: '0 16px',
+      gap: '8px',
       position: 'sticky',
       top: 0,
       zIndex: 10,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
         {/* Mobile Drawer Trigger Button */}
         {onMobileMenuToggle && (
           <IconButton
@@ -59,8 +65,8 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '10px',
-            padding: '8px 16px',
+            gap: '8px',
+            padding: '8px 12px',
             backgroundColor: '#CCFBF1',
             border: '1px solid #99F6E4',
             borderRadius: '12px',
@@ -69,14 +75,20 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
             fontSize: '13px',
             fontWeight: 700,
             transition: 'all 0.15s ease',
+            minWidth: 0,
+            maxWidth: '100%',
+            fontFamily: 'inherit',
           }}
         >
-          <Building size={16} color="#0F766E" />
-          <span>الجهة الحالية:</span>
-          <span style={{ color: '#0D9488', fontWeight: 800 }}>
+          <Building size={16} color="#0F766E" style={{ flexShrink: 0 }} />
+          {!isCompact && <span style={{ flexShrink: 0 }}>الجهة الحالية:</span>}
+          <span style={{
+            color: '#0D9488', fontWeight: 800, minWidth: 0,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
             {user?.activeOrganization?.nameAr || 'اختر الجهة'}
           </span>
-          <ChevronDown size={14} color="#0F766E" />
+          <ChevronDown size={14} color="#0F766E" style={{ flexShrink: 0 }} />
         </button>
 
         <Menu
@@ -120,10 +132,10 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
       </div>
 
       {/* User Actions Right */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
         <NotificationCenter />
 
-        <div style={{ height: '24px', width: '1px', backgroundColor: '#E2E8F0', margin: '0 4px' }} />
+        {!isCompact && <div style={{ height: '24px', width: '1px', backgroundColor: '#E2E8F0', margin: '0 4px' }} />}
 
         <div
           onClick={handleUserClick}
@@ -139,13 +151,17 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
           <Avatar sx={{ width: 36, height: 36, bgcolor: '#0F766E', fontSize: 14, fontWeight: 700 }}>
             {user?.nameAr?.charAt(0) || 'U'}
           </Avatar>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
-              {user?.nameAr || 'المستخدم'}
-            </span>
-            <span style={{ fontSize: '11px', color: '#64748B' }}>{user?.email}</span>
-          </div>
-          <ChevronDown size={14} color="#64748B" />
+          {!isCompact && (
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, maxWidth: 180 }}>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user?.nameAr || 'المستخدم'}
+              </span>
+              <span style={{ fontSize: '11px', color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user?.email}
+              </span>
+            </div>
+          )}
+          {!isCompact && <ChevronDown size={14} color="#64748B" />}
         </div>
 
         <Menu

@@ -1,109 +1,211 @@
 import React from 'react';
-import { useAuth } from '../../context/AuthContext';
-import { Building2, Users, GraduationCap, Shield, Stethoscope, FileCheck, Network } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import {
+  Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis,
+} from 'recharts';
+import {
+  Activity, AlertTriangle, Building2, GitMerge, GraduationCap, Globe2, Key,
+  LayoutDashboard, Network, Shield, Stethoscope, UserCog, Users,
+} from 'lucide-react';
 import { apiClient } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
+import {
+  Badge, EmptyState, KpiCard, KpiGrid, ListRow, Metric, MetricRow, Panel,
+  PanelGrid, PanelLink, PanelSkeleton, PageHeader, QuickActions, SplitGrid, colour, space,
+} from '../../components/ui';
 
-const StatCard: React.FC<{ label: string; value: string | number; icon: any; color: string }> = ({ label, value, icon: Icon, color }) => (
-  <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px', height: '100%' }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>{label}</span>
-      <div style={{ padding: 8, borderRadius: 10, backgroundColor: `${color}12` }}>
-        <Icon size={18} color={color} />
-      </div>
-    </div>
-    <div style={{ fontSize: '30px', fontWeight: 800, color: '#0F172A' }}>{value}</div>
-  </div>
-);
-
+/**
+ * National control centre.
+ *
+ * The platform owner governs the federation rather than running training, so
+ * this board answers "is the national picture healthy": how many organisations
+ * of each type exist, where trainees sit, and what needs administrative
+ * attention. No per-trainee operational detail.
+ */
 export const PlatformDashboard: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
 
-  const { data: stats, isLoading } = useQuery({
-    queryKey: ['platform-stats'],
+  const { data: orgs, isLoading: orgsLoading } = useQuery({
+    queryKey: ['pf-orgs'],
     queryFn: async () => {
-      const [orgs, users] = await Promise.all([
-        apiClient.get('/organizations').catch(() => ({ data: { data: [], meta: { total: 0 } } })),
-        apiClient.get('/user-accounts').catch(() => ({ data: { data: [], meta: { total: 0 } } })),
-      ]);
-      return {
-        orgsCount: orgs.data?.meta?.total || orgs.data?.data?.length || 0,
-        usersCount: users.data?.meta?.total || users.data?.data?.length || 0,
-        orgs: orgs.data?.data || [],
-      };
+      const res = await apiClient.get('/organizations', { params: { limit: 200 } }).catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
     },
   });
 
-  const orgList = stats?.orgs || [];
-  const clusters = orgList.filter((o: any) => o.organizationType?.code === 'cluster');
-  const hospitals = orgList.filter((o: any) => o.organizationType?.code === 'hospital');
-  const universities = orgList.filter((o: any) => o.organizationType?.code === 'university');
+  const { data: requests } = useQuery({
+    queryKey: ['pf-requests'],
+    queryFn: async () => {
+      const res = await apiClient.get('/training-requests').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const { data: audits } = useQuery({
+    queryKey: ['pf-audits'],
+    queryFn: async () => {
+      const res = await apiClient.get('/audit-logs', { params: { limit: 8 } }).catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const byType = (code: string) => (orgs ?? []).filter((o: any) => o.organizationType?.code === code);
+  const universities = byType('university');
+  const clusters = byType('cluster');
+  const hospitals = byType('hospital');
+
+  const totalTrainees = (orgs ?? []).reduce((s: number, o: any) => s + (o._count?.traineeProfiles ?? 0), 0);
+  const totalCapacity = hospitals.reduce((s: number, h: any) => s + (h.capacity ?? 0), 0);
+  const suspended = (orgs ?? []).filter((o: any) => o.status && o.status !== 'active');
+  const pendingRequests = (requests ?? []).filter((r: any) => ['submitted', 'under_review'].includes(r.status));
+
+  const typeChart = [
+    { name: 'الجامعات', value: universities.length, fill: '#0284C7' },
+    { name: 'التجمعات', value: clusters.length, fill: '#0F766E' },
+    { name: 'المستشفيات', value: hospitals.length, fill: '#7C3AED' },
+  ].filter((d) => d.value > 0);
+
+  // Trainee distribution per region, the closest thing to a national map view
+  // that the organisation data supports today.
+  const regionChart = Object.entries(
+    (orgs ?? []).reduce((acc: Record<string, number>, o: any) => {
+      const region = o.regionAr || 'غير محدد';
+      acc[region] = (acc[region] ?? 0) + (o._count?.traineeProfiles ?? 0);
+      return acc;
+    }, {}),
+  )
+    .map(([name, value]) => ({ name, value: value as number }))
+    .filter((r) => r.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-      {/* Banner */}
-      <div style={{
-        padding: '32px',
-        background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)',
-        borderRadius: '16px',
-        color: '#FFFFFF',
-        boxShadow: '0 4px 14px rgba(15, 118, 110, 0.25)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <Shield size={20} color="#CCFBF1" />
-          <span style={{ fontSize: '12px', color: '#CCFBF1', fontWeight: 700, letterSpacing: '1px' }}>
-            مركز التحكم الوطني — {user?.roles?.[0] === 'platform_owner' ? 'Platform Owner' : 'System Admin'}
-          </span>
-        </div>
-        <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
-          مرحباً بك، {user?.nameAr} 👋
-        </h1>
-        <p style={{ fontSize: '14px', color: '#F0FDF4', marginTop: '8px', opacity: 0.9 }}>
-          لوحة الإشراف الوطنية — إحصائيات شاملة لجميع الجهات والتجمعات والمستشفيات والجامعات
-        </p>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'] }}>
+      <PageHeader
+        eyebrow="NATIONAL CONTROL CENTRE"
+        icon={LayoutDashboard}
+        title={`مركز التحكم الوطني`}
+        subtitle={`أهلاً ${user?.nameAr ?? ''} — حوكمة الجهات والتجمعات والمستشفيات على مستوى المملكة`}
+      />
 
-      {/* National KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
-        <StatCard label="إجمالي الجهات المسجلة" value={stats?.orgsCount || 0} icon={Building2} color="#0F766E" />
-        <StatCard label="التجمعات الصحية" value={clusters.length} icon={Network} color="#0891B2" />
-        <StatCard label="المستشفيات والمراكز" value={hospitals.length} icon={Stethoscope} color="#F59E0B" />
-        <StatCard label="الجامعات الصحية" value={universities.length} icon={GraduationCap} color="#7E22CE" />
-        <StatCard label="إجمالي المستخدمين" value={stats?.usersCount || 0} icon={Users} color="#DB2777" />
-        <StatCard label="سجلات التدقيق" value="Active" icon={FileCheck} color="#16A34A" />
-      </div>
+      <KpiGrid>
+        <KpiCard label="إجمالي الجهات" value={(orgs ?? []).length} icon={Globe2} tone="primary"
+          loading={orgsLoading} onClick={() => navigate('/organizations')} />
+        <KpiCard label="الجامعات" value={universities.length} icon={GraduationCap} tone="info"
+          loading={orgsLoading} onClick={() => navigate('/organizations')} />
+        <KpiCard label="التجمعات الصحية" value={clusters.length} icon={Network} tone="primary"
+          loading={orgsLoading} onClick={() => navigate('/organizations')} />
+        <KpiCard label="المستشفيات" value={hospitals.length} icon={Stethoscope} tone="violet"
+          loading={orgsLoading} onClick={() => navigate('/organizations')} />
+        <KpiCard label="المتدربون وطنياً" value={totalTrainees} icon={Users} tone="success"
+          hint={totalCapacity ? `من سعة ${totalCapacity}` : undefined} loading={orgsLoading} />
+        <KpiCard label="الطلبات الوطنية" value={(requests ?? []).length} icon={GitMerge} tone="warning"
+          hint={`${pendingRequests.length} بانتظار المعالجة`} />
+      </KpiGrid>
 
-      {/* Organizations List */}
-      <div className="glass-card" style={{ padding: '24px' }}>
-        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', marginBottom: '16px' }}>
-          🏛️ الجهات المسجلة في المنصة
-        </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {isLoading ? (
-            <div style={{ color: '#64748B', fontSize: '13px', padding: '16px', textAlign: 'center' }}>جاري التحميل...</div>
-          ) : orgList.length === 0 ? (
-            <div style={{ color: '#64748B', fontSize: '13px', padding: '16px', textAlign: 'center' }}>لا توجد جهات مسجلة حالياً</div>
+      <SplitGrid>
+        <Panel
+          title="توزيع المتدربين حسب المنطقة"
+          icon={Globe2}
+          action={<PanelLink label="كل الجهات" onClick={() => navigate('/organizations')} />}
+        >
+          {regionChart.length === 0 ? (
+            <EmptyState icon={Globe2} title="لا توجد بيانات توزيع بعد" hint="تظهر هنا أعداد المتدربين لكل منطقة فور إسنادهم." />
           ) : (
-            orgList.slice(0, 10).map((org: any) => (
-              <div key={org.id} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '12px 16px', backgroundColor: '#F8FAFC', borderRadius: '12px',
-                border: '1px solid #E2E8F0',
-              }}>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>{org.nameAr}</div>
-                  <div style={{ fontSize: '11.5px', color: '#64748B' }}>{org.nameEn} • {org.code}</div>
-                </div>
-                <span style={{
-                  fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '8px',
-                  backgroundColor: org.status === 'active' ? '#DCFCE7' : '#FEF3C7',
-                  color: org.status === 'active' ? '#15803D' : '#B45309',
-                }}>{org.status === 'active' ? 'نشط' : org.status}</span>
-              </div>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={regionChart} margin={{ top: 4, right: 8, left: -18, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={colour.border} vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: colour.muted }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: colour.muted }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <RTooltip
+                  cursor={{ fill: colour.subtle }}
+                  contentStyle={{ borderRadius: 12, border: `1px solid ${colour.border}`, fontSize: 12, fontFamily: 'inherit' }}
+                />
+                <Bar dataKey="value" name="متدربون" fill={colour.primary} radius={[6, 6, 0, 0]} maxBarSize={48} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </Panel>
+
+        <Panel title="تركيبة الجهات" icon={Building2} tone="violet">
+          {typeChart.length === 0 ? (
+            <EmptyState icon={Building2} title="لا توجد جهات مسجلة" />
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={190}>
+                <PieChart>
+                  <Pie data={typeChart} dataKey="value" nameKey="name" innerRadius={52} outerRadius={78} paddingAngle={3}>
+                    {typeChart.map((d) => <Cell key={d.name} fill={d.fill} />)}
+                  </Pie>
+                  <RTooltip contentStyle={{ borderRadius: 12, border: `1px solid ${colour.border}`, fontSize: 12, fontFamily: 'inherit' }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <MetricRow min={90}>
+                <Metric label="جامعات" value={universities.length} tone="info" />
+                <Metric label="تجمعات" value={clusters.length} tone="primary" />
+                <Metric label="مستشفيات" value={hospitals.length} tone="violet" />
+              </MetricRow>
+            </>
+          )}
+        </Panel>
+      </SplitGrid>
+
+      <PanelGrid>
+        <Panel title="التنبيهات الوطنية" icon={AlertTriangle} tone={suspended.length ? 'danger' : 'success'}>
+          {suspended.length === 0 && pendingRequests.length === 0 ? (
+            <EmptyState icon={Shield} title="لا توجد تنبيهات" hint="كل الجهات مفعّلة ولا توجد طلبات متأخرة." />
+          ) : (
+            <>
+              {suspended.slice(0, 4).map((o: any) => (
+                <ListRow
+                  key={o.id}
+                  title={o.nameAr}
+                  meta={`جهة غير مفعّلة — ${o.organizationType?.nameAr ?? ''}`}
+                  trailing={<Badge label={o.status} tone="danger" />}
+                  onClick={() => navigate('/organizations')}
+                />
+              ))}
+              {pendingRequests.slice(0, 3).map((r: any) => (
+                <ListRow
+                  key={r.id}
+                  title={`طلب تدريب ${r.requestNumber}`}
+                  meta={`${r.sourceOrg?.nameAr ?? ''} → ${r.targetOrg?.nameAr ?? ''}`}
+                  trailing={<Badge label={r.status} tone="warning" />}
+                />
+              ))}
+            </>
+          )}
+        </Panel>
+
+        <Panel title="آخر النشاطات" icon={Activity} tone="info">
+          {!audits ? <PanelSkeleton /> : audits.length === 0 ? (
+            <EmptyState icon={Activity} title="لا توجد نشاطات مسجلة" />
+          ) : (
+            audits.slice(0, 6).map((a: any) => (
+              <ListRow
+                key={a.id}
+                title={a.action}
+                meta={`${a.entityType ?? ''} · ${new Date(a.createdAt).toLocaleString('ar-SA')}`}
+              />
             ))
           )}
-        </div>
-      </div>
+        </Panel>
+
+        <Panel title="إجراءات سريعة" icon={Key} tone="neutral">
+          <QuickActions
+            items={[
+              { label: 'إدارة الجهات', icon: Building2, onClick: () => navigate('/organizations'), hint: 'إنشاء وتعديل' },
+              { label: 'المستخدمون', icon: Users, onClick: () => navigate('/users'), tone: 'info' },
+              { label: 'الأدوار والصلاحيات', icon: Key, onClick: () => navigate('/roles-management'), tone: 'violet' },
+              { label: 'سجلات التدقيق', icon: Shield, onClick: () => navigate('/audit-logs'), tone: 'warning' },
+              { label: 'سلامة الخدمات', icon: Activity, onClick: () => navigate('/health-monitor'), tone: 'success' },
+              { label: 'محرك سير العمل', icon: GitMerge, onClick: () => navigate('/workflows'), tone: 'neutral' },
+            ]}
+          />
+        </Panel>
+      </PanelGrid>
     </div>
   );
 };

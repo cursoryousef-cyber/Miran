@@ -1,97 +1,140 @@
 import React from 'react';
-import { useAuth } from '../../context/AuthContext';
-import { Stethoscope, ClipboardCheck } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '../../api/client';
-import { Button } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import {
+  AlertTriangle, BookOpen, CalendarCheck, CheckSquare, ClipboardCheck,
+  PhoneCall, Stethoscope, UserCog, Users,
+} from 'lucide-react';
+import { apiClient } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
+import {
+  Badge, EmptyState, KpiCard, KpiGrid, ListRow, Panel, PanelGrid, PanelLink,
+  PanelSkeleton, PageHeader, QuickActions, SplitGrid, StatBar, colour, space,
+} from '../../components/ui';
 
+/**
+ * Trainer's day.
+ *
+ * A trainer supervises a handful of trainees, so this board is a worklist, not
+ * an analytics view: who is with me today, what have they got left, and what
+ * needs my signature.
+ */
 export const TrainerDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const { data: stats } = useQuery({
-    queryKey: ['trainer-operations-dashboard'],
+  const { data: dash, isLoading } = useQuery({
+    queryKey: ['tr-dashboard'],
     queryFn: async () => {
-      const res = await apiClient.get('/operations/trainer/dashboard');
-      return res.data?.data;
+      const res = await apiClient.get('/operations/trainer/dashboard').catch(() => ({ data: { data: null } }));
+      return res.data?.data ?? null;
     },
-    refetchInterval: 15000,
   });
 
+  const { data: interns } = useQuery({
+    queryKey: ['tr-interns'],
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/trainer/assigned-interns').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const { data: me } = useQuery({
+    queryKey: ['tr-me'],
+    queryFn: async () => {
+      const res = await apiClient.get('/trainers/me').catch(() => ({ data: null }));
+      return res.data?.data ?? res.data ?? null;
+    },
+  });
+
+  const trainees = interns ?? [];
+  const capacity = me?.maxTrainees ?? 0;
+  const occupied = trainees.length;
+
+  const pendingLogs = dash?.pendingCaseLogs ?? dash?.logbook?.pending ?? 0;
+  const pendingEvals = dash?.pendingEvaluations ?? 0;
+  const activeCalls = dash?.activeCalls ?? 0;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-      <div style={{
-        padding: '32px',
-        background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)',
-        borderRadius: '16px',
-        color: '#FFFFFF',
-        boxShadow: '0 4px 14px rgba(15, 118, 110, 0.25)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <Stethoscope size={20} color="#CCFBF1" />
-          <span style={{ fontSize: '12px', color: '#CCFBF1', fontWeight: 700, letterSpacing: '1px' }}>
-            TRAINER DASHBOARD
-          </span>
-        </div>
-        <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
-          مرحباً، {user?.nameAr} 👋
-        </h1>
-        <p style={{ fontSize: '14px', color: '#F0FDF4', marginTop: '8px', opacity: 0.9 }}>
-          {user?.activeOrganization?.nameAr} — إدارة المتدربين المسندين والتقييمات والـ Logbook
-        </p>
-        <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
-          <Button variant="contained" onClick={() => navigate('/org-members')}
-            style={{ background: '#FFFFFF', color: '#0F766E', fontWeight: 800, borderRadius: 12 }}>
-            متدربيّ المسندين
-          </Button>
-          <Button variant="outlined" onClick={() => navigate('/logbook')}
-            style={{ borderColor: '#CCFBF1', color: '#FFFFFF', fontWeight: 700, borderRadius: 12 }}>
-            مراجعة الـ Logbook
-          </Button>
-          <Button variant="outlined" onClick={() => navigate('/hospital?tab=calls')}
-            style={{ borderColor: '#CCFBF1', color: '#FFFFFF', fontWeight: 700, borderRadius: 12 }}>
-            🔔 النداءات
-          </Button>
-        </div>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'] }}>
+      <PageHeader
+        eyebrow="CLINICAL TRAINER"
+        icon={UserCog}
+        title={`يومك التدريبي`}
+        subtitle={`${user?.nameAr ?? ''} — ${me?.department?.nameAr ?? user?.activeOrganization?.nameAr ?? ''}`}
+      />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>المتدربون المسندون</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#0F766E' }}>{stats?.assignedTrainees ?? 0}</div>
-        </div>
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>تصحيحات حضور معلقة</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#F59E0B' }}>{stats?.pendingAttendance ?? 0}</div>
-        </div>
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>Logbook ينتظر اعتماد</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#EF4444' }}>{stats?.pendingLogbook ?? 0}</div>
-        </div>
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>الروتيشنات النشطة</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#0891B2' }}>{stats?.activeRotations ?? 0}</div>
-        </div>
-        <div className="glass-card" style={{ padding: '24px', cursor: 'pointer', border: (stats?.openCalls ?? 0) > 0 ? '1px solid #0F766E' : undefined }}
-          onClick={() => navigate('/hospital?tab=calls')}>
-          <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 600, marginBottom: '8px' }}>نداءات مفتوحة</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#7E22CE' }}>{stats?.openCalls ?? 0}</div>
-          <div style={{ fontSize: '11px', color: '#0F766E', marginTop: 4, fontWeight: 700 }}>← إدارة النداءات</div>
-        </div>
-      </div>
+      <KpiGrid min={200}>
+        <KpiCard label="طلابي اليوم" value={occupied} icon={Users} tone="primary"
+          hint={capacity ? `من سعة ${capacity}` : undefined} loading={isLoading} />
+        <KpiCard label="سجلات بانتظار الاعتماد" value={pendingLogs} icon={BookOpen} tone="warning"
+          onClick={() => navigate('/logbook')} />
+        <KpiCard label="تقييمات مطلوبة" value={pendingEvals} icon={ClipboardCheck} tone="violet"
+          onClick={() => navigate('/logbook')} />
+        <KpiCard label="نداءات نشطة" value={activeCalls} icon={PhoneCall}
+          tone={activeCalls > 0 ? 'danger' : 'success'} />
+      </KpiGrid>
 
-      {(stats?.pendingLogbook ?? 0) > 0 && (
-        <div className="glass-card" style={{
-          padding: '16px 20px', border: '1px solid #FEF3C7',
-          background: '#FEF3C7', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12
-        }}>
-          <ClipboardCheck size={18} color="#B45309" />
-          <span style={{ fontSize: 14, color: '#B45309', fontWeight: 700 }}>
-            {stats.pendingLogbook} سجل سريري ينتظر اعتمادك — انتقل إلى الـ Logbook لإتمام التقييمات واجتماعات منتصف الدورة.
-          </span>
-        </div>
-      )}
+      <SplitGrid>
+        <Panel
+          title="متدربيّ المسندون"
+          icon={Users}
+          action={<PanelLink label="عرض الكل" onClick={() => navigate('/org-members')} />}
+        >
+          {isLoading ? <PanelSkeleton rows={5} /> : trainees.length === 0 ? (
+            <EmptyState icon={Users} title="لا يوجد متدربون مسندون" hint="سيظهر هنا كل متدرب يُسند إليك." />
+          ) : (
+            trainees.slice(0, 8).map((t: any) => (
+              <ListRow
+                key={t.id}
+                title={t.person?.nameAr ?? t.nameAr ?? '—'}
+                meta={`${t.traineeNumber ?? ''} · ${t.level ?? ''}`}
+                trailing={<Badge label={t.applicationStatus ?? 'نشط'}
+                  tone={t.applicationStatus === 'active' ? 'success' : 'neutral'} />}
+                onClick={() => navigate('/org-members')}
+              />
+            ))
+          )}
+        </Panel>
+
+        <Panel title="سعتي التدريبية" icon={Stethoscope} tone="info">
+          <StatBar label="الإشغال الحالي" value={occupied} max={capacity || 1} />
+          <div style={{ marginTop: space.lg, paddingTop: space.lg, borderTop: `1px solid ${colour.border}` }}>
+            <QuickActions
+              items={[
+                { label: 'السجل السريري', icon: BookOpen, onClick: () => navigate('/logbook'), tone: 'primary' },
+                { label: 'سلسلة القبول', icon: CheckSquare, onClick: () => navigate('/acceptance-chain'), tone: 'info' },
+                { label: 'البلاغات', icon: AlertTriangle, onClick: () => navigate('/incidents'), tone: 'danger' },
+              ]}
+            />
+          </div>
+        </Panel>
+      </SplitGrid>
+
+      <PanelGrid>
+        <Panel title="الحضور" icon={CalendarCheck} tone="violet">
+          {dash?.attendanceToday ? (
+            <StatBar label="حضور اليوم" value={dash.attendanceToday.present ?? 0} max={dash.attendanceToday.total || 1} />
+          ) : (
+            <EmptyState icon={CalendarCheck} title="لا توجد بيانات حضور اليوم" />
+          )}
+        </Panel>
+
+        <Panel title="خطة التدريب" icon={ClipboardCheck} tone="primary">
+          <EmptyState icon={ClipboardCheck} title="خطط المتدربين"
+            hint="افتح ملف أي متدرب لعرض خطته التدريبية وتقدمه في الروتيشنات." />
+        </Panel>
+
+        <Panel title="آخر النشاطات" icon={BookOpen} tone="neutral">
+          {dash?.recentLogs?.length ? (
+            dash.recentLogs.slice(0, 5).map((l: any) => (
+              <ListRow key={l.id} title={l.diagnosis ?? 'سجل حالة'} meta={l.status} />
+            ))
+          ) : (
+            <EmptyState icon={BookOpen} title="لا توجد نشاطات حديثة" />
+          )}
+        </Panel>
+      </PanelGrid>
     </div>
   );
 };

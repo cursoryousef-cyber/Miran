@@ -4,12 +4,17 @@ import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { hasPermission } from '../utils/rbac';
 import {
-  Building2, Plus, Search, Filter, CheckCircle2, AlertCircle, Archive, Clock, RefreshCw, Edit, Trash2, Eye
+  Building2, Plus, Search, CheckCircle2, AlertCircle, Archive, Clock, RefreshCw, Edit, Trash2, Eye,
+  LayoutGrid, List, BedDouble, Users, Gauge,
 } from 'lucide-react';
 import {
   Button, TextField, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tabs, Tab,
-  TablePagination, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip
+  TablePagination, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip, Skeleton
 } from '@mui/material';
+import {
+  EmptyState, KpiCard, KpiGrid, Metric, MetricRow, PageHeader, StatBar, Surface,
+  colour, radius, space,
+} from '../components/ui';
 
 export const Organizations: React.FC = () => {
   const { user } = useAuth();
@@ -18,7 +23,8 @@ export const Organizations: React.FC = () => {
   const [search, setSearch] = useState('');
   const [tabValue, setTabValue] = useState('all');
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(12);
+  const [view, setView] = useState<'cards' | 'table'>('cards');
 
   // Modal States
   const [openCreate, setOpenCreate] = useState(false);
@@ -138,195 +144,239 @@ export const Organizations: React.FC = () => {
     }
   };
 
+  const rows = data?.data ?? [];
+  const summary = rows.reduce(
+    (acc: any, o: any) => {
+      const capacity = o.capacity || 0;
+      const accepted = o._count?.traineeProfiles || 0;
+      acc.capacity += capacity;
+      acc.accepted += accepted;
+      if (o.status === 'active') acc.active += 1;
+      if (capacity > 0 && accepted / capacity >= 0.8) acc.pressured += 1;
+      return acc;
+    },
+    { capacity: 0, accepted: 0, active: 0, pressured: 0 },
+  );
+  const occupancyPct = summary.capacity > 0 ? Math.round((summary.accepted / summary.capacity) * 100) : 0;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Top Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-            إدارة الجهات والتجمعات الصحية
-          </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-            CRUD كامل موصل بالـ Backend بضوابط RBAC و Pagination حقيقي
-          </p>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'] }}>
+      <PageHeader
+        eyebrow="ORGANISATION DIRECTORY"
+        icon={Building2}
+        title="الجهات والتجمعات الصحية"
+        subtitle="استعراض الجهات وسعتها ونسب إشغالها قبل الدخول إلى التفاصيل"
+        actions={
+          <>
+            <Tooltip title="تحديث البيانات">
+              <IconButton onClick={() => refetch()} sx={{ border: `1px solid ${colour.border}`, borderRadius: 2 }}>
+                <RefreshCw size={17} color={colour.primary} />
+              </IconButton>
+            </Tooltip>
+            <div style={{ display: 'inline-flex', border: `1px solid ${colour.border}`, borderRadius: 10, overflow: 'hidden' }}>
+              {([['cards', 'بطاقات', LayoutGrid], ['table', 'جدول', List]] as const).map(([mode, label, Icon]) => (
+                <button
+                  key={mode}
+                  onClick={() => setView(mode)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', border: 'none',
+                    cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5,
+                    background: view === mode ? colour.primarySoft : colour.surface,
+                    color: view === mode ? colour.primary : colour.muted,
+                  }}
+                >
+                  <Icon size={15} /> {label}
+                </button>
+              ))}
+            </div>
+            {canCreate && (
+              <Button variant="contained" startIcon={<Plus size={17} />}
+                onClick={() => { resetForm(); setOpenCreate(true); }}>
+                إضافة جهة
+              </Button>
+            )}
+          </>
+        }
+      />
 
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <Tooltip title="تحديث البيانات">
-            <IconButton onClick={() => refetch()} style={{ color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
-              <RefreshCw size={18} />
-            </IconButton>
-          </Tooltip>
+      {/* Summary before detail — the page opens on numbers, not a grid of rows. */}
+      <KpiGrid>
+        <KpiCard label="الجهات المعروضة" value={data?.meta?.total ?? rows.length} icon={Building2} tone="primary" loading={isLoading} />
+        <KpiCard label="جهات نشطة" value={summary.active} icon={CheckCircle2} tone="success" loading={isLoading} />
+        <KpiCard label="السعة الإجمالية" value={summary.capacity} icon={BedDouble} tone="info" loading={isLoading} />
+        <KpiCard label="المتدربون" value={summary.accepted} icon={Users} tone="violet" loading={isLoading} />
+        <KpiCard label="نسبة الإشغال" value={`${occupancyPct}%`} icon={Gauge}
+          tone={occupancyPct >= 90 ? 'danger' : occupancyPct >= 70 ? 'warning' : 'success'} loading={isLoading} />
+        <KpiCard label="جهات تحت ضغط" value={summary.pressured} icon={AlertCircle}
+          tone={summary.pressured ? 'warning' : 'success'} hint="إشغال 80% فأكثر" loading={isLoading} />
+      </KpiGrid>
 
-          {canCreate && (
-            <Button
-              variant="contained"
-              startIcon={<Plus size={18} />}
-              onClick={() => { resetForm(); setOpenCreate(true); }}
-              style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', fontWeight: 700 }}
-            >
-              إضافة جهة جديدة
-            </Button>
-          )}
-        </div>
+      <div className="glass-card" style={{ padding: `${space.lg}px ${space['2xl']}px`, display: 'flex', gap: space.lg, alignItems: 'center', flexWrap: 'wrap' }}>
+        <TextField
+          placeholder="بحث بالاسم أو الرمز أو المدينة..."
+          size="small"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ minWidth: 280, flex: '0 1 320px' }}
+          InputProps={{ startAdornment: <Search size={17} color={colour.faint} style={{ marginLeft: 8 }} /> }}
+        />
+        <Tabs value={tabValue} onChange={(_, val) => setTabValue(val)} variant="scrollable" scrollButtons="auto"
+          sx={{ minHeight: 40, '& .MuiTab-root': { minHeight: 40, fontSize: 12.5, fontWeight: 700 } }}>
+          <Tab label="الكل" value="all" />
+          <Tab label="نشط" value="active" />
+          <Tab label="مسودة" value="draft" />
+          <Tab label="معلق" value="suspended" />
+          <Tab label="مؤرشف" value="archived" />
+        </Tabs>
       </div>
 
-      {/* Filter Bar & Lifecycle Tabs */}
-      <div className="glass-card" style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <TextField
-            placeholder="البحث باسم الجهة أو الرمز أو المدينة..."
-            variant="outlined"
-            size="small"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ width: '320px' }}
-            InputProps={{
-              startAdornment: <Search size={18} color="#94a3b8" style={{ marginLeft: '8px' }} />,
-            }}
-          />
-
-          <Tabs
-            value={tabValue}
-            onChange={(_, val) => setTabValue(val)}
-            textColor="primary"
-            indicatorColor="primary"
-            style={{ marginRight: 'auto' }}
-          >
-            <Tab label="جميع الجهات" value="all" />
-            <Tab label="نشط (Active)" value="active" />
-            <Tab label="مسودة (Draft)" value="draft" />
-            <Tab label="معلق (Suspended)" value="suspended" />
-            <Tab label="مؤرشف (Archived)" value="archived" />
-          </Tabs>
+      {isLoading ? (
+        <div style={{ display: 'grid', gap: space.xl, gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))' }}>
+          {[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} variant="rounded" height={190} />)}
         </div>
-      </div>
+      ) : rows.length === 0 ? (
+        <div className="glass-card" style={{ padding: 0 }}>
+          <EmptyState icon={Building2} title="لا توجد جهات مطابقة" hint="جرّب تغيير كلمة البحث أو الحالة." />
+        </div>
+      ) : view === 'cards' ? (
+        <div style={{ display: 'grid', gap: space.xl, gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', alignItems: 'stretch' }}>
+          {rows.map((org: any) => {
+            const capacity = org.capacity || 0;
+            const accepted = org._count?.traineeProfiles || 0;
+            const remaining = Math.max(0, capacity - accepted);
+            return (
+              <Surface key={org.id} padding={space.xl}>
+                <div style={{ display: 'flex', gap: space.md, alignItems: 'flex-start', marginBottom: space.lg }}>
+                  <div style={{ width: 40, height: 40, borderRadius: radius.md, background: colour.primarySoft, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                    <Building2 size={19} color={colour.primary} />
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 800, color: colour.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {org.nameAr}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: colour.faint, marginTop: 2 }}>
+                      {org.code} · {org.cityAr || '—'}
+                    </div>
+                  </div>
+                  {getStatusChip(org.status)}
+                </div>
 
-      {/* Organizations Table */}
-      <TableContainer component={Paper} className="glass-card">
-        <Table>
-          <TableHead>
-            <TableRow style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>اسم المستشفى / الجهة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الرمز (Code)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المدينة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>السعة الإجمالية</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المقبولون (Accepted)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المقاعد المتبقية (Remaining)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>نسبة الإشغال (Occupancy %)</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>المدربون / الأقسام</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700 }}>الحالة</TableCell>
-              <TableCell style={{ color: '#94a3b8', fontWeight: 700, textAlign: 'center' }}>العمليات (RBAC)</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {isLoading ? (
-              <TableRow><TableCell colSpan={10} style={{ textAlign: 'center', color: '#cbd5e1' }}>جاري التحميل من Production Backend...</TableCell></TableRow>
-            ) : data?.data?.length === 0 ? (
-              <TableRow><TableCell colSpan={10} style={{ textAlign: 'center', color: '#94a3b8' }}>لا توجد جهات مطابقة لشروط البحث.</TableCell></TableRow>
-            ) : (
-              data?.data?.map((org: any) => {
+                <StatBar label="الإشغال" value={accepted} max={capacity || 1} />
+
+                <MetricRow min={84}>
+                  <Metric label="السعة" value={capacity} tone="info" />
+                  <Metric label="مقبولون" value={accepted} tone="success" />
+                  <Metric label="متاح" value={remaining} tone={remaining === 0 ? 'danger' : 'neutral'} />
+                </MetricRow>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, marginTop: 'auto', paddingTop: space.lg }}>
+                  <span style={{ fontSize: 11.5, color: colour.muted }}>
+                    {org._count?.trainerProfiles || 0} مدرب · {org._count?.departments || 0} قسم
+                  </span>
+                  <div style={{ display: 'flex', gap: 2 }}>
+                    <Tooltip title="عرض التفاصيل">
+                      <IconButton size="small" onClick={() => setOpenDetails(org)} sx={{ color: colour.info }}>
+                        <Eye size={16} />
+                      </IconButton>
+                    </Tooltip>
+                    {canUpdate && (
+                      <Tooltip title="تعديل">
+                        <IconButton size="small" sx={{ color: colour.warning }}
+                          onClick={() => {
+                            setOpenEdit(org);
+                            setFormData({
+                              code: org.code, nameAr: org.nameAr, nameEn: org.nameEn || '',
+                              organizationTypeId: org.organizationTypeId || '',
+                              cityAr: org.cityAr || 'عرعر', regionAr: org.regionAr || 'الحدود الشمالية',
+                              status: org.status || 'active',
+                            });
+                          }}>
+                          <Edit size={16} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {canDelete && (
+                      <Tooltip title="حذف">
+                        <IconButton size="small" onClick={() => setDeleteId(org.id)} sx={{ color: colour.danger }}>
+                          <Trash2 size={16} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </div>
+                </div>
+              </Surface>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="glass-card table-scroll">
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ backgroundColor: colour.canvas }}>
+                {['الجهة', 'الرمز', 'المدينة', 'السعة', 'مقبولون', 'متاح', 'الإشغال', 'الحالة', ''].map((h) => (
+                  <TableCell key={h} sx={{ color: colour.muted, fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap' }}>{h}</TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {rows.map((org: any) => {
                 const capacity = org.capacity || 0;
                 const accepted = org._count?.traineeProfiles || 0;
                 const remaining = Math.max(0, capacity - accepted);
                 const occupancy = capacity > 0 ? Math.min(100, Math.round((accepted / capacity) * 100)) : 0;
-
                 return (
                   <TableRow key={org.id} hover>
-                    <TableCell style={{ fontWeight: 700, color: '#f8fafc' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '8px',
-                          backgroundColor: 'rgba(5, 150, 105, 0.15)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}>
-                          <Building2 size={16} color="#10b981" />
+                    <TableCell sx={{ fontWeight: 700, color: colour.text, whiteSpace: 'nowrap' }}>{org.nameAr}</TableCell>
+                    <TableCell sx={{ fontFamily: 'monospace', color: colour.primary, fontWeight: 700 }}>{org.code}</TableCell>
+                    <TableCell sx={{ color: colour.muted }}>{org.cityAr || '—'}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colour.text }}>{capacity}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colour.success }}>{accepted}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: remaining === 0 ? colour.danger : colour.muted }}>{remaining}</TableCell>
+                    <TableCell sx={{ minWidth: 130 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ flex: 1, height: 6, background: colour.subtle, borderRadius: 4, overflow: 'hidden' }}>
+                          <div style={{ width: `${occupancy}%`, height: '100%', background: occupancy >= 90 ? colour.danger : occupancy >= 70 ? colour.warning : colour.success }} />
                         </div>
-                        <div>
-                          <div>{org.nameAr}</div>
-                          <div style={{ fontSize: '11px', color: '#64748b' }}>{org.nameEn}</div>
-                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: colour.text }}>{occupancy}%</span>
                       </div>
-                    </TableCell>
-                    <TableCell style={{ fontFamily: 'monospace', fontWeight: 700, color: '#06b6d4' }}>{org.code}</TableCell>
-                    <TableCell style={{ color: '#cbd5e1' }}>{org.cityAr || 'عرعر'}</TableCell>
-                    <TableCell style={{ fontWeight: 700, color: '#38bdf8' }}>{capacity} مقعد</TableCell>
-                    <TableCell style={{ fontWeight: 700, color: '#10b981' }}>{accepted} متدرب</TableCell>
-                    <TableCell style={{ fontWeight: 700, color: remaining < 10 ? '#ef4444' : '#f59e0b' }}>{remaining} مقعد متاح</TableCell>
-                    <TableCell>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ flex: 1, height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-                          <div style={{ width: `${occupancy}%`, height: '100%', background: occupancy > 80 ? '#ef4444' : '#10b981', borderRadius: '4px' }} />
-                        </div>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#f8fafc' }}>{occupancy}%</span>
-                      </div>
-                    </TableCell>
-                    <TableCell style={{ color: '#94a3b8', fontSize: '13px' }}>
-                      {org._count?.trainerProfiles || 0} مدربين / {org._count?.departments || 0} أقسام
                     </TableCell>
                     <TableCell>{getStatusChip(org.status)}</TableCell>
-                  <TableCell style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
-                      <Tooltip title="عرض التفاصيل">
-                        <IconButton size="small" onClick={() => setOpenDetails(org)} style={{ color: '#3b82f6' }}>
-                          <Eye size={16} />
-                        </IconButton>
-                      </Tooltip>
-
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      <IconButton size="small" onClick={() => setOpenDetails(org)} sx={{ color: colour.info }}><Eye size={15} /></IconButton>
                       {canUpdate && (
-                        <Tooltip title="تعديل الجهة">
-                          <IconButton
-                            size="small"
-                            onClick={() => {
-                              setOpenEdit(org);
-                              setFormData({
-                                code: org.code,
-                                nameAr: org.nameAr,
-                                nameEn: org.nameEn || '',
-                                organizationTypeId: org.organizationTypeId || '',
-                                cityAr: org.cityAr || 'عرعر',
-                                regionAr: org.regionAr || 'الحدود الشمالية',
-                                status: org.status || 'active',
-                              });
-                            }}
-                            style={{ color: '#f59e0b' }}
-                          >
-                            <Edit size={16} />
-                          </IconButton>
-                        </Tooltip>
+                        <IconButton size="small" sx={{ color: colour.warning }}
+                          onClick={() => {
+                            setOpenEdit(org);
+                            setFormData({
+                              code: org.code, nameAr: org.nameAr, nameEn: org.nameEn || '',
+                              organizationTypeId: org.organizationTypeId || '',
+                              cityAr: org.cityAr || 'عرعر', regionAr: org.regionAr || 'الحدود الشمالية',
+                              status: org.status || 'active',
+                            });
+                          }}><Edit size={15} /></IconButton>
                       )}
-
                       {canDelete && (
-                        <Tooltip title="حذف الجهة">
-                          <IconButton size="small" onClick={() => setDeleteId(org.id)} style={{ color: '#ef4444' }}>
-                            <Trash2 size={16} />
-                          </IconButton>
-                        </Tooltip>
+                        <IconButton size="small" onClick={() => setDeleteId(org.id)} sx={{ color: colour.danger }}><Trash2 size={15} /></IconButton>
                       )}
-                    </div>
-                  </TableCell>
-                </TableRow>
+                    </TableCell>
+                  </TableRow>
                 );
-              })
-            )}
-          </TableBody>
-        </Table>
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
-        <TablePagination
-          component="div"
-          count={data?.meta?.total || 0}
-          page={page}
-          onPageChange={(_, newPage) => setPage(newPage)}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
-          rowsPerPageOptions={[5, 10, 25, 50]}
-          labelRowsPerPage="عدد الصفوف:"
-        />
-      </TableContainer>
+      <TablePagination
+        component="div"
+        count={data?.meta?.total || 0}
+        page={page}
+        onPageChange={(_, newPage) => setPage(newPage)}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+        rowsPerPageOptions={[6, 12, 24, 48]}
+        labelRowsPerPage="عدد العناصر:"
+      />
 
       {/* Dialog: Create Org */}
       <Dialog open={openCreate} onClose={() => setOpenCreate(false)} maxWidth="sm" fullWidth>

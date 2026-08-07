@@ -1,221 +1,196 @@
 import React from 'react';
-import { useAuth } from '../../context/AuthContext';
-import { BookOpen, Clock, CheckCircle2, QrCode, Calendar, ClipboardList, Radio, MapPin } from 'lucide-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '../../api/client';
-import { Button, Chip, LinearProgress } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { CircularProgress } from '@mui/material';
+import {
+  BellRing, BookOpen, CalendarCheck, CheckCircle2, ClipboardCheck, FileSignature,
+  GraduationCap, MapPin, Route, Target,
+} from 'lucide-react';
+import { apiClient } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
+import {
+  Badge, EmptyState, KpiCard, KpiGrid, ListRow, Metric, MetricRow, Panel,
+  PanelGrid, PanelLink, PageHeader, QuickActions, SplitGrid, StatBar,
+  colour, font, radius, space, toneColour,
+} from '../../components/ui';
 
-const CALL_TYPE_LABELS: Record<string, { label: string; icon: string; accent: string }> = {
-  urgent:           { label: 'حالة عاجلة',            icon: '🚨', accent: '#DC2626' },
-  interesting_case: { label: 'حالة مثيرة للاهتمام',  icon: '🔬', accent: '#B45309' },
-  skill_training:   { label: 'تدريب على مهارة',      icon: '🩺', accent: '#0891B2' },
-  teaching_round:   { label: 'راوند تعليمي',         icon: '📚', accent: '#7E22CE' },
-  general:          { label: 'عام',                   icon: '📢', accent: '#0F766E' },
-};
-
-const STATE_LABELS: Record<string, string> = {
-  notified: 'مُبلَّغ', acknowledged: 'أكّد الاستلام',
-  self_arrived: 'في الطريق', confirmed_arrived: 'وصل ✓', no_show: 'لم يحضر',
-};
-
+/**
+ * The trainee's own journey.
+ *
+ * This is the only board built around a single person, so it leads with where
+ * they are in the plan and what is left, using the timeline as the source for
+ * every progress figure.
+ */
 export const TraineeDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const { data: summary } = useQuery({
-    queryKey: ['trainee-summary'],
+  const { data: timeline, isLoading } = useQuery({
+    queryKey: ['te-timeline'],
     queryFn: async () => {
-      const res = await apiClient.get('/operations/trainee/dashboard');
-      return res.data?.data;
-    },
-    refetchInterval: 15000,
-  });
-
-  const { data: profile } = useQuery({
-    queryKey: ['trainee-profile'],
-    queryFn: async () => {
-      const res = await apiClient.get('/trainees/me').catch(() => ({ data: null }));
-      return res.data;
-    },
-  });
-
-  const { data: pendingEvals } = useQuery({
-    queryKey: ['my-pending-evals-dashboard'],
-    queryFn: async () => {
-      const res = await apiClient.get('/operations/evaluations/my-pending').catch(() => ({ data: { data: null } }));
+      const res = await apiClient.get('/timeline/me').catch(() => ({ data: { data: null } }));
       return res.data?.data ?? null;
     },
-    refetchInterval: 30000,
   });
 
-  const qc = useQueryClient();
-  const { data: incomingData, refetch: refetchCalls } = useQuery({
-    queryKey: ['my-incoming-calls-dashboard'],
+  const { data: dash } = useQuery({
+    queryKey: ['te-dashboard'],
     queryFn: async () => {
-      const res = await apiClient.get('/calls/my-incoming').catch(() => ({ data: { data: [] } }));
-      return res.data?.data ?? [];
+      const res = await apiClient.get('/operations/trainee/dashboard').catch(() => ({ data: { data: null } }));
+      return res.data?.data ?? null;
     },
-    refetchInterval: 10000,
   });
 
-  const activeCall = (incomingData ?? []).find((p: any) => p.call?.status === 'active');
+  if (isLoading) {
+    return <div style={{ display: 'grid', placeItems: 'center', padding: 80 }}><CircularProgress sx={{ color: colour.primary }} /></div>;
+  }
 
-  const handleCallAction = async (callId: string, action: 'ack' | 'on-way' | 'arrived') => {
-    try {
-      await apiClient.post(`/calls/${callId}/${action}`, {});
-      refetchCalls();
-    } catch (e: any) {
-      alert(e?.response?.data?.message ?? 'خطأ');
-    }
-  };
+  const current = timeline?.current;
+  const readiness = timeline?.readiness;
+  const rotations = timeline?.rotations ?? [];
+  const completion = timeline?.completionPercentage ?? 0;
 
-  const pendingDeptCount = pendingEvals?.pendingDepartmentEvals?.length ?? 0;
+  const statusTone = (s?: string) =>
+    s === 'completed' ? 'success' : s === 'active' ? 'primary'
+      : s === 'cancelled' || s === 'skipped' ? 'danger' : 'neutral';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-      <div style={{
-        padding: '32px',
-        background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)',
-        borderRadius: '16px',
-        color: '#FFFFFF',
-        boxShadow: '0 4px 14px rgba(15, 118, 110, 0.25)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <BookOpen size={20} color="#CCFBF1" />
-          <span style={{ fontSize: '12px', color: '#CCFBF1', fontWeight: 700, letterSpacing: '1px' }}>
-            TRAINEE DASHBOARD — طبيب امتياز
-          </span>
-        </div>
-        <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
-          مرحباً، {user?.nameAr} 👋
-        </h1>
-        <p style={{ fontSize: '14px', color: '#F0FDF4', marginTop: '8px', opacity: 0.9 }}>
-          {user?.activeOrganization?.nameAr} — متابعة الروتيشن والمهام والسجل السريري
-        </p>
-        <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
-          <Button variant="contained" onClick={() => navigate('/logbook')}
-            style={{ background: '#FFFFFF', color: '#0F766E', fontWeight: 800, borderRadius: 12 }}>
-            السجل السريري (Logbook)
-          </Button>
-        </div>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'] }}>
+      <PageHeader
+        eyebrow="MY TRAINING JOURNEY"
+        icon={GraduationCap}
+        title={`مرحباً، ${user?.nameAr ?? ''}`}
+        subtitle={
+          timeline?.program?.nameAr
+            ? `${timeline.program.nameAr}${timeline?.trainingPlanVersion ? ` — ${timeline.trainingPlanVersion.label ?? ''}` : ''}`
+            : 'برنامج التدريب'
+        }
+      />
 
-      {activeCall && (() => {
-        const meta = CALL_TYPE_LABELS[activeCall.call?.callType] ?? CALL_TYPE_LABELS.general;
-        return (
-          <div className="glass-card" style={{
-            padding: '20px 24px',
-            border: `2px solid ${meta.accent}`,
-            backgroundColor: '#FFFFFF',
-            borderRadius: 16,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <Radio size={20} color={meta.accent} style={{ flexShrink: 0 }} />
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>
-                {meta.icon} {activeCall.call?.customTitle ?? meta.label}
-              </span>
-              <Chip label="نداء نشط" size="small" sx={{ background: '#FEF3C7', color: '#B45309', fontWeight: 700, ml: 'auto' }} />
-            </div>
-            {activeCall.call?.note && (
-              <p style={{ margin: '0 0 8px', fontSize: 13, color: '#475569' }}>{activeCall.call.note}</p>
-            )}
-            {activeCall.call?.location && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#64748B', marginBottom: 12 }}>
-                <MapPin size={12} color="#0F766E" /> {activeCall.call.location}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              {activeCall.state === 'notified' && (
-                <Button variant="contained" size="small"
-                  onClick={() => handleCallAction(activeCall.call.id, 'ack')}
-                  style={{ background: '#0F766E', fontWeight: 700, borderRadius: 10 }}>✅ تأكيد الاستلام</Button>
-              )}
-              {activeCall.state === 'acknowledged' && (
-                <Button variant="contained" size="small"
-                  onClick={() => handleCallAction(activeCall.call.id, 'on-way')}
-                  style={{ background: '#0891B2', fontWeight: 700, borderRadius: 10 }}>🚶 أنا في الطريق</Button>
-              )}
-              {activeCall.state === 'self_arrived' && (
-                <Button variant="contained" size="small"
-                  onClick={() => handleCallAction(activeCall.call.id, 'arrived')}
-                  style={{ background: '#10B981', fontWeight: 700, borderRadius: 10 }}>📍 وصلت</Button>
-              )}
-              {activeCall.state === 'confirmed_arrived' && (
-                <Chip label="✓ تم تأكيد وصولك من المدرب" sx={{ background: '#CCFBF1', color: '#0F766E', fontWeight: 700 }} />
-              )}
-              <span style={{ fontSize: 12, color: '#64748B', marginRight: 'auto' }}>
-                حالتك: <strong style={{ color: meta.accent }}>{STATE_LABELS[activeCall.state] ?? activeCall.state}</strong>
-              </span>
-            </div>
-          </div>
-        );
-      })()}
-
-      {pendingDeptCount > 0 && (
-        <div className="glass-card" style={{
-          padding: '16px 20px',
-          border: '1px solid #FEF3C7',
-          background: '#FEF3C7',
-          borderRadius: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+      {/* Progress hero — the single most important thing for a trainee. */}
+      <div className="glass-card" style={{ padding: space['2xl'] }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: space['2xl'], flexWrap: 'wrap',
+          justifyContent: 'space-between',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <ClipboardList size={18} color="#B45309" />
-            <span style={{ fontSize: 14, color: '#B45309', fontWeight: 700 }}>
-              لديك {pendingDeptCount} قسم بحاجة لتقييمك — تقييم القسم شرط للقفل المتبادل وإتمام التخرج.
-            </span>
-          </div>
-          <Button size="small" variant="outlined"
-            onClick={() => navigate('/logbook')}
-            style={{ borderColor: '#B45309', color: '#B45309', fontWeight: 700, whiteSpace: 'nowrap', borderRadius: 8 }}>
-            تقييم الآن
-          </Button>
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>أيام الروتيشن المتبقية</span>
-            <Clock size={20} color="#0F766E" />
-          </div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#0F766E', marginTop: '8px' }}>{summary?.rotation ? Math.max(0, Math.ceil((new Date(summary.rotation.endDate).getTime() - Date.now()) / 86400000)) : '—'} يوماً</div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>القسم: {summary?.rotation?.department?.nameAr || '—'}</div>
-          <LinearProgress variant="determinate" value={summary?.competencies?.percentage || 0} style={{ borderRadius: '6px', height: '8px', backgroundColor: '#E2E8F0', marginTop: '12px' }} />
-        </div>
-
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>نسبة الحضور</span>
-            <Calendar size={20} color="#0891B2" />
-          </div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#0891B2', marginTop: '8px' }}>{summary?.attendanceRate ?? 0}%</div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>نسبة الحضور الشهرية</div>
-        </div>
-
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>إنجاز الأهداف</span>
-            <CheckCircle2 size={20} color="#7E22CE" />
-          </div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: '#7E22CE', marginTop: '8px' }}>{summary?.competencies?.percentage ?? 0}%</div>
-        </div>
-      </div>
-
-      <div className="glass-card" style={{ padding: '24px' }}>
-        <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', marginBottom: '16px' }}>🪪 البطاقة الرقمية</h3>
-        <div style={{ padding: '20px', background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)', borderRadius: '16px', color: '#FFFFFF' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFFFFF' }}>{profile?.person?.nameAr || user?.nameAr}</div>
-              <div style={{ fontSize: '13px', color: '#CCFBF1', marginTop: '4px', fontWeight: 700 }}>رقم المتدرب: {profile?.traineeNumber || '—'}</div>
-              <div style={{ fontSize: '12px', color: '#F0FDF4', marginTop: '2px', opacity: 0.9 }}>المستوى: {profile?.level === 'intern' ? 'طبيب امتياز' : profile?.level || '—'}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space.xl, minWidth: 0 }}>
+            <div style={{ position: 'relative', width: 92, height: 92, flexShrink: 0 }}>
+              <CircularProgress variant="determinate" value={100} size={92} thickness={4}
+                sx={{ color: colour.subtle, position: 'absolute' }} />
+              <CircularProgress variant="determinate" value={completion} size={92} thickness={4}
+                sx={{ color: colour.primary, position: 'absolute' }} />
+              <div style={{
+                position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
+                fontSize: 20, fontWeight: 800, color: colour.text,
+              }}>
+                {completion}%
+              </div>
             </div>
-            <QrCode size={52} color="#FFFFFF" />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: font.label, color: colour.muted, fontWeight: 600 }}>نسبة الإنجاز الكلية</div>
+              <div style={{ fontSize: font.sectionTitle, fontWeight: 800, color: colour.text, marginTop: 2 }}>
+                {current ? current.departmentNameAr : 'لا يوجد روتيشن نشط'}
+              </div>
+              {current && (
+                <div style={{ fontSize: font.caption, color: colour.muted, marginTop: 4 }}>
+                  المدرب: {current.trainerNameAr ?? '—'} · متبقٍ {current.remainingDays} يوم
+                </div>
+              )}
+            </div>
           </div>
+          <MetricRow min={104}>
+            <Metric label="مكتملة" value={timeline?.rotationSummary?.completed ?? 0} tone="success" />
+            <Metric label="متبقية" value={timeline?.rotationSummary?.remaining ?? 0} tone="info" />
+            <Metric label="تقدم التخرج" value={`${timeline?.graduationProgress ?? 0}%`} tone="primary" />
+          </MetricRow>
         </div>
       </div>
+
+      <KpiGrid min={200}>
+        <KpiCard label="الحضور" value={`${readiness?.attendance?.rate ?? 0}%`} icon={CalendarCheck} tone="violet"
+          hint={readiness?.attendance ? `${readiness.attendance.missingDays} يوم غياب` : undefined} />
+        <KpiCard label="السجل السريري" value={dash?.logbook?.approved ?? 0} icon={BookOpen} tone="primary"
+          hint={dash?.logbook ? `${dash.logbook.pending} بانتظار الاعتماد` : undefined}
+          onClick={() => navigate('/logbook')} />
+        <KpiCard label="تقييمات متبقية" value={readiness?.remaining?.evaluations ?? 0} icon={ClipboardCheck} tone="warning" />
+        <KpiCard label="إجراءات متبقية" value={readiness?.remaining?.procedures ?? 0} icon={Target} tone="info" />
+      </KpiGrid>
+
+      <SplitGrid>
+        <Panel title="جدولي التدريبي" icon={Route}
+          action={<PanelLink label="السجل السريري" onClick={() => navigate('/logbook')} />}>
+          {rotations.length === 0 ? (
+            <EmptyState icon={Route} title="لم يبدأ جدولك بعد" hint="سيظهر جدول الروتيشنات فور تفعيل تدريبك." />
+          ) : (
+            rotations.map((r: any) => {
+              const tone = statusTone(r.status);
+              const c = toneColour(tone as any);
+              return (
+                <ListRow
+                  key={r.rotationId}
+                  leading={
+                    <div style={{
+                      width: 28, height: 28, borderRadius: radius.sm, background: c.bg, color: c.fg,
+                      display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0,
+                    }}>
+                      {r.sequenceOrder ?? '•'}
+                    </div>
+                  }
+                  title={r.departmentNameAr}
+                  meta={`${String(r.startDate).slice(0, 10)} → ${String(r.endDate).slice(0, 10)} · ${r.trainerNameAr ?? ''}`}
+                  trailing={<Badge label={`${r.progressPercentage}%`} tone={tone as any} />}
+                />
+              );
+            })
+          )}
+        </Panel>
+
+        <Panel title="ما تبقى للتخرج" icon={CheckCircle2} tone={readiness?.readyForGraduation ? 'success' : 'warning'}>
+          {readiness?.readyForGraduation ? (
+            <EmptyState icon={CheckCircle2} title="استوفيت جميع المتطلبات" hint="ملفك جاهز لاعتماد التخرج." />
+          ) : readiness?.remainingRequirements?.length ? (
+            readiness.remainingRequirements.map((req: string, i: number) => (
+              <ListRow key={i} title={req} />
+            ))
+          ) : (
+            <EmptyState icon={Target} title="لا توجد متطلبات مسجلة" />
+          )}
+        </Panel>
+      </SplitGrid>
+
+      <PanelGrid>
+        <Panel title="مهامي" icon={ClipboardCheck} tone="warning">
+          {dash?.tasks?.length ? (
+            dash.tasks.slice(0, 5).map((t: any) => (
+              <ListRow key={t.id} title={t.titleAr}
+                meta={t.dueDate ? `الاستحقاق: ${String(t.dueDate).slice(0, 10)}` : undefined} />
+            ))
+          ) : (
+            <EmptyState icon={ClipboardCheck} title="لا توجد مهام معلقة" />
+          )}
+        </Panel>
+
+        <Panel title="التنبيهات" icon={BellRing} tone="info">
+          {dash?.notifications?.length ? (
+            dash.notifications.slice(0, 5).map((n: any) => (
+              <ListRow key={n.id} title={n.titleAr}
+                meta={new Date(n.createdAt).toLocaleDateString('ar-SA')} />
+            ))
+          ) : (
+            <EmptyState icon={BellRing} title="لا توجد تنبيهات" />
+          )}
+        </Panel>
+
+        <Panel title="روابط سريعة" icon={MapPin} tone="neutral">
+          <QuickActions
+            items={[
+              { label: 'السجل السريري', icon: BookOpen, onClick: () => navigate('/logbook'), tone: 'primary' },
+              { label: 'الإقرارات', icon: FileSignature, onClick: () => navigate('/declarations'), tone: 'info' },
+              { label: 'البلاغات', icon: BellRing, onClick: () => navigate('/incidents'), tone: 'danger' },
+            ]}
+          />
+        </Panel>
+      </PanelGrid>
     </div>
   );
 };
