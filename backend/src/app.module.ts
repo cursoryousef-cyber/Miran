@@ -34,6 +34,7 @@ import { TraineeDocumentsModule } from './modules/trainee-documents/trainee-docu
 import { OperationsModule } from './modules/operations/operations.module';
 import { IncidentsModule } from './modules/incidents/incidents.module';
 import { OrganizationAssignmentModule } from './modules/organization-assignments/organization-assignment.module';
+import { ProgramsModule } from './modules/programs/programs.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { OrganizationAssignmentModule } from './modules/organization-assignments
     FeatureFlagsModule,
     LicensesModule,
     OrganizationAssignmentModule,
+    ProgramsModule,
     SettingsModule,
     DeclarationsModule,
 

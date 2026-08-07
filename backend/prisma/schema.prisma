@@ -642,17 +642,21 @@ model Department {
   @@map("departments")
 }
 
+/// كتالوج البرامج التدريبية — مُدار مركزياً على مستوى الوطن
+/// organizationId = NULL يعني برنامج مركزي في الكتالوج الوطني.
+/// القيمة غير الفارغة محفوظة للبرامج القديمة المرتبطة بجهة (توافقية).
 model Program {
   id                 String    @id @default(uuid()) @db.Uuid
-  organizationId     String    @map("organization_id") @db.Uuid
+  organizationId     String?   @map("organization_id") @db.Uuid
   nameAr             String    @map("name_ar") @db.VarChar(300)
   nameEn             String?   @map("name_en") @db.VarChar(300)
-  code               String?   @db.VarChar(50)
+  code               String    @unique @db.VarChar(50)
   programType        String    @map("program_type") @db.VarChar(50)
   durationMonths     Int       @map("duration_months")
   description        String?   @db.Text
   requirements       Json      @default("{}") @db.JsonB
   departmentSequence Json      @default("[]") @map("department_sequence") @db.JsonB
+  sortOrder          Int       @default(0) @map("sort_order")
   isActive           Boolean   @default(true) @map("is_active")
   createdById        String?   @map("created_by") @db.Uuid
   updatedById        String?   @map("updated_by") @db.Uuid
@@ -661,7 +665,7 @@ model Program {
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz
   deletedAt          DateTime? @map("deleted_at") @db.Timestamptz
 
-  organization    Organization     @relation(fields: [organizationId], references: [id])
+  organization    Organization?    @relation(fields: [organizationId], references: [id])
   trainingPlans   TrainingPlan[]
   traineeProfiles TraineeProfile[]
   rotations       Rotation[]
