@@ -117,6 +117,10 @@ export const App: React.FC = () => {
                       bookmarks land on the right section instead of 404-ing. */}
                   <Route path="hospital-capacity" element={<Navigate to="/hospital?tab=capacity" replace />} />
                   <Route path="hospital-review" element={<Navigate to="/hospital?tab=requests" replace />} />
+
+                  {/* Calls → Hospital Workspace calls tab */}
+                  <Route path="calls" element={<Navigate to="/hospital?tab=calls" replace />} />
+
                   <Route path="acceptance-chain" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, 'training_supervisor', ...PLATFORM]}><AcceptanceChain /></RoleRoute>} />
                   <Route path="incidents" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...CLUSTER, TRAINEE[0], ...PLATFORM]}><Incidents /></RoleRoute>} />
                   <Route path="graduation" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, 'training_supervisor', 'university_administrator', ...PLATFORM]}><Graduation /></RoleRoute>} />
@@ -125,6 +129,7 @@ export const App: React.FC = () => {
                   <Route path="org-members" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...UNIVERSITY]}><OrgMembersPage /></RoleRoute>} />
                   <Route path="trainer-reassignment" element={<Navigate to="/hospital?tab=reassignment" replace />} />
                   <Route path="trainer-leaves" element={<Navigate to="/hospital?tab=leaves" replace />} />
+
 
                   {/* Trainer + Trainee */}
                   <Route path="logbook" element={<RoleRoute allowedRoles={[...TRAINER, ...TRAINEE, ...HOSPITAL]}><LogbookPage /></RoleRoute>} />

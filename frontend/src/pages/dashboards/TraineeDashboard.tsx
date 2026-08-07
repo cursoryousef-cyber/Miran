@@ -1,10 +1,23 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { BookOpen, Clock, Activity, CheckCircle2, QrCode, Calendar, ClipboardList } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { BookOpen, Clock, CheckCircle2, QrCode, Calendar, ClipboardList, Radio, MapPin } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../api/client';
-import { Button, LinearProgress } from '@mui/material';
+import { Button, Chip, LinearProgress } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+
+const CALL_TYPE_LABELS: Record<string, { label: string; icon: string; accent: string }> = {
+  urgent:           { label: 'حالة عاجلة',            icon: '🚨', accent: '#ef4444' },
+  interesting_case: { label: 'حالة مثيرة للاهتمام',  icon: '🔬', accent: '#f59e0b' },
+  skill_training:   { label: 'تدريب على مهارة',      icon: '🩺', accent: '#06b6d4' },
+  teaching_round:   { label: 'راوند تعليمي',         icon: '📚', accent: '#8b5cf6' },
+  general:          { label: 'عام',                   icon: '📢', accent: '#10b981' },
+};
+
+const STATE_LABELS: Record<string, string> = {
+  notified: 'مُبلَّغ', acknowledged: 'أكّد الاستلام',
+  self_arrived: 'في الطريق', confirmed_arrived: 'وصل ✓', no_show: 'لم يحضر',
+};
 
 export const TraineeDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -36,6 +49,26 @@ export const TraineeDashboard: React.FC = () => {
     refetchInterval: 30000,
   });
 
+  const qc = useQueryClient();
+  const { data: incomingData, refetch: refetchCalls } = useQuery({
+    queryKey: ['my-incoming-calls-dashboard'],
+    queryFn: async () => {
+      const res = await apiClient.get('/calls/my-incoming').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+    refetchInterval: 10000,
+  });
+  const activeCall = (incomingData ?? []).find((p: any) => p.call?.status === 'active');
+
+  const handleCallAction = async (callId: string, action: 'ack' | 'on-way' | 'arrived') => {
+    try {
+      await apiClient.post(`/calls/${callId}/${action}`, {});
+      refetchCalls();
+    } catch (e: any) {
+      alert(e?.response?.data?.message ?? 'خطأ');
+    }
+  };
+
   const pendingDeptCount = pendingEvals?.pendingDepartmentEvals?.length ?? 0;
 
   return (
@@ -63,7 +96,58 @@ export const TraineeDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Pending department evaluation alert */}
+      {/* ── Active incoming call alert ──────────────────────────── */}
+      {activeCall && (() => {
+        const meta = CALL_TYPE_LABELS[activeCall.call?.callType] ?? CALL_TYPE_LABELS.general;
+        return (
+          <div className="glass-card" style={{
+            padding: '20px 24px',
+            border: `2px solid ${meta.accent}`,
+            background: `linear-gradient(135deg, ${meta.accent}18, rgba(15,23,42,0.96))`,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <Radio size={20} color={meta.accent} style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#f8fafc' }}>
+                {meta.icon} {activeCall.call?.customTitle ?? meta.label}
+              </span>
+              <Chip label="نداء نشط" size="small" sx={{ background: meta.accent + '30', color: meta.accent, fontWeight: 700, ml: 'auto' }} />
+            </div>
+            {activeCall.call?.note && (
+              <p style={{ margin: '0 0 8px', fontSize: 13, color: '#cbd5e1' }}>{activeCall.call.note}</p>
+            )}
+            {activeCall.call?.location && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
+                <MapPin size={12} /> {activeCall.call.location}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              {activeCall.state === 'notified' && (
+                <Button variant="contained" size="small"
+                  onClick={() => handleCallAction(activeCall.call.id, 'ack')}
+                  style={{ background: '#f59e0b', fontWeight: 700 }}>✅ تأكيد الاستلام</Button>
+              )}
+              {activeCall.state === 'acknowledged' && (
+                <Button variant="contained" size="small"
+                  onClick={() => handleCallAction(activeCall.call.id, 'on-way')}
+                  style={{ background: '#06b6d4', fontWeight: 700 }}>🚶 أنا في الطريق</Button>
+              )}
+              {activeCall.state === 'self_arrived' && (
+                <Button variant="contained" size="small"
+                  onClick={() => handleCallAction(activeCall.call.id, 'arrived')}
+                  style={{ background: '#10b981', fontWeight: 700 }}>📍 وصلت</Button>
+              )}
+              {activeCall.state === 'confirmed_arrived' && (
+                <Chip label="✓ تم تأكيد وصولك من المدرب" sx={{ background: 'rgba(16,185,129,0.2)', color: '#10b981', fontWeight: 700 }} />
+              )}
+              <span style={{ fontSize: 12, color: '#94a3b8', marginRight: 'auto' }}>
+                حالتك: <strong style={{ color: meta.accent }}>{STATE_LABELS[activeCall.state] ?? activeCall.state}</strong>
+              </span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Pending dept evaluation alert ────────────────────────── */}
       {pendingDeptCount > 0 && (
         <div className="glass-card" style={{
           padding: '16px 20px',

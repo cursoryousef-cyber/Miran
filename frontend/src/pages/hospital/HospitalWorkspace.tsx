@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 
 import { WorkspaceOverview } from './WorkspaceOverview';
 import { TrainerCards } from './TrainerCards';
+import { CallsHub } from './CallsHub';
 
 // Existing pages are mounted as sections rather than reimplemented, so every
 // workflow they own — capacity editing, acceptance, reassignment, leave,
@@ -34,16 +35,17 @@ interface Section {
 }
 
 const SECTIONS: Section[] = [
-  { key: 'overview', label: 'نظرة عامة', render: (goTo) => <WorkspaceOverview onNavigate={goTo} /> },
-  { key: 'capacity', label: 'الطاقة الاستيعابية', render: () => <HospitalCapacity /> },
-  { key: 'trainers', label: 'المدربون', render: (goTo) => <TrainerCards onNavigate={goTo} /> },
-  { key: 'requests', label: 'الطلبات الواردة', render: () => <HospitalReview /> },
-  { key: 'acceptance', label: 'سلسلة القبول', render: () => <AcceptanceChain /> },
-  { key: 'reassignment', label: 'إعادة الإسناد', render: () => <TrainerReassignment /> },
-  { key: 'leaves', label: 'الإجازات', render: () => <TrainerLeaveManagement /> },
-  { key: 'logbook', label: 'السجل السريري', render: () => <LogbookPage /> },
-  { key: 'incidents', label: 'البلاغات', render: () => <Incidents /> },
-  { key: 'graduation', label: 'التخرج', render: () => <Graduation /> },
+  { key: 'overview',     label: 'نظرة عامة',         render: (goTo) => <WorkspaceOverview onNavigate={goTo} /> },
+  { key: 'capacity',     label: 'الطاقة الاستيعابية', render: () => <HospitalCapacity /> },
+  { key: 'trainers',     label: 'المدربون',           render: (goTo) => <TrainerCards onNavigate={goTo} /> },
+  { key: 'calls',        label: '🔔 النداءات',        render: () => <CallsHub /> },
+  { key: 'requests',     label: 'الطلبات الواردة',    render: () => <HospitalReview /> },
+  { key: 'acceptance',   label: 'سلسلة القبول',       render: () => <AcceptanceChain /> },
+  { key: 'reassignment', label: 'إعادة الإسناد',      render: () => <TrainerReassignment /> },
+  { key: 'leaves',       label: 'الإجازات',           render: () => <TrainerLeaveManagement /> },
+  { key: 'logbook',      label: 'السجل السريري',      render: () => <LogbookPage /> },
+  { key: 'incidents',    label: 'البلاغات',            render: () => <Incidents /> },
+  { key: 'graduation',   label: 'التخرج',             render: () => <Graduation /> },
 ];
 
 export const HospitalWorkspace: React.FC = () => {
@@ -78,7 +80,7 @@ export const HospitalWorkspace: React.FC = () => {
           {user?.activeOrganization?.nameAr ?? 'مساحة عمل المستشفى'}
         </h1>
         <p style={{ fontSize: 13, color: '#cbd5e1', marginTop: 6 }}>
-          مركز العمليات — السعة والمدربون والطلبات والروتيشنات والتقييمات والتخرج في مكان واحد
+          مركز العمليات — السعة والمدربون والنداءات والطلبات والروتيشنات والتقييمات والتخرج في مكان واحد
         </p>
       </div>
 

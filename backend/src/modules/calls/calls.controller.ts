@@ -1,9 +1,22 @@
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import {
+  Controller, Get, Post, Body, Param, Query,
+  UseGuards, BadRequestException, NotFoundException,
+} from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
+
+const TRAINER_ROLES = ['trainer', 'org_manager', 'platform_owner', 'hospital_administrator', 'training_supervisor', 'cluster_administrator'];
+
+/** ms → Arabic human-readable (ثانية / دقيقة) */
+function humanMs(ms: number | null): string {
+  if (ms === null || ms < 0) return '—';
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return `${sec} ث`;
+  return `${Math.round(sec / 60)} د`;
+}
 
 @ApiTags('Calls (النداءات الطارئة)')
 @Controller('calls')
@@ -12,99 +25,312 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class CallsController {
   constructor(private prisma: PrismaService) {}
 
-  // ─── للمدربين ومديري الجهات ومدير المنصة ──────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TRAINER / SUPERVISOR ENDPOINTS
+  // ═══════════════════════════════════════════════════════════════════════════
+
   @Get('active')
-  @RequireRoles('trainer', 'org_manager', 'platform_owner', 'hospital_administrator', 'training_supervisor', 'cluster_administrator')
-  @ApiOperation({ summary: 'عرض النداءات النشطة — للمدرب ومدير الجهة ومدير المنصة' })
+  @RequireRoles(...TRAINER_ROLES)
+  @ApiOperation({ summary: 'النداءات النشطة الآن — للمدرب والمشرف' })
   async getActiveCalls(@CurrentUser() user: IAuthenticatedUser) {
     const calls = await this.prisma.trainerCall.findMany({
       where: { organizationId: user.organizationId, status: 'active' },
       include: {
         participants: {
           include: { traineeProfile: { include: { person: true } } },
+          orderBy: { notifiedAt: 'asc' },
         },
       },
       orderBy: { launchedAt: 'desc' },
     });
-    return { data: calls };
+    return { success: true, data: calls };
   }
 
   @Post('launch')
-  @RequireRoles('trainer', 'org_manager', 'platform_owner', 'hospital_administrator', 'training_supervisor', 'cluster_administrator')
-  @ApiOperation({ summary: 'إطلاق نداء جديد — للمدرب ومدير الجهة ومدير المنصة' })
-  async launchCall(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
+  @RequireRoles(...TRAINER_ROLES)
+  @ApiOperation({ summary: 'إطلاق نداء جديد (مع حد: نداء واحد نشط لكل مدرب)' })
+  async launchCall(
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body() dto: {
+      callType: string;
+      customTitle?: string;
+      note?: string;
+      location?: string;
+      expectedMinutes?: number;
+      departmentId?: string;
+    },
+  ) {
     const trainerProfile = await this.prisma.trainerProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
+      select: { id: true, departmentId: true },
     });
+
+    const departmentId: string = trainerProfile?.departmentId ?? dto.departmentId ?? '';
+    const trainerProfileId: string = trainerProfile?.id ?? '';
+
+    if (!trainerProfileId) {
+      throw new BadRequestException('لم يتم العثور على ملف المدرب — يُرجى ربط حسابك بملف مدرب');
+    }
+    if (!departmentId) {
+      throw new BadRequestException('يجب تحديد القسم (departmentId) لإطلاق النداء');
+    }
+
+    // ── Concurrent-call cap: one active call per trainer ──────────────────
+    const existing = await this.prisma.trainerCall.findFirst({
+      where: { trainerProfileId, status: 'active' },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new BadRequestException('لديك نداء نشط بالفعل — أنهِ النداء الحالي قبل إطلاق نداء جديد');
+    }
 
     const call = await this.prisma.trainerCall.create({
       data: {
         organizationId: user.organizationId,
-        departmentId: trainerProfile?.departmentId ?? dto.departmentId,
-        trainerProfileId: trainerProfile?.id ?? dto.trainerProfileId,
+        departmentId,
+        trainerProfileId,
         callType: dto.callType || 'urgent',
         customTitle: dto.customTitle,
         note: dto.note,
         location: dto.location,
-        expectedMinutes: dto.expectedMinutes || 15,
+        expectedMinutes: dto.expectedMinutes ?? 15,
         launchedAt: new Date(),
         status: 'active',
       },
     });
 
-    // إشعار جميع المتدربين في القسم
-    if (call.departmentId) {
-      const trainees = await this.prisma.traineeProfile.findMany({
-        where: { organizationId: user.organizationId },
-        include: { person: { include: { userAccounts: { select: { id: true } } } } },
-      });
 
-      for (const trainee of trainees) {
-        // إضافة كمشارك
-        await this.prisma.callParticipant.create({
+    // ── Notify trainees (scoped to department when available) ─────────────
+    const trainees = await this.prisma.traineeProfile.findMany({
+      where: {
+        organizationId: user.organizationId,
+        ...(departmentId
+          ? {
+              rotations: {
+                some: { departmentId, status: 'active' },
+              },
+            }
+          : {}),
+      },
+      include: {
+        person: { include: { userAccounts: { select: { id: true } } } },
+      },
+    });
+
+    const now = new Date();
+    for (const trainee of trainees) {
+      await this.prisma.callParticipant.create({
+        data: {
+          callId: call.id,
+          traineeProfileId: trainee.id,
+          state: 'notified',
+          notifiedAt: now,
+        },
+      });
+      const accountId = trainee.person?.userAccounts?.[0]?.id;
+      if (accountId) {
+        await this.prisma.notification.create({
           data: {
-            callId: call.id,
-            traineeProfileId: trainee.id,
-            state: 'notified',
-            notifiedAt: new Date(),
+            organizationId: user.organizationId,
+            userId: accountId,
+            titleAr: `🔔 نداء جديد: ${dto.customTitle ?? call.callType}`,
+            bodyAr: dto.note ?? 'يُرجى التوجه فوراً',
+            type: 'call_alert',
+            isRead: false,
           },
         });
-
-        // إشعار
-        const accountId = trainee.person?.userAccounts?.[0]?.id;
-        if (accountId) {
-          await this.prisma.notification.create({
-            data: {
-              organizationId: user.organizationId,
-              userId: accountId,
-              titleAr: `نداء جديد: ${dto.customTitle || call.callType}`,
-              bodyAr: dto.note || 'يرجى التوجه فوراً',
-              type: 'call_alert',
-              isRead: false,
-            },
-          });
-        }
       }
     }
 
-    return { success: true, call };
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: user.organizationId,
+        actorId: user.accountId,
+        action: 'call.launch',
+        entityType: 'TrainerCall',
+        entityId: call.id,
+        newValues: { callType: call.callType, departmentId, traineesNotified: trainees.length } as any,
+      },
+    });
+
+    return { success: true, data: { call, traineesNotified: trainees.length } };
   }
 
-  // ─── للمتدربين فقط (الرد على النداء) ──────────────────────────────────────
-  @Post(':id/ack')
-  @RequireRoles('trainee')
-  @ApiOperation({ summary: 'تأكيد استلام النداء — للمتدرب فقط' })
-  async acknowledgeCall(@Param('id') callId: string, @CurrentUser() user: IAuthenticatedUser) {
-    const traineeProfile = await this.prisma.traineeProfile.findFirst({
-      where: { person: { userAccounts: { some: { id: user.accountId } } } },
+  @Post(':id/confirm-arrival')
+  @RequireRoles(...TRAINER_ROLES)
+  @ApiOperation({ summary: 'تأكيد وصول المتدرب فعلياً — للمدرب' })
+  async confirmArrival(
+    @Param('id') callId: string,
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body() dto: { traineeProfileId: string },
+  ) {
+    const call = await this.prisma.trainerCall.findFirst({
+      where: { id: callId, organizationId: user.organizationId },
     });
-    if (!traineeProfile) return { message: 'ليس متدرباً' };
+    if (!call) throw new NotFoundException('النداء غير موجود');
+    if (call.status !== 'active') throw new BadRequestException('النداء منتهٍ بالفعل');
 
     const participant = await this.prisma.callParticipant.findFirst({
-      where: { callId, traineeProfileId: traineeProfile.id },
+      where: { callId, traineeProfileId: dto.traineeProfileId },
     });
-    if (!participant) return { message: 'غير مشارك في النداء' };
+    if (!participant) throw new NotFoundException('المتدرب ليس مشاركاً في هذا النداء');
 
+    const updated = await this.prisma.callParticipant.update({
+      where: { id: participant.id },
+      data: { state: 'confirmed_arrived', confirmedAt: new Date() },
+    });
+    return { success: true, data: updated };
+  }
+
+  @Post(':id/end')
+  @RequireRoles(...TRAINER_ROLES)
+  @ApiOperation({ summary: 'إنهاء النداء وإغلاق المشاركة — للمدرب' })
+  async endCall(
+    @Param('id') callId: string,
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body() dto: { summary?: string },
+  ) {
+    const call = await this.prisma.trainerCall.findFirst({
+      where: { id: callId, organizationId: user.organizationId },
+      include: { participants: true },
+    });
+    if (!call) throw new NotFoundException('النداء غير موجود');
+    if (call.status === 'ended') throw new BadRequestException('النداء منتهٍ بالفعل');
+
+    const endedAt = new Date();
+    await this.prisma.trainerCall.update({
+      where: { id: callId },
+      data: { status: 'ended', endedAt },
+    });
+
+    // Mark any still-notified participants as 'no_show'
+    await this.prisma.callParticipant.updateMany({
+      where: { callId, state: 'notified' },
+      data: { state: 'no_show' },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: user.organizationId,
+        actorId: user.accountId,
+        action: 'call.end',
+        entityType: 'TrainerCall',
+        entityId: callId,
+        newValues: { summary: dto.summary, endedAt } as any,
+      },
+    });
+
+    const stats = await this._computeCallStats(callId, call.participants);
+    return { success: true, data: { callId, endedAt, stats } };
+  }
+
+  @Get(':id/stats')
+  @RequireRoles(...TRAINER_ROLES, 'academic_supervisor')
+  @ApiOperation({ summary: 'إحصائيات نداء محدد — الاستجابة، المعدلات، الأوقات' })
+  async getCallStats(
+    @Param('id') callId: string,
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    const call = await this.prisma.trainerCall.findFirst({
+      where: { id: callId, organizationId: user.organizationId },
+      include: {
+        participants: {
+          include: { traineeProfile: { include: { person: true } } },
+        },
+      },
+    });
+    if (!call) throw new NotFoundException('النداء غير موجود');
+
+    const stats = await this._computeCallStats(callId, call.participants);
+    return { success: true, data: { call, stats } };
+  }
+
+  @Get('history')
+  @RequireRoles(...TRAINER_ROLES, 'academic_supervisor')
+  @ApiOperation({ summary: 'سجل النداءات مع إحصائياتها — مرتبة زمنياً' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  async getCallHistory(
+    @CurrentUser() user: IAuthenticatedUser,
+    @Query('page') page = '1',
+    @Query('limit') limit = '20',
+  ) {
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const [calls, total] = await Promise.all([
+      this.prisma.trainerCall.findMany({
+        where: { organizationId: user.organizationId },
+        include: {
+          participants: { select: { state: true, ackAt: true, confirmedAt: true, notifiedAt: true } },
+        },
+        orderBy: { launchedAt: 'desc' },
+        skip,
+        take: parseInt(limit),
+      }),
+      this.prisma.trainerCall.count({ where: { organizationId: user.organizationId } }),
+    ]);
+
+    const enriched = calls.map((c) => {
+      const stats = this._computeStatsSync(c.participants);
+      return { ...c, stats };
+    });
+
+    return { success: true, data: enriched, meta: { total, page: parseInt(page), limit: parseInt(limit) } };
+  }
+
+  @Get('diligence')
+  @RequireRoles(...TRAINER_ROLES, 'academic_supervisor', 'training_supervisor')
+  @ApiOperation({ summary: 'درجات الحرص — ترتيب المتدربين حسب نسبة الاستجابة للنداءات' })
+  async getDiligenceScores(@CurrentUser() user: IAuthenticatedUser) {
+    // Fetch all call participants for this org's ended calls
+    const participants = await this.prisma.callParticipant.findMany({
+      where: {
+        call: { organizationId: user.organizationId, status: 'ended' },
+      },
+      include: {
+        traineeProfile: { include: { person: true } },
+      },
+    });
+
+    // Group by traineeProfileId
+    const map = new Map<string, { nameAr: string; notified: number; acked: number; arrived: number; confirmed: number }>();
+    for (const p of participants) {
+      const id = p.traineeProfileId;
+      const nameAr = p.traineeProfile.person?.nameAr ?? 'غير معروف';
+      if (!map.has(id)) map.set(id, { nameAr, notified: 0, acked: 0, arrived: 0, confirmed: 0 });
+      const entry = map.get(id)!;
+      entry.notified++;
+      if (['acknowledged', 'self_arrived', 'confirmed_arrived'].includes(p.state)) entry.acked++;
+      if (['self_arrived', 'confirmed_arrived'].includes(p.state)) entry.arrived++;
+      if (p.state === 'confirmed_arrived') entry.confirmed++;
+    }
+
+    const scores = Array.from(map.entries()).map(([traineeProfileId, d]) => ({
+      traineeProfileId,
+      nameAr: d.nameAr,
+      totalCalls: d.notified,
+      acked: d.acked,
+      arrived: d.arrived,
+      confirmedArrived: d.confirmed,
+      ackRate: d.notified ? Math.round((d.acked / d.notified) * 100) : 0,
+      arrivalRate: d.notified ? Math.round((d.arrived / d.notified) * 100) : 0,
+      diligenceScore: d.notified
+        ? Math.round(((d.acked * 0.3 + d.arrived * 0.4 + d.confirmed * 0.3) / d.notified) * 100)
+        : 0,
+    }));
+
+    scores.sort((a, b) => b.diligenceScore - a.diligenceScore);
+    return { success: true, data: scores };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TRAINEE ENDPOINTS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  @Post(':id/ack')
+  @RequireRoles('trainee')
+  @ApiOperation({ summary: 'تأكيد استلام النداء — للمتدرب' })
+  async acknowledgeCall(@Param('id') callId: string, @CurrentUser() user: IAuthenticatedUser) {
+    const participant = await this._getParticipant(callId, user.accountId);
     return this.prisma.callParticipant.update({
       where: { id: participant.id },
       data: { state: 'acknowledged', ackAt: new Date() },
@@ -113,18 +339,9 @@ export class CallsController {
 
   @Post(':id/on-way')
   @RequireRoles('trainee')
-  @ApiOperation({ summary: 'أنا في الطريق — للمتدرب فقط' })
+  @ApiOperation({ summary: 'أنا في الطريق — للمتدرب' })
   async onWay(@Param('id') callId: string, @CurrentUser() user: IAuthenticatedUser) {
-    const traineeProfile = await this.prisma.traineeProfile.findFirst({
-      where: { person: { userAccounts: { some: { id: user.accountId } } } },
-    });
-    if (!traineeProfile) return { message: 'ليس متدرباً' };
-
-    const participant = await this.prisma.callParticipant.findFirst({
-      where: { callId, traineeProfileId: traineeProfile.id },
-    });
-    if (!participant) return { message: 'غير مشارك في النداء' };
-
+    const participant = await this._getParticipant(callId, user.accountId);
     return this.prisma.callParticipant.update({
       where: { id: participant.id },
       data: { state: 'self_arrived', selfArrivedAt: new Date() },
@@ -133,39 +350,96 @@ export class CallsController {
 
   @Post(':id/arrived')
   @RequireRoles('trainee')
-  @ApiOperation({ summary: 'وصلت — للمتدرب فقط' })
+  @ApiOperation({ summary: 'وصلت — للمتدرب' })
   async arrived(@Param('id') callId: string, @CurrentUser() user: IAuthenticatedUser) {
-    const traineeProfile = await this.prisma.traineeProfile.findFirst({
-      where: { person: { userAccounts: { some: { id: user.accountId } } } },
-    });
-    if (!traineeProfile) return { message: 'ليس متدرباً' };
-
-    const participant = await this.prisma.callParticipant.findFirst({
-      where: { callId, traineeProfileId: traineeProfile.id },
-    });
-    if (!participant) return { message: 'غير مشارك في النداء' };
-
+    const participant = await this._getParticipant(callId, user.accountId);
     return this.prisma.callParticipant.update({
       where: { id: participant.id },
       data: { state: 'confirmed_arrived', confirmedAt: new Date() },
     });
   }
 
-  // ─── للمتدرب: نداءاته المستلمة ────────────────────────────────────────────
   @Get('my-incoming')
   @RequireRoles('trainee')
-  @ApiOperation({ summary: 'النداءات الواردة للمتدرب — للمتدرب فقط' })
+  @ApiOperation({ summary: 'النداءات الواردة (النشطة أولاً) — للمتدرب' })
   async getMyIncomingCalls(@CurrentUser() user: IAuthenticatedUser) {
     const traineeProfile = await this.prisma.traineeProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
+      select: { id: true },
     });
-    if (!traineeProfile) return { data: [] };
+    if (!traineeProfile) return { success: true, data: [] };
 
     const participants = await this.prisma.callParticipant.findMany({
       where: { traineeProfileId: traineeProfile.id },
-      include: { call: true },
+      include: {
+        call: {
+          include: {
+            participants: { select: { state: true } },
+          },
+        },
+      },
       orderBy: { notifiedAt: 'desc' },
+      take: 50,
     });
-    return { data: participants };
+
+    // Enrich with per-call summary stats visible to trainee
+    const enriched = participants.map((p) => ({
+      ...p,
+      callSummary: this._computeStatsSync(p.call.participants),
+    }));
+
+    return { success: true, data: enriched };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PRIVATE HELPERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private async _getParticipant(callId: string, accountId: string) {
+    const traineeProfile = await this.prisma.traineeProfile.findFirst({
+      where: { person: { userAccounts: { some: { id: accountId } } } },
+      select: { id: true },
+    });
+    if (!traineeProfile) throw new BadRequestException('ليس متدرباً مسجلاً');
+
+    const participant = await this.prisma.callParticipant.findFirst({
+      where: { callId, traineeProfileId: traineeProfile.id },
+    });
+    if (!participant) throw new NotFoundException('غير مشارك في هذا النداء');
+
+    const call = await this.prisma.trainerCall.findUnique({ where: { id: callId }, select: { status: true } });
+    if (call?.status === 'ended') throw new BadRequestException('النداء منتهٍ بالفعل');
+
+    return participant;
+  }
+
+  private _computeStatsSync(participants: { state: string; ackAt?: Date | null; confirmedAt?: Date | null; notifiedAt?: Date | null }[]) {
+    const total = participants.length;
+    const acked = participants.filter((p) => ['acknowledged', 'self_arrived', 'confirmed_arrived'].includes(p.state)).length;
+    const arrived = participants.filter((p) => ['self_arrived', 'confirmed_arrived'].includes(p.state)).length;
+    const confirmed = participants.filter((p) => p.state === 'confirmed_arrived').length;
+    const noShow = participants.filter((p) => p.state === 'no_show').length;
+
+    // Avg ack time in ms (for those who acked)
+    const ackTimes = participants
+      .filter((p) => p.ackAt && p.notifiedAt)
+      .map((p) => p.ackAt!.getTime() - p.notifiedAt!.getTime());
+    const avgAckMs = ackTimes.length ? Math.round(ackTimes.reduce((a, b) => a + b, 0) / ackTimes.length) : null;
+
+    return {
+      total,
+      acked,
+      arrived,
+      confirmedArrived: confirmed,
+      noShow,
+      ackRatePct: total ? Math.round((acked / total) * 100) : 0,
+      arrivalRatePct: total ? Math.round((arrived / total) * 100) : 0,
+      avgAckTime: humanMs(avgAckMs),
+      avgAckMs,
+    };
+  }
+
+  private async _computeCallStats(callId: string, participants: any[]) {
+    return this._computeStatsSync(participants);
   }
 }

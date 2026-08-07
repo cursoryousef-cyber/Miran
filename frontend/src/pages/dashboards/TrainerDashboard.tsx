@@ -45,9 +45,9 @@ export const TrainerDashboard: React.FC = () => {
             style={{ borderColor: '#10b981', color: '#10b981', fontWeight: 700 }}>
             مراجعة الـ Logbook
           </Button>
-          <Button variant="outlined" onClick={() => navigate('/logbook?tab=3')}
+          <Button variant="outlined" onClick={() => navigate('/hospital?tab=calls')}
             style={{ borderColor: '#f59e0b', color: '#f59e0b', fontWeight: 700 }}>
-            التقييمات
+            🔔 النداءات
           </Button>
         </div>
       </div>
@@ -69,9 +69,11 @@ export const TrainerDashboard: React.FC = () => {
           <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>الروتيشنات النشطة</div>
           <div style={{ fontSize: '32px', fontWeight: 800, color: '#06b6d4' }}>{stats?.activeRotations ?? 0}</div>
         </div>
-        <div className="glass-card" style={{ padding: '24px' }}>
+        <div className="glass-card" style={{ padding: '24px', cursor: 'pointer', border: (stats?.openCalls ?? 0) > 0 ? '1px solid rgba(139,92,246,0.4)' : undefined }}
+          onClick={() => navigate('/hospital?tab=calls')}>
           <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>نداءات مفتوحة</div>
           <div style={{ fontSize: '32px', fontWeight: 800, color: '#8b5cf6' }}>{stats?.openCalls ?? 0}</div>
+          <div style={{ fontSize: '11px', color: '#8b5cf6', marginTop: 4 }}>← إدارة النداءات</div>
         </div>
       </div>
 
