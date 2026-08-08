@@ -123,6 +123,26 @@ export class OperationsController {
 
     const data = await this.prisma.rotation.update({ where: { id: rotationId }, data: { status: 'active' } });
     await this.audit(user, 'rotation.trainer_accept', 'Rotation', rotationId, data);
+
+    // Recipient is resolved server-side the same way reject already does —
+    // whoever performed the still-open allocation for this trainee at this
+    // hospital, i.e. the hospital training administration — never a
+    // client-supplied id.
+    const allocation = await this.prisma.traineeAllocation.findFirst({
+      where: { traineeProfileId: rotation.traineeProfileId, hospitalId: rotation.organizationId, status: 'open' },
+    });
+    if (allocation?.performedById) {
+      await this.notify(
+        rotation.organizationId,
+        allocation.performedById,
+        'تم قبول إسناد المتدرب من قبل المدرب.',
+        'تم قبول إسناد المتدرب من قبل المدرب.',
+        'trainee_assignment_accepted',
+        'Rotation',
+        rotationId,
+      );
+    }
+
     return { success: true, data };
   }
 

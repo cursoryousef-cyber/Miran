@@ -203,5 +203,17 @@ describe('Trainer assignment acceptance', () => {
     expect(dash.body.data.assignedTrainees).toBe(1);
     const interns = await http.get('/operations/trainer/assigned-interns').set(auth(trainerToken));
     expect(interns.body.data.map((t: any) => t.id)).toContain(profileId);
+
+    // Hospital training administration — whoever performed the reassignment
+    // that just accepted (test 7, via h1TrainingToken) — receives exactly one
+    // acceptance notification, scoped to the hospital, unread.
+    const hospitalAdmin = await prisma.userAccount.findFirstOrThrow({ where: { email: SCENARIO.accounts.hospital1TrainingAdmin } });
+    const notifications = await prisma.notification.findMany({
+      where: { userId: hospitalAdmin.id, type: 'trainee_assignment_accepted', referenceId: rotation.id },
+    });
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].bodyAr).toBe('تم قبول إسناد المتدرب من قبل المدرب.');
+    expect(notifications[0].organizationId).toBe(s.hospital1.id);
+    expect(notifications[0].isRead).toBe(false);
   });
 });
