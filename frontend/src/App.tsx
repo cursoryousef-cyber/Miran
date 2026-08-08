@@ -66,10 +66,10 @@ const RoleRoute: React.FC<{ allowedRoles: string[]; children: React.ReactNode }>
 };
 
 // ─── Role constants ──────────────────────────────────────────────────────
-const PLATFORM = ['platform_owner', 'system_admin', 'holding_administrator'];
+const PLATFORM = ['platform_owner', 'system_admin', 'holding_administrator', 'org_manager'];
 const UNIVERSITY = ['university_administrator', 'academic_affairs'];
-const CLUSTER = ['cluster_administrator', 'training_director'];
-const HOSPITAL = ['hospital_administrator', 'department_head', 'training_supervisor'];
+const CLUSTER = ['cluster_administrator', 'cluster_manager', 'training_director'];
+const HOSPITAL = ['hospital_administrator', 'hospital_training_admin', 'department_head', 'training_supervisor'];
 const TRAINER = ['trainer'];
 const TRAINEE = ['trainee'];
 const ACADEMIC = ['academic_supervisor'];
