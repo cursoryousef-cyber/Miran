@@ -1,5 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { IAuthenticatedUser } from '../../common/interfaces';
+import { RotationInputDto } from './dto/training-request.dto';
+
+const WEEKS_PER_MONTH = 4.345;
+/** Tolerance allowed for rotation totals vs program window — 4 weeks (1 month) for 48-52 week variations. */
+const DURATION_TOLERANCE_WEEKS = 4;
 
 /**
  * Composing a university training request: which plan versions are on offer for
@@ -72,10 +78,27 @@ export class RequestCompositionService {
     trainingEndDate?: string;
     expectedGraduationDate?: string;
     studentCount?: number;
+    rotations?: RotationInputDto[];
   }) {
     const dates = this.validateDates(input);
     const resolved = await this.resolvePlan(input, dates.startDate);
     await this.validateSpecialty(input.specialty);
+
+    // A catalog plan already carries its own rotations; a request cannot also
+    // propose a competing set for the same program window.
+    if (resolved.version && input.rotations?.length) {
+      throw new BadRequestException(
+        'لا يمكن إرسال روتيشنات مخصصة مع اختيار قالب خطة معتمد من الكتالوج — اختر أحدهما',
+      );
+    }
+
+    this.assertProgramDurationMatchesWindow(resolved.program, dates);
+
+    // No catalog version chosen: the proposed rotation breakdown stands in for
+    // one, and must itself add up to the training window.
+    const inlineRotations = !resolved.version && input.rotations?.length
+      ? this.validateRotationRows(input.rotations, dates)
+      : null;
 
     return {
       data: {
@@ -83,14 +106,22 @@ export class RequestCompositionService {
         trainingPlan: resolved.plan,
         trainingPlanVersion: resolved.version ? this.versionSummary(resolved.version) : null,
         specialty: input.specialty ?? null,
-        rotationCount: resolved.version?.rotations.length ?? 0,
-        totalWeeks: resolved.version?.totalWeeks ?? 0,
+        rotationCount: resolved.version?.rotations.length ?? inlineRotations?.rows.length ?? 0,
+        totalWeeks: resolved.version?.totalWeeks ?? inlineRotations?.totalWeeks ?? 0,
+        // Present when the university is proposing its own breakdown rather than
+        // picking one off the shelf, so the form can render it the same way it
+        // would render a catalog plan's rotations.
+        rotations: inlineRotations?.rows ?? resolved.version?.rotations.map((r) => ({
+          sequenceOrder: r.sequenceOrder,
+          departmentNameAr: r.departmentNameAr,
+          departmentCode: r.departmentCode,
+          durationWeeks: r.durationWeeks,
+          isMandatory: r.isMandatory,
+        })) ?? null,
         trainingStartDate: dates.startDate,
         trainingEndDate: dates.endDate,
         expectedGraduationDate: dates.expectedGraduationDate,
         studentCount: input.studentCount ?? 0,
-        // Surfaced so the university can see the plan does not overrun the window
-        // it asked for, without blocking submission on it.
         warnings: this.buildWarnings(resolved.version, dates),
       },
       valid: true,
@@ -256,6 +287,168 @@ export class RequestCompositionService {
       }
     }
     return version;
+  }
+
+  /**
+   * The program's catalog duration must actually match the window the request
+   * proposes — a request asking for 3 months of an internship declared as 12 is
+   * asking for something the program does not describe.
+   *
+   * Skipped when either side is missing: a legacy request with no program, or a
+   * program whose duration was never catalogued, stays valid rather than being
+   * retroactively blocked by a field nobody filled in.
+   */
+  assertProgramDurationMatchesWindow(
+    program: { durationMonths: number; nameAr: string } | null,
+    dates: { startDate: Date | null; endDate: Date | null },
+  ): void {
+    if (!program?.durationMonths || !dates.startDate || !dates.endDate) return;
+
+    const windowWeeks = this.weeksBetween(dates.startDate, dates.endDate);
+    const programWeeks = Math.round(program.durationMonths * WEEKS_PER_MONTH);
+
+    if (Math.abs(windowWeeks - programWeeks) > DURATION_TOLERANCE_WEEKS) {
+      throw new BadRequestException(
+        `مدة برنامج «${program.nameAr}» (${program.durationMonths} شهر ≈ ${programWeeks} أسبوع) ` +
+          `لا تطابق الفترة المحددة (${windowWeeks} أسبوع) — عدّل تاريخي البداية والنهاية ليطابقا مدة البرنامج`,
+      );
+    }
+  }
+
+  /**
+   * Validates a proposed rotation breakdown and totals it. Used both to preview
+   * an inline plan before submission and, identically, right before persisting
+   * one — the same rule applies at both stages so a request that passed preview
+   * cannot fail composition for a reason the university was never shown.
+   */
+  validateRotationRows(
+    rotations: RotationInputDto[],
+    dates: { startDate: Date | null; endDate: Date | null },
+  ): {
+    rows: Array<{
+      sequenceOrder: number; departmentNameAr: string; departmentCode: string;
+      durationWeeks: number; isMandatory: boolean;
+    }>;
+    totalWeeks: number;
+  } {
+    if (!rotations.length) {
+      throw new BadRequestException('يجب تحديد روتيشن واحد على الأقل ضمن خطة الطلب');
+    }
+
+    const seenCodes = new Set<string>();
+    const rows = rotations.map((r, index) => {
+      const nameAr = r.departmentNameAr?.trim();
+      if (!nameAr) {
+        throw new BadRequestException(`الروتيشن رقم ${index + 1}: اسم القسم مطلوب`);
+      }
+      if (!Number.isInteger(r.durationWeeks) || r.durationWeeks < 1) {
+        throw new BadRequestException(`الروتيشن «${nameAr}»: مدة الروتيشن يجب أن تكون رقماً صحيحاً أكبر من صفر`);
+      }
+
+      const code = (r.departmentCode?.trim() || this.slugify(nameAr)).toUpperCase();
+      if (seenCodes.has(code)) {
+        throw new BadRequestException(`رمز القسم «${code}» مكرر داخل خطة الروتيشنات`);
+      }
+      seenCodes.add(code);
+
+      return {
+        sequenceOrder: index + 1,
+        departmentNameAr: nameAr,
+        departmentCode: code,
+        durationWeeks: r.durationWeeks,
+        isMandatory: r.isMandatory ?? true,
+      };
+    });
+
+    const totalWeeks = rows.reduce((sum, r) => sum + r.durationWeeks, 0);
+
+    if (dates.startDate && dates.endDate) {
+      const windowWeeks = this.weeksBetween(dates.startDate, dates.endDate);
+      if (Math.abs(totalWeeks - windowWeeks) > DURATION_TOLERANCE_WEEKS) {
+        throw new BadRequestException(
+          `مجموع مدد الروتيشنات (${totalWeeks} أسبوع) لا يطابق فترة التدريب المحددة (${windowWeeks} أسبوع)`,
+        );
+      }
+    }
+
+    return { rows, totalWeeks };
+  }
+
+  /**
+   * Creates the training plan and version a request's own rotation proposal
+   * becomes, when the university is not choosing one off the national catalog.
+   *
+   * This is a request-scoped plan — `organizationId` is the sending university,
+   * not null (null means the national catalog). It is published immediately
+   * (status `active`) rather than going through the draft→publish workflow that
+   * `TrainingPlansService` uses for shared curriculum: nobody else can select it,
+   * it has one version, and it must be immutable from the moment it exists.
+   *
+   * Deliberately does not reuse TrainingPlansService.createPlan/publishVersion —
+   * those are guarded for national-curriculum authoring (platform/cluster only).
+   * Authority to write this plan comes from the caller already holding
+   * `training_request.create` for their own request, not from borrowing the
+   * curriculum-authoring capability.
+   */
+  async composeInlinePlan(
+    program: { id: string; nameAr: string },
+    dates: { startDate: Date | null; endDate: Date | null },
+    rotations: RotationInputDto[],
+    sourceOrgId: string,
+    user: IAuthenticatedUser,
+  ) {
+    const { rows, totalWeeks } = this.validateRotationRows(rotations, dates);
+
+    const code = `REQ-${program.id.slice(0, 8)}-${Date.now().toString(36).toUpperCase()}`;
+
+    const plan = await this.prisma.trainingPlan.create({
+      data: {
+        programId: program.id,
+        organizationId: sourceOrgId,
+        code,
+        nameAr: `خطة طلب — ${program.nameAr}`,
+        status: 'active',
+        isActive: true,
+        createdById: user.accountId,
+        versions: {
+          create: {
+            versionNumber: 1,
+            label: 'الإصدار 1 (خاص بالطلب)',
+            status: 'active',
+            effectiveFrom: dates.startDate,
+            effectiveTo: dates.endDate,
+            totalWeeks,
+            publishedAt: new Date(),
+            publishedById: user.accountId,
+            createdById: user.accountId,
+            rotations: {
+              create: rows.map((r) => ({
+                sequenceOrder: r.sequenceOrder,
+                departmentCode: r.departmentCode,
+                departmentNameAr: r.departmentNameAr,
+                durationWeeks: r.durationWeeks,
+                isMandatory: r.isMandatory,
+              })),
+            },
+          },
+        },
+      },
+      include: { versions: { include: { rotations: true } } },
+    });
+
+    return { plan, version: plan.versions[0] };
+  }
+
+  private weeksBetween(start: Date, end: Date): number {
+    return Math.round((end.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000));
+  }
+
+  private slugify(nameAr: string): string {
+    // Arabic survives as-is; anything that cannot form a stable code is dropped,
+    // and department-matching at allocation time falls back to the Arabic name
+    // regardless (see common/department-code.ts).
+    const ascii = nameAr.trim().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
+    return ascii || `RT${Math.random().toString(36).slice(2, 7)}`;
   }
 
   /** Specialty must come from the lookup table when supplied. */

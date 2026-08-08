@@ -7,6 +7,7 @@ import { CapacityService } from '../organizations/capacity.service';
 import { AllocationEngineService } from './allocation-engine.service';
 import { ActivationService } from './activation.service';
 import { RequestCompositionService } from './request-composition.service';
+import { TrainingRequestTraineesService } from './training-request-trainees.service';
 import {
   assertValidTransition,
   TRAINING_REQUEST_TRANSITIONS,
@@ -23,6 +24,7 @@ export class TrainingRequestsService {
     private allocationEngine: AllocationEngineService,
     private activationService: ActivationService,
     private composition: RequestCompositionService,
+    private traineesService: TrainingRequestTraineesService,
   ) {}
 
   /**
@@ -157,6 +159,36 @@ export class TrainingRequestsService {
     const dates = this.composition.validateDates(dto);
     const resolved = await this.composition.resolvePlan(dto, dates.startDate);
 
+    // A catalog plan and a proposed rotation breakdown answer the same question
+    // twice; refuse the ambiguity rather than silently picking one.
+    if (resolved.version && dto.rotations?.length) {
+      throw new BadRequestException(
+        'لا يمكن إرسال روتيشنات مخصصة مع اختيار قالب خطة معتمد من الكتالوج — اختر أحدهما',
+      );
+    }
+
+    this.composition.assertProgramDurationMatchesWindow(resolved.program, dates);
+
+    // No catalog plan was chosen: the university's own rotation breakdown
+    // becomes a request-scoped TrainingPlan/Version, reusing the same models the
+    // rest of the workflow already reads — nothing downstream needs to know this
+    // plan did not come from the national catalog.
+    let planId = dto.trainingPlanId ?? resolved.plan?.id;
+    let versionId = resolved.version?.id;
+    if (!resolved.version && dto.rotations?.length) {
+      if (!resolved.program) {
+        throw new BadRequestException('لا يمكن تعريف روتيشنات مخصصة بدون تحديد البرنامج التدريبي');
+      }
+      if (!user) {
+        throw new BadRequestException('لا يمكن إنشاء خطة روتيشنات مخصصة بدون مستخدم مصادَق عليه');
+      }
+      const composed = await this.composition.composeInlinePlan(
+        resolved.program, dates, dto.rotations, sourceOrgId, user,
+      );
+      planId = composed.plan.id;
+      versionId = composed.version.id;
+    }
+
     const created = await this.prisma.trainingRequest.create({
       data: {
         requestNumber,
@@ -164,8 +196,8 @@ export class TrainingRequestsService {
         targetOrgId: dto.targetOrgId,
         programId: dto.programId,
         specialty: dto.specialty,
-        trainingPlanId: dto.trainingPlanId,
-        trainingPlanVersionId: resolved.version?.id,
+        trainingPlanId: planId,
+        trainingPlanVersionId: versionId,
         trainingStartDate: dates.startDate,
         trainingEndDate: dates.endDate,
         expectedGraduationDate: dates.expectedGraduationDate,
@@ -183,6 +215,50 @@ export class TrainingRequestsService {
         academicIntake: true,
       },
     });
+
+    // A roster submitted alongside the request goes through the exact same
+    // validated write path as the standalone import endpoint — required academic
+    // number/national ID/name, required specialty and dates (row or request-level
+    // fallback), national ID format, and duplicate detection. This is not a
+    // second, looser way to create trainee rows; it is the one validated way,
+    // called one step earlier so a university can submit everything at once.
+    //
+    // A roster that fails validation must not leave behind a request with zero
+    // trainees and no way for the caller to tell why — the request (and any
+    // plan composed for it) is removed and the same error surfaces to the caller,
+    // who can correct the roster and resubmit the whole thing.
+    if (dto.trainees?.length) {
+      if (!user) {
+        await this.prisma.trainingRequest.delete({ where: { id: created.id } }).catch(() => undefined);
+        throw new BadRequestException('لا يمكن إرفاق قائمة متدربين بدون مستخدم مصادَق عليه');
+      }
+      try {
+        await this.traineesService.importTrainees(
+          created.id,
+          dto.trainees.map((t) => ({
+            academicNumber: t.academicNumber,
+            nationalId: t.nationalId,
+            nameAr: t.nameAr,
+            nameEn: t.nameEn,
+            gender: t.gender,
+            specialty: t.specialty,
+            email: t.email,
+            mobile: t.mobile,
+            startDate: t.startDate,
+            endDate: t.endDate,
+          })),
+          user!,
+        );
+      } catch (e) {
+        await this.prisma.trainingRequest.delete({ where: { id: created.id } }).catch(() => undefined);
+        if (versionId && !resolved.version) {
+          // Only the plan this call composed itself — never a catalog plan the
+          // university merely selected.
+          await this.prisma.trainingPlan.delete({ where: { id: planId! } }).catch(() => undefined);
+        }
+        throw e;
+      }
+    }
 
     // Addressed by capability, so whoever owns request review in that cluster is
     // told — training_director included, which the hard-coded role code missed.

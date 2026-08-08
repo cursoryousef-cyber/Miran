@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Patch, Put, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Put, Query, UseGuards, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
@@ -46,17 +46,65 @@ export class LogbookController {
 
   // ─── 2. سجل الحالات والإجراءات للمتدرب (Case & Procedure Logs) ─────────────
   @Get('my-logs')
-  @RequireRoles('trainee', 'platform_owner', 'org_manager')
-  @ApiOperation({ summary: 'عرض سجل الحالات والإجراءات الخاصة بالمتدرب الحالي' })
+  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'platform_owner', 'org_manager')
+  @ApiOperation({ summary: 'عرض سجل الحالات والإجراءات الخاصة بالمتدرب الحالي أو المدرب/المشرف' })
   async getMyLogs(@CurrentUser() user: IAuthenticatedUser) {
-    let profile = await this.prisma.traineeProfile.findFirst({
-      where: { person: { userAccounts: { some: { id: user.accountId } } } },
-    });
-    if (!profile) return { data: [] };
+    if (user.roles.includes('hospital_administrator')) {
+      return { data: [] };
+    }
 
+    const isTrainee = user.roles.includes('trainee');
+    const isTrainer = user.roles.includes('trainer');
+
+    if (isTrainee) {
+      const profile = await this.prisma.traineeProfile.findFirst({
+        where: { person: { userAccounts: { some: { id: user.accountId } } } },
+      });
+      if (!profile) return { data: [] };
+
+      const logs = await this.prisma.clinicalCaseLog.findMany({
+        where: { traineeProfileId: profile.id },
+        include: {
+          procedure: true,
+          department: true,
+          trainerProfile: { include: { person: true } },
+          signoffs: { include: { signer: { include: { person: true } } } },
+        },
+        orderBy: { performedAt: 'desc' },
+      });
+      return { data: logs };
+    }
+
+    if (isTrainer) {
+      const trainer = await this.prisma.trainerProfile.findFirst({
+        where: { person: { userAccounts: { some: { id: user.accountId } } } },
+      });
+      if (!trainer) return { data: [] };
+
+      const logs = await this.prisma.clinicalCaseLog.findMany({
+        where: {
+          OR: [
+            { trainerProfileId: trainer.id },
+            { traineeProfile: { rotations: { some: { trainerProfileId: trainer.id } } } },
+          ],
+        },
+        include: {
+          traineeProfile: { include: { person: true } },
+          procedure: true,
+          department: true,
+          trainerProfile: { include: { person: true } },
+          signoffs: { include: { signer: { include: { person: true } } } },
+        },
+        orderBy: { performedAt: 'desc' },
+      });
+      return { data: logs };
+    }
+
+    // Supervisors and admins
     const logs = await this.prisma.clinicalCaseLog.findMany({
-      where: { traineeProfileId: profile.id },
+      where: { organizationId: user.organizationId },
       include: {
+        traineeProfile: { include: { person: true } },
         procedure: true,
         department: true,
         trainerProfile: { include: { person: true } },
@@ -64,12 +112,11 @@ export class LogbookController {
       },
       orderBy: { performedAt: 'desc' },
     });
-
     return { data: logs };
   }
 
   @Get('trainee-logs/:traineeId')
-  @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'academic_supervisor', 'training_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'org_manager', 'platform_owner')
   @ApiOperation({ summary: 'عرض سجل الحالات لمتدرب محدد — للمدرب والمشرف الأكاديمي' })
   async getTraineeLogs(@Param('traineeId') traineeId: string) {
     const logs = await this.prisma.clinicalCaseLog.findMany({
@@ -87,9 +134,10 @@ export class LogbookController {
   }
 
   @Post('entries')
-  @RequireRoles('trainee', 'platform_owner', 'org_manager')
+  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'platform_owner', 'org_manager')
   @ApiOperation({ summary: 'تسجيل حالة سريرية أو إجراء طبي جديد' })
   async createLogEntry(@CurrentUser() user: IAuthenticatedUser, @Body() dto: {
+    traineeProfileId?: string;
     diagnosis: string;
     procedureId?: string;
     patientAge?: number;
@@ -100,10 +148,59 @@ export class LogbookController {
     notes?: string;
     evidenceUrls?: string[];
   }) {
-    let profile = await this.prisma.traineeProfile.findFirst({
-      where: { person: { userAccounts: { some: { id: user.accountId } } } },
+    if (user.roles.includes('hospital_administrator')) {
+      throw new ForbiddenException('غير مصرح لمدير المستشفى الإداري بالوصول إلى العمليات التدريبية');
+    }
+
+    const isTrainee = user.roles.includes('trainee');
+    const isTrainer = user.roles.includes('trainer');
+
+    let targetTraineeId: string | undefined = dto.traineeProfileId;
+    let trainerProfileId: string | undefined;
+
+    if (isTrainee) {
+      const profile = await this.prisma.traineeProfile.findFirst({
+        where: { person: { userAccounts: { some: { id: user.accountId } } } },
+      });
+      if (!profile) return { error: 'لا يوجد ملف متدرب مراد بالتسجيل عليه' };
+      targetTraineeId = profile.id;
+    } else if (isTrainer) {
+      const trainer = await this.prisma.trainerProfile.findFirst({
+        where: { person: { userAccounts: { some: { id: user.accountId } } } },
+      });
+      if (!trainer) throw new BadRequestException('لا يوجد ملف مدرب مرتبط بهذا الحساب');
+      trainerProfileId = trainer.id;
+
+      if (!targetTraineeId) {
+        throw new BadRequestException('يرجى تحديد المتدرب المراد تسجيل الحالة له');
+      }
+
+      // Verify assignment guard
+      const isAssigned = await this.prisma.traineeAllocation.findFirst({
+        where: {
+          traineeProfileId: targetTraineeId,
+          trainerProfileId: trainer.id,
+          status: 'open',
+        },
+      }) || await this.prisma.rotation.findFirst({
+        where: {
+          traineeProfileId: targetTraineeId,
+          trainerProfileId: trainer.id,
+          status: { in: ['scheduled', 'active'] },
+        },
+      });
+
+      if (!isAssigned) {
+        throw new ForbiddenException('غير مصرح للمدرب بإضافة حالة لمتدرب غير مسند إليه');
+      }
+    } else if (!targetTraineeId) {
+      throw new BadRequestException('يرجى تحديد المتدرب المراد تسجيل الحالة له');
+    }
+
+    const profile = await this.prisma.traineeProfile.findUnique({
+      where: { id: targetTraineeId },
     });
-    if (!profile) return { error: 'لا يوجد ملف متدرب مراد بالتسجيل عليه' };
+    if (!profile) return { error: 'ملف المتدرب غير موجود' };
 
     const activeRotation = await this.prisma.rotation.findFirst({
       where: { traineeProfileId: profile.id, status: 'active' },

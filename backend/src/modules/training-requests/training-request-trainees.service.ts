@@ -91,9 +91,10 @@ export class TrainingRequestTraineesService {
     if (!request) throw new NotFoundException('طلب التدريب غير موجود');
     if (!rows?.length) throw new BadRequestException('لا توجد صفوف متدربين للاستيراد');
 
-    const rowErrors = await this.validateImportRows(rows, request);
+    const rowErrors = await this.validateImportRows(rows, request, trainingRequestId);
     if (rowErrors.length > 0) {
       throw new BadRequestException({
+        statusCode: 400,
         message: `تعذّر الاستيراد — ${rowErrors.length} صف يحتوي على أخطاء`,
         importedCount: 0,
         rowErrors,
@@ -152,6 +153,7 @@ export class TrainingRequestTraineesService {
       trainingEndDate: Date | null;
       program: { id: string; code: string; nameAr: string; nameEn: string | null } | null;
     },
+    trainingRequestId?: string,
   ) {
     const specialtyCodes = new Set(
       (
@@ -161,6 +163,22 @@ export class TrainingRequestTraineesService {
         })
       ).map((s) => s.code),
     );
+
+    // Sibling rows already persisted in this same request, from an earlier
+    // import call. Checked once up front rather than per row: without it, a
+    // second import into the same request could quietly duplicate a trainee the
+    // first import already created, since each call only ever saw its own file.
+    const existingRows = trainingRequestId
+      ? await this.prisma.trainingRequestTrainee.findMany({
+          where: {
+            trainingRequestId,
+            status: { notIn: ['merged', 'split', 'rejected'] },
+          },
+          select: { nationalId: true, academicNumber: true },
+        })
+      : [];
+    const existingNationalIds = new Set(existingRows.map((r) => r.nationalId));
+    const existingAcademicNumbers = new Set(existingRows.map((r) => r.academicNumber));
 
     const seenNationalIds = new Map<string, number>();
     const seenAcademicNumbers = new Map<string, number>();
@@ -180,8 +198,13 @@ export class TrainingRequestTraineesService {
         rowIssues.push(`الجنس "${row.gender}" غير صالح — القيم المقبولة male أو female`);
       }
 
+      // Specialty is required per trainee, either on the row itself or as the
+      // batch-level default the request already carries — a trainee with neither
+      // has no specialty at all, which downstream allocation cannot place.
       const specialty = row.specialty ?? request.specialty;
-      if (specialty && !specialtyCodes.has(specialty)) {
+      if (!specialty) {
+        rowIssues.push('التخصص مطلوب — حدده لكل متدرب أو على مستوى الطلب بالكامل');
+      } else if (!specialtyCodes.has(specialty)) {
         rowIssues.push(`التخصص "${specialty}" غير موجود في جدول التخصصات`);
       }
 
@@ -195,6 +218,8 @@ export class TrainingRequestTraineesService {
         }
       }
 
+      // Training dates are required per trainee too, with the same row-or-batch
+      // fallback as specialty.
       const start = row.startDate ? new Date(row.startDate) : request.trainingStartDate;
       const end = row.endDate ? new Date(row.endDate) : request.trainingEndDate;
       if (row.startDate && Number.isNaN(new Date(row.startDate).getTime())) {
@@ -203,6 +228,8 @@ export class TrainingRequestTraineesService {
       if (row.endDate && Number.isNaN(new Date(row.endDate).getTime())) {
         rowIssues.push('تاريخ النهاية غير صالح');
       }
+      if (!start) rowIssues.push('تاريخ البداية مطلوب — حدده لكل متدرب أو على مستوى الطلب بالكامل');
+      if (!end) rowIssues.push('تاريخ النهاية مطلوب — حدده لكل متدرب أو على مستوى الطلب بالكامل');
       if (start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end <= start) {
         rowIssues.push('تاريخ النهاية يجب أن يكون بعد تاريخ البداية');
       }
@@ -212,12 +239,14 @@ export class TrainingRequestTraineesService {
       if (nid) {
         const first = seenNationalIds.get(nid);
         if (first) rowIssues.push(`رقم الهوية مكرر داخل الملف (الصف ${first})`);
+        else if (existingNationalIds.has(nid)) rowIssues.push('رقم الهوية موجود مسبقاً ضمن هذا الطلب');
         else seenNationalIds.set(nid, rowNumber);
       }
       const acad = row.academicNumber?.trim();
       if (acad) {
         const first = seenAcademicNumbers.get(acad);
         if (first) rowIssues.push(`الرقم الأكاديمي مكرر داخل الملف (الصف ${first})`);
+        else if (existingAcademicNumbers.has(acad)) rowIssues.push('الرقم الأكاديمي موجود مسبقاً ضمن هذا الطلب');
         else seenAcademicNumbers.set(acad, rowNumber);
       }
 

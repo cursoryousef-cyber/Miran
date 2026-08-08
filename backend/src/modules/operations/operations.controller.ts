@@ -260,16 +260,16 @@ export class OperationsController {
 
   // ── GET /operations/evaluations/slow-evaluators  — academic supervisor report ──
   @Get('evaluations/slow-evaluators')
-  @RequireRoles('academic_supervisor', 'training_supervisor', 'hospital_administrator', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'training_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'academic_supervisor', 'org_manager', 'platform_owner')
   @ApiOperation({ summary: 'تقرير كاشف التقييم الآلي — المدربون الذين أرسلوا تقييمات مشبوهة (أقل من 40 ثانية)' })
   async slowEvaluators(@CurrentUser() user: IAuthenticatedUser) {
     return this.evaluationService.slowEvaluatorReport(user.organizationId);
   }
 
-  // ── GET /operations/evaluations/my-pending  — trainee's pending evals ────
+  // ── GET /operations/evaluations/my-pending  — trainee/trainer pending evals ────
   @Get('evaluations/my-pending')
-  @RequireRoles('trainee')
-  @ApiOperation({ summary: 'التقييمات المعلقة للمتدرب — القسم الذي لم يُقيَّم + التقييمات الواردة' })
+  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'platform_owner', 'org_manager')
+  @ApiOperation({ summary: 'التقييمات المعلقة للمتدرب أو المدرب — التقييمات التي تنتظر الإكمال' })
   async myPendingEvaluations(@CurrentUser() user: IAuthenticatedUser) {
     return this.evaluationService.myPendingEvaluations(user);
   }

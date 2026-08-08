@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { FileText, CheckCircle2, Clock, Building2, Send, AlertCircle, RefreshCw, FolderGit2, Clock3, Sparkles, Users, XCircle } from 'lucide-react';
+import { FileText, CheckCircle2, Clock, Building2, Send, AlertCircle, RefreshCw, FolderGit2, Clock3, Sparkles, Users, XCircle, Trash2 } from 'lucide-react';
 import {
   Button,
   Table,
@@ -22,6 +22,10 @@ import {
   CircularProgress,
   IconButton,
   Tooltip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 
@@ -38,11 +42,92 @@ export const Affiliations: React.FC = () => {
   // Hospital seat allocations — dynamic
   const [allocations, setAllocations] = useState<Record<string, number>>({});
 
+  // University Create Request Modal State
+  const [openCreateModal, setOpenCreateModal] = useState(false);
+  const [reqTargetOrgId, setReqTargetOrgId] = useState('');
+  const [reqProgramId, setReqProgramId] = useState('');
+  // Must be a code that exists in the specialty lookup table (see
+  // HospitalCapacity.tsx for the same convention) — free Arabic text like
+  // "طب بشري" is not a specialty code and every trainee row would fail
+  // validation the moment the roster is submitted.
+  const [reqSpecialty, setReqSpecialty] = useState('internal_medicine');
+  const [reqDurationMonths, setReqDurationMonths] = useState(12);
+  const [reqStartDate, setReqStartDate] = useState('2026-09-01');
+  const [reqEndDate, setReqEndDate] = useState('2027-08-31');
+  const [reqRotations, setReqRotations] = useState<Array<{ departmentNameAr: string; durationWeeks: number }>>([
+    { departmentNameAr: 'الباطنة العامة', durationWeeks: 8 },
+    { departmentNameAr: 'الأطفال', durationWeeks: 8 },
+    { departmentNameAr: 'الجراحة العامة', durationWeeks: 8 },
+    { departmentNameAr: 'النساء والتوليد', durationWeeks: 8 },
+    { departmentNameAr: 'الطوارئ', durationWeeks: 8 },
+    { departmentNameAr: 'طب الأسرة / اختيارية', durationWeeks: 8 },
+  ]);
+  const [reqTrainees, setReqTrainees] = useState<Array<{ academicNumber: string; nationalId: string; nameAr: string }>>([
+    { academicNumber: '441001', nationalId: '1099112233', nameAr: 'أحمد محمد علي' },
+    { academicNumber: '441002', nationalId: '1099112234', nameAr: 'خالد عبدالله عمر' },
+  ]);
+
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['training-requests'],
     queryFn: async () => {
       const res = await apiClient.get('/training-requests');
       return res.data;
+    },
+  });
+
+  const { data: clustersData } = useQuery({
+    queryKey: ['clusters-list'],
+    queryFn: async () => {
+      const res = await apiClient.get('/organizations').catch(() => ({ data: [] }));
+      const all = Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
+      return all.filter((o: any) => o.organizationType?.code === 'cluster' || o.type === 'cluster' || o.code?.includes('CLUSTER'));
+    },
+  });
+  const clusters = clustersData || [];
+
+  // The program the request runs on. Required: the rotation breakdown below
+  // becomes a request-scoped TrainingPlan tied to this program, and the
+  // program's catalog duration is what the backend checks the training window
+  // against — without it there is nothing to validate the plan/window against.
+  const { data: programsData } = useQuery({
+    queryKey: ['programs-list'],
+    queryFn: async () => {
+      const res = await apiClient.get('/programs').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? res.data ?? [];
+    },
+  });
+  const programs = programsData || [];
+
+  const createRequestMutation = useMutation({
+    mutationFn: async () => {
+      return apiClient.post('/training-requests', {
+        targetOrgId: reqTargetOrgId,
+        programId: reqProgramId,
+        specialty: reqSpecialty,
+        durationMonths: reqDurationMonths,
+        trainingStartDate: reqStartDate,
+        trainingEndDate: reqEndDate,
+        studentCount: reqTrainees.length,
+        rotations: reqRotations.map((r) => ({
+          departmentNameAr: r.departmentNameAr,
+          durationWeeks: Number(r.durationWeeks),
+        })),
+        trainees: reqTrainees.map((t) => ({
+          academicNumber: t.academicNumber,
+          nationalId: t.nationalId,
+          nameAr: t.nameAr,
+          startDate: reqStartDate,
+          endDate: reqEndDate,
+        })),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['training-requests'] });
+      setOpenCreateModal(false);
+      setSuccessMsg('تم تقديم طلب التدريب وقائمة المتدربين والروتيشنات إلى التجمع الصحي بنجاح!');
+    },
+    onError: (err: any) => {
+      setErrorMsg(err.response?.data?.message || err.message || 'فشل تقديم طلب التدريب — يرجى التثبت من البيانات');
     },
   });
 
@@ -144,11 +229,26 @@ export const Affiliations: React.FC = () => {
         title="طلبات التدريب الواردة للتجمع الصحي (Incoming Training Requests Queue)"
         subtitle={<>{user?.activeOrganization?.nameAr} — مراجعة الطلبات التشغيلية الواردة من الجامعات وتوزيع المتدربين على المستشفيات</>}
         actions={<>
-        <Tooltip title="تحديث البيانات">
-          <IconButton onClick={() => refetch()} style={{ color: '#059669', border: '1px solid rgba(16,185,129,0.3)' }}>
-            <RefreshCw size={18} />
-          </IconButton>
-        </Tooltip>
+          {hasAnyRole(['university_administrator', 'academic_affairs', 'platform_owner']) && (
+            <Button
+              variant="contained"
+              startIcon={<Send size={16} />}
+              onClick={() => {
+                if (clusters.length > 0 && !reqTargetOrgId) setReqTargetOrgId(clusters[0].id);
+                if (programs.length > 0 && !reqProgramId) setReqProgramId(programs[0].id);
+                setOpenCreateModal(true);
+                setErrorMsg(null);
+              }}
+              style={{ background: 'linear-gradient(135deg, #059669 0%, #0D9488 100%)', fontWeight: 700 }}
+            >
+              إرسال طلب تدريب جديد
+            </Button>
+          )}
+          <Tooltip title="تحديث البيانات">
+            <IconButton onClick={() => refetch()} style={{ color: '#059669', border: '1px solid rgba(16,185,129,0.3)' }}>
+              <RefreshCw size={18} />
+            </IconButton>
+          </Tooltip>
         </>}
         loading={isLoading}
         stats={[
@@ -300,6 +400,207 @@ export const Affiliations: React.FC = () => {
             style={{ background: '#059669', fontWeight: 700 }}
           >
             {allocateMutation.isPending ? <CircularProgress size={20} /> : 'اعتماد التوزيع وإرساله للمستشفيات (Approve & Allocate)'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* University Create Training Request Modal */}
+      <Dialog open={openCreateModal} onClose={() => setOpenCreateModal(false)} maxWidth="md" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>تقديم طلب تدريب جديد من الجامعة إلى التجمع الصحي</DialogTitle>
+        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingTop: '16px' }}>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <FormControl fullWidth required>
+              <InputLabel>التجمع الصحي المستقبل</InputLabel>
+              <Select
+                value={reqTargetOrgId}
+                label="التجمع الصحي المستقبل"
+                onChange={(e) => setReqTargetOrgId(e.target.value)}
+              >
+                {clusters.map((c: any) => (
+                  <MenuItem key={c.id} value={c.id}>{c.nameAr} ({c.code || 'CLUSTER'})</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth required>
+              <InputLabel>البرنامج التدريبي</InputLabel>
+              <Select
+                value={reqProgramId}
+                label="البرنامج التدريبي"
+                onChange={(e) => {
+                  const p = programs.find((x: any) => x.id === e.target.value);
+                  setReqProgramId(e.target.value);
+                  // The program's own catalogued duration replaces whatever was
+                  // typed before — it is the figure the backend actually checks
+                  // the training window against.
+                  if (p?.durationMonths) setReqDurationMonths(p.durationMonths);
+                }}
+              >
+                {programs.map((p: any) => (
+                  <MenuItem key={p.id} value={p.id}>{p.nameAr} ({p.durationMonths} شهر)</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </div>
+
+          <TextField
+            label="رمز التخصص (Specialty Code)"
+            value={reqSpecialty}
+            onChange={(e) => setReqSpecialty(e.target.value)}
+            helperText="رمز من جدول التخصصات المعتمد — مثال: internal_medicine"
+            fullWidth
+          />
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+            <TextField
+              label="مدة البرنامج (بالأشهر)"
+              type="number"
+              value={reqDurationMonths}
+              InputProps={{ readOnly: true }}
+              helperText="من كتالوج البرنامج — يجب أن تطابقها فترة التدريب أدناه"
+              fullWidth
+            />
+            <TextField
+              label="تاريخ بداية التدريب"
+              type="date"
+              value={reqStartDate}
+              onChange={(e) => setReqStartDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            <TextField
+              label="تاريخ نهاية التدريب"
+              type="date"
+              value={reqEndDate}
+              onChange={(e) => setReqEndDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+          </div>
+
+          {/* Structured Training Plan (Rotations) */}
+          <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#F8FAFC' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <span style={{ fontWeight: 800, color: '#0F172A' }}>خطة الروتيشنات التدريبية (WHAT/WHEN Plan)</span>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setReqRotations([...reqRotations, { departmentNameAr: 'تخصص جديد', durationWeeks: 8 }])}
+              >
+                + إضافة روتيشن
+              </Button>
+            </div>
+            {reqRotations.map((r, idx) => (
+              <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 40px', gap: '12px', marginBottom: '8px', alignItems: 'center' }}>
+                <TextField
+                  size="small"
+                  label={`روتيشن ${idx + 1}`}
+                  value={r.departmentNameAr}
+                  onChange={(e) => {
+                    const next = [...reqRotations];
+                    next[idx].departmentNameAr = e.target.value;
+                    setReqRotations(next);
+                  }}
+                />
+                <TextField
+                  size="small"
+                  label="المدة (أسابيع)"
+                  type="number"
+                  value={r.durationWeeks}
+                  onChange={(e) => {
+                    const next = [...reqRotations];
+                    next[idx].durationWeeks = Number(e.target.value);
+                    setReqRotations(next);
+                  }}
+                />
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => setReqRotations(reqRotations.filter((_, i) => i !== idx))}
+                  disabled={reqRotations.length <= 1}
+                >
+                  <Trash2 size={16} />
+                </IconButton>
+              </div>
+            ))}
+            <div style={{ fontSize: '12px', color: '#64748B', marginTop: '8px' }}>
+              مجموع أسابيع الروتيشنات: <strong>{reqRotations.reduce((s, r) => s + Number(r.durationWeeks || 0), 0)} أسابيع</strong> (يعادل {Math.round(reqRotations.reduce((s, r) => s + Number(r.durationWeeks || 0), 0) / 4.345)} شهراً).
+            </div>
+          </div>
+
+          {/* Candidate Trainees Roster */}
+          <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#F8FAFC' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <span style={{ fontWeight: 800, color: '#0F172A' }}>قائمة أطباء الامتياز / المرشحين (Roster — {reqTrainees.length} متدرب)</span>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setReqTrainees([...reqTrainees, { academicNumber: `44100${reqTrainees.length + 1}`, nationalId: `109911223${reqTrainees.length + 5}`, nameAr: 'متدرب جديد' }])}
+              >
+                + إضافة متدرب
+              </Button>
+            </div>
+            {reqTrainees.map((t, idx) => (
+              <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr 40px', gap: '12px', marginBottom: '8px', alignItems: 'center' }}>
+                <TextField
+                  size="small"
+                  label="الرقم الجامعي"
+                  value={t.academicNumber}
+                  onChange={(e) => {
+                    const next = [...reqTrainees];
+                    next[idx].academicNumber = e.target.value;
+                    setReqTrainees(next);
+                  }}
+                />
+                <TextField
+                  size="small"
+                  label="الهوية الوطنية"
+                  value={t.nationalId}
+                  onChange={(e) => {
+                    const next = [...reqTrainees];
+                    next[idx].nationalId = e.target.value;
+                    setReqTrainees(next);
+                  }}
+                />
+                <TextField
+                  size="small"
+                  label="اسم المتدرب بالعربية"
+                  value={t.nameAr}
+                  onChange={(e) => {
+                    const next = [...reqTrainees];
+                    next[idx].nameAr = e.target.value;
+                    setReqTrainees(next);
+                  }}
+                />
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => setReqTrainees(reqTrainees.filter((_, i) => i !== idx))}
+                  disabled={reqTrainees.length <= 1}
+                >
+                  <Trash2 size={16} />
+                </IconButton>
+              </div>
+            ))}
+          </div>
+
+          {createRequestMutation.isError && (
+            <Alert severity="error">
+              {(createRequestMutation.error as any)?.response?.data?.message || (createRequestMutation.error as any)?.message || 'فشل تقديم طلب التدريب'}
+            </Alert>
+          )}
+
+        </DialogContent>
+        <DialogActions style={{ padding: '16px 24px' }}>
+          <Button onClick={() => setOpenCreateModal(false)}>إلغاء</Button>
+          <Button
+            variant="contained"
+            onClick={() => createRequestMutation.mutate()}
+            disabled={createRequestMutation.isPending || !reqTargetOrgId || !reqProgramId || reqTrainees.length === 0}
+            style={{ background: '#059669', fontWeight: 700 }}
+          >
+            {createRequestMutation.isPending ? <CircularProgress size={20} /> : 'إرسال طلب التدريب (Submit Request)'}
           </Button>
         </DialogActions>
       </Dialog>

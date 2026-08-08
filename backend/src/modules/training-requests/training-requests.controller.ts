@@ -7,6 +7,8 @@ import {
   Param,
   Query,
   UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TrainingRequestsService } from './training-requests.service';
@@ -82,6 +84,7 @@ export class TrainingRequestsController {
   }
 
   @Post('preview')
+  @HttpCode(HttpStatus.OK)
   @RequireRoles(...UNIVERSITY_ROLES, ...CLUSTER_ROLES)
   @ApiOperation({
     summary: 'التحقق من الطلب قبل الإرسال وعرض ملخصه (البرنامج، الإصدار، عدد الروتيشنات، الأسابيع)',

@@ -305,35 +305,74 @@ export class EvaluationService {
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
       select: { id: true },
     });
-    if (!profile) return { data: { pendingDepartmentEvals: [], receivedEvals: [] } };
 
-    const activeRotations = await this.prisma.rotation.findMany({
-      where: { traineeProfileId: profile.id, status: 'active' },
-      include: { department: { select: { nameAr: true } } },
+    if (profile) {
+      const activeRotations = await this.prisma.rotation.findMany({
+        where: { traineeProfileId: profile.id, status: 'active' },
+        include: { department: { select: { nameAr: true } } },
+      });
+
+      const pendingDepartmentEvals = (
+        await Promise.all(
+          activeRotations.map(async (rot) => {
+            const done = await this.prisma.evaluation.findFirst({
+              where: {
+                rotationId: rot.id,
+                evaluatorId: user.accountId,
+                evaluationType: 'department_by_trainee',
+              },
+            });
+            return done ? null : { rotationId: rot.id, departmentNameAr: rot.department.nameAr };
+          }),
+        )
+      ).filter(Boolean);
+
+      const receivedEvals = await this.prisma.evaluation.findMany({
+        where: { evaluateeId: user.accountId },
+        include: { form: true, rotation: { include: { department: { select: { nameAr: true } } } } },
+        orderBy: { submittedAt: 'desc' },
+        take: 20,
+      });
+
+      return { data: { pendingDepartmentEvals, receivedEvals } };
+    }
+
+    // For trainers, return pending trainer evaluations for assigned trainees
+    const trainer = await this.prisma.trainerProfile.findFirst({
+      where: { person: { userAccounts: { some: { id: user.accountId } } } },
     });
 
-    const pendingDepartmentEvals = (
-      await Promise.all(
-        activeRotations.map(async (rot) => {
-          const done = await this.prisma.evaluation.findFirst({
-            where: {
-              rotationId: rot.id,
-              evaluatorId: user.accountId,
-              evaluationType: 'department_by_trainee',
-            },
-          });
-          return done ? null : { rotationId: rot.id, departmentNameAr: rot.department.nameAr };
-        }),
-      )
-    ).filter(Boolean);
+    if (trainer) {
+      const activeTrainerRotations = await this.prisma.rotation.findMany({
+        where: { trainerProfileId: trainer.id, status: 'active' },
+        include: {
+          traineeProfile: { include: { person: true } },
+          department: { select: { nameAr: true } },
+        },
+      });
 
-    const receivedEvals = await this.prisma.evaluation.findMany({
-      where: { evaluateeId: user.accountId },
-      include: { form: true, rotation: { include: { department: { select: { nameAr: true } } } } },
-      orderBy: { submittedAt: 'desc' },
-      take: 20,
-    });
+      const pendingTrainerEvals = (
+        await Promise.all(
+          activeTrainerRotations.map(async (rot) => {
+            const done = await this.prisma.evaluation.findFirst({
+              where: { rotationId: rot.id, evaluatorId: user.accountId },
+            });
+            return done
+              ? null
+              : {
+                  rotationId: rot.id,
+                  traineeNameAr: rot.traineeProfile.person.nameAr,
+                  departmentNameAr: rot.department.nameAr,
+                  startDate: rot.startDate,
+                  endDate: rot.endDate,
+                };
+          }),
+        )
+      ).filter(Boolean);
 
-    return { data: { pendingDepartmentEvals, receivedEvals } };
+      return { data: { pendingTrainerEvals, pendingDepartmentEvals: [], receivedEvals: [] } };
+    }
+
+    return { data: { pendingDepartmentEvals: [], receivedEvals: [] } };
   }
 }

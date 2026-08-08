@@ -390,15 +390,13 @@ describe('Negative authorisation', () => {
     deptHeadToken = await login(SCENARIO.accounts.hospital1DeptHead);
     traineeToken = await login(SCENARIO.accounts.trainee);
 
-    const req = await prisma.trainingRequest.findFirst({
-      where: { targetOrgId: s.cluster.id },
+    const row = await prisma.trainingRequestTrainee.findFirst({
+      where: { trainingRequest: { targetOrgId: s.cluster.id } },
       orderBy: { createdAt: 'desc' },
     });
-    requestId = req!.id;
-    const row = await prisma.trainingRequestTrainee.findFirst({
-      where: { trainingRequestId: requestId },
-    });
-    rowId = row!.id;
+    if (!row) throw new Error('No training request trainee found for cluster in authz-workflow.e2e-spec.ts');
+    rowId = row.id;
+    requestId = row.trainingRequestId;
   });
 
   it('N1. hospital training admin cannot create a training request', async () => {

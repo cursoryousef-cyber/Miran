@@ -1,5 +1,101 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, IsUUID, IsNumber, IsArray, IsDateString } from 'class-validator';
+import {
+  IsNotEmpty, IsOptional, IsString, IsUUID, IsNumber, IsArray, IsDateString,
+  IsInt, IsBoolean, Min, ValidateNested, ArrayMinSize,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+/**
+ * One rotation row of an inline, request-specific training plan — the WHAT/WHEN
+ * a university proposes when no national curriculum template exists yet for the
+ * program. Reused verbatim as a `TrainingPlanRotation` once persisted; this DTO
+ * only carries what a person can reasonably type, not internal plan fields.
+ */
+export class RotationInputDto {
+  @ApiProperty({ description: 'اسم القسم/الروتيشن بالعربية (مثال: الباطنة)' })
+  @IsString()
+  @IsNotEmpty()
+  departmentNameAr!: string;
+
+  @ApiPropertyOptional({
+    description: 'رمز القسم — يُشتق تلقائياً من الاسم إن تُرك فارغاً',
+  })
+  @IsOptional()
+  @IsString()
+  departmentCode?: string;
+
+  @ApiProperty({ description: 'مدة الروتيشن بالأسابيع' })
+  @IsInt()
+  @Min(1)
+  durationWeeks!: number;
+
+  @ApiPropertyOptional({ description: 'إلزامي أم اختياري — افتراضياً إلزامي' })
+  @IsOptional()
+  @IsBoolean()
+  isMandatory?: boolean;
+}
+
+/**
+ * One trainee proposed alongside the request itself, so a university can submit
+ * the request and its roster in a single call. Reuses exactly the same shape and
+ * the same validated write path as the standalone
+ * `POST /training-requests/:id/trainees/import` endpoint — see
+ * `TrainingRequestsService.create()`, which maps these onto `TraineeRowDto` and
+ * hands them to `TrainingRequestTraineesService.importTrainees()` rather than
+ * writing rows itself. There is one validated way to create a trainee row; this
+ * is a convenience entry point onto it, not a second one.
+ */
+export class CandidateTraineeInputDto {
+  @ApiProperty({ description: 'الرقم الأكاديمي للمتدرب (الرقم الجامعي)' })
+  @IsString()
+  @IsNotEmpty()
+  academicNumber!: string;
+
+  @ApiProperty({ description: 'رقم الهوية الوطنية أو الإقامة' })
+  @IsString()
+  @IsNotEmpty()
+  nationalId!: string;
+
+  @ApiProperty({ description: 'الاسم الكامل بالعربية' })
+  @IsString()
+  @IsNotEmpty()
+  nameAr!: string;
+
+  @ApiPropertyOptional({ description: 'الاسم الكامل بالإنجليزية' })
+  @IsOptional()
+  @IsString()
+  nameEn?: string;
+
+  @ApiPropertyOptional({ description: 'الجنس (male/female)' })
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @ApiPropertyOptional({ description: 'التخصص — يرث تخصص الطلب إن تُرك فارغاً' })
+  @IsOptional()
+  @IsString()
+  specialty?: string;
+
+  @ApiPropertyOptional({ description: 'البريد الإلكتروني' })
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @ApiPropertyOptional({ description: 'رقم الجوال' })
+  @IsOptional()
+  @IsString()
+  mobile?: string;
+
+  @ApiPropertyOptional({ description: 'تاريخ بداية تدريب المتدرب — يرث تاريخ الطلب إن تُرك فارغاً' })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ description: 'تاريخ نهاية تدريب المتدرب — يرث تاريخ الطلب إن تُرك فارغاً' })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+}
 
 export class CreateTrainingRequestDto {
   @ApiProperty({ description: 'معرف الجهة الهدف (التجمع الصحي)' })
@@ -16,6 +112,16 @@ export class CreateTrainingRequestDto {
   @IsOptional()
   @IsString()
   specialty?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'مدة البرنامج بالأشهر كما تراها الجامعة — معلوماتي فقط. مصدر الحقيقة الملزم هو ' +
+      'Program.durationMonths من الكتالوج؛ هذا الحقل لا يغيّر أي تحقق ولا يُكتب في أي جدول.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  durationMonths?: number;
 
   @ApiPropertyOptional({
     description: 'قالب الخطة التدريبية المختار — يُثبَّت إصداره النشط وقت التقديم',
@@ -65,6 +171,31 @@ export class CreateTrainingRequestDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'روتيشنات خطة مخصصة للطلب — تُستخدم فقط عند عدم اختيار trainingPlanId من الكتالوج. ' +
+      'تُنشئ خطة وإصداراً خاصين بهذا الطلب (WHAT/WHEN)، منفصلين عن مكان/من يشرف على المتدرب.',
+    type: [RotationInputDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => RotationInputDto)
+  rotations?: RotationInputDto[];
+
+  @ApiPropertyOptional({
+    description:
+      'قائمة المتدربين المرفقة مع الطلب — بديل عن استدعاء منفصل لـ ' +
+      '/training-requests/:id/trainees/import بعد الإنشاء. تخضع لنفس التحقق تماماً.',
+    type: [CandidateTraineeInputDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CandidateTraineeInputDto)
+  trainees?: CandidateTraineeInputDto[];
 }
 
 /**
@@ -111,6 +242,13 @@ export class PreviewTrainingRequestDto {
   @IsOptional()
   @IsNumber()
   studentCount?: number;
+
+  @ApiPropertyOptional({ type: [RotationInputDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RotationInputDto)
+  rotations?: RotationInputDto[];
 }
 
 export class UpdateTrainingRequestDto {
