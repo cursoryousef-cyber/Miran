@@ -15,6 +15,7 @@ export const NotificationCenter: React.FC = () => {
   const queryClient = useQueryClient();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
+  const hasToken = Boolean(localStorage.getItem('access_token'));
 
   const { data: unreadData } = useQuery({
     queryKey: ['notifications-unread-count'],
@@ -22,7 +23,8 @@ export const NotificationCenter: React.FC = () => {
       const res = await apiClient.get('/notifications/unread-count').catch(() => ({ data: { data: { count: 0 } } }));
       return res.data?.data || { count: 0 };
     },
-    refetchInterval: 30000,
+    enabled: hasToken,
+    refetchInterval: hasToken ? 30000 : false,
   });
 
   const { data: notificationsData, isLoading } = useQuery({
@@ -31,7 +33,7 @@ export const NotificationCenter: React.FC = () => {
       const res = await apiClient.get('/notifications', { params: { limit: 10 } }).catch(() => ({ data: { data: [] } }));
       return res.data?.data || [];
     },
-    enabled: open,
+    enabled: open && hasToken,
   });
 
   const markReadMutation = useMutation({
@@ -97,6 +99,7 @@ export const NotificationCenter: React.FC = () => {
         open={open}
         anchorEl={anchorEl}
         onClose={() => setAnchorEl(null)}
+        disableRestoreFocus
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         PaperProps={{

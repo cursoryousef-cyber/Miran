@@ -23,14 +23,53 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Interceptor: Refresh Token on 401
+// Queue state for handling concurrent 401 requests during token refresh
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (error: any) => void;
+}> = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else if (token) {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+// Interceptor: Refresh Token on 401 with Queue & Re-trying
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
+    // Do not attempt refresh on login or refresh-token calls themselves
+    if (
+      originalRequest.url?.includes('/auth/login') ||
+      originalRequest.url?.includes('/auth/refresh-token')
+    ) {
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return apiClient(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
       originalRequest._retry = true;
+      isRefreshing = true;
+
       const refreshToken = localStorage.getItem('refresh_token');
 
       if (refreshToken) {
@@ -39,20 +78,45 @@ apiClient.interceptors.response.use(
             refreshToken,
           });
 
-          const newAccessToken = res.data.accessToken;
-          localStorage.setItem('access_token', newAccessToken);
+          const data = res.data?.data || res.data;
+          const newAccessToken = data?.accessToken || res.data?.accessToken;
+          const newRefreshToken = data?.refreshToken || res.data?.refreshToken;
 
-          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-          return apiClient(originalRequest);
-        } catch {
+          if (newAccessToken) {
+            localStorage.setItem('access_token', newAccessToken);
+            if (newRefreshToken) {
+              localStorage.setItem('refresh_token', newRefreshToken);
+            }
+
+            apiClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
+            originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+
+            processQueue(null, newAccessToken);
+            isRefreshing = false;
+
+            return apiClient(originalRequest);
+          } else {
+            throw new Error('No access token returned from refresh');
+          }
+        } catch (refreshErr) {
+          processQueue(refreshErr, null);
+          isRefreshing = false;
+
           localStorage.clear();
-          window.location.href = '/login';
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
+          return Promise.reject(refreshErr);
         }
       } else {
+        isRefreshing = false;
         localStorage.clear();
-        window.location.href = '/login';
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
       }
     }
+
     return Promise.reject(error);
   },
 );

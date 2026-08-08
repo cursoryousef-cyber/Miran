@@ -95,6 +95,7 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
           anchorEl={orgAnchorEl}
           open={Boolean(orgAnchorEl)}
           onClose={() => setOrgAnchorEl(null)}
+          disableRestoreFocus
           PaperProps={{
             style: {
               backgroundColor: '#FFFFFF',
@@ -168,6 +169,7 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
           anchorEl={userAnchorEl}
           open={Boolean(userAnchorEl)}
           onClose={() => setUserAnchorEl(null)}
+          disableRestoreFocus
           PaperProps={{
             style: {
               backgroundColor: '#FFFFFF',
