@@ -22,6 +22,12 @@ export class AcademicIntakesService {
     if (orgId) {
       where.OR = [
         { organizationId: orgId },
+        { universityOrgId: orgId },
+        {
+          sourceRequest: {
+            OR: [{ sourceOrgId: orgId }, { targetOrgId: orgId }],
+          },
+        },
         {
           traineeProfiles: {
             some: {

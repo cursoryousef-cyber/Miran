@@ -28,7 +28,7 @@ import { useAuth } from '../context/AuthContext';
 
 export const AcademicIntakes: React.FC = () => {
   const { user, hasCapability } = useAuth();
-  const canManageBatches = hasCapability('academic_batch.manage');
+  const canCreateBatch = hasCapability('academic_batch.create_from_request');
   const queryClient = useQueryClient();
 
   const [openModal, setOpenModal] = useState(false);
@@ -53,7 +53,7 @@ export const AcademicIntakes: React.FC = () => {
       const all = res.data?.data || res.data || [];
       return all.filter((r: any) => r.status === 'approved');
     },
-    enabled: canManageBatches,
+    enabled: canCreateBatch,
   });
 
   const createBatchFromRequestMutation = useMutation({
@@ -91,7 +91,7 @@ export const AcademicIntakes: React.FC = () => {
       title="الدفعات الأكاديمية (Academic Batches)"
       actions={
         <>
-          {canManageBatches && (
+          {canCreateBatch && (
             <Button
               variant="contained"
               startIcon={<Plus size={18} />}
