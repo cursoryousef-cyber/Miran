@@ -1,0 +1,64 @@
+format_version: '13'
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+project_type: ios
+
+app:
+  envs:
+  - BITRISE_PROJECT_PATH: Miran.xcodeproj
+  - BITRISE_SCHEME: Miran
+  - BITRISE_DISTRIBUTION_TYPE: app-store
+
+workflows:
+  release:
+    summary: Builds Release Archive and deploys IPA to App Store Connect / TestFlight.
+    steps:
+    - activate-ssh-key@4: {}
+    - git-clone@8: {}
+    - script@1:
+        title: Resolve Swift Package Dependencies
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -ex
+            xcodebuild -resolvePackageDependencies -project "$BITRISE_PROJECT_PATH"
+    - ios-auto-provision@1:
+        inputs:
+        - distribution_type: app-store
+    - xcode-archive@5:
+        inputs:
+        - project_path: "$BITRISE_PROJECT_PATH"
+        - scheme: "$BITRISE_SCHEME"
+        - configuration: Release
+        - export_method: app-store
+        - automatic_code_signing: api-key
+    - deploy-to-itunesconnect-deliver@3:
+        inputs:
+        - connection: api_key
+    - deploy-to-bitrise-io@2: {}
+
+  primary:
+    summary: Primary build workflow for verification.
+    steps:
+    - activate-ssh-key@4: {}
+    - git-clone@8: {}
+    - script@1:
+        title: Resolve Swift Package Dependencies
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -ex
+            xcodebuild -resolvePackageDependencies -project "$BITRISE_PROJECT_PATH"
+    - ios-auto-provision@1:
+        inputs:
+        - distribution_type: app-store
+    - xcode-archive@5:
+        inputs:
+        - project_path: "$BITRISE_PROJECT_PATH"
+        - scheme: "$BITRISE_SCHEME"
+        - configuration: Release
+        - export_method: app-store
+        - automatic_code_signing: api-key
+    - deploy-to-itunesconnect-deliver@3:
+        inputs:
+        - connection: api_key
+    - deploy-to-bitrise-io@2: {}
