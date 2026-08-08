@@ -14,7 +14,7 @@ meta:
     stack: osx-xcode-15.x
 
 workflows:
-  build:
+  archive_and_export_app:
     summary: Production Release Archive, App Store IPA Export, and TestFlight Deployment.
     steps:
     - activate-ssh-key@4: {}
@@ -53,7 +53,6 @@ workflows:
             echo "================ HARD IPA VERIFICATION =================="
             echo "Searching for exported IPA in $BITRISE_DEPLOY_DIR..."
             
-            # Print all IPA files found in deploy dir
             find "$BITRISE_DEPLOY_DIR" -name "*.ipa" -print
             
             FOUND_IPA=$(find "$BITRISE_DEPLOY_DIR" -name "*.ipa" 2>/dev/null | head -n 1)
@@ -72,18 +71,23 @@ workflows:
         inputs:
         - deploy_path: "$BITRISE_DEPLOY_DIR"
 
-  release:
-    summary: Release distribution workflow for App Store Connect / TestFlight.
+  build:
+    summary: Default build workflow alias.
     before_run:
-    - build
+    - archive_and_export_app
+
+  release:
+    summary: Release workflow alias.
+    before_run:
+    - archive_and_export_app
 
   primary:
-    summary: Primary workflow entrypoint.
+    summary: Primary workflow alias.
     before_run:
-    - build
+    - archive_and_export_app
 
 trigger_map:
 - push_branch: "*"
-  workflow: build
+  workflow: archive_and_export_app
 - pull_request_source_branch: "*"
-  workflow: build
+  workflow: archive_and_export_app
