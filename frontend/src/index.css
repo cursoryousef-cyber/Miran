@@ -137,3 +137,33 @@ img, svg, table { max-width: 100%; }
 
 /* Long page titles wrap instead of forcing the header wider. */
 main h1 { overflow-wrap: anywhere; }
+
+/* ── Mobile experience ─────────────────────────────────────────────────────
+   Room to breathe at the end of a scroll (so the last card is not flush
+   against the edge, and clears any floating action button). */
+main { padding-bottom: 24px; }
+@media (max-width: 900px) {
+  main { padding: 16px 16px 96px !important; }
+  /* Page header actions stack full-width rather than crowding the title. */
+  main > header { flex-direction: column; align-items: stretch; }
+  main > header > div:last-child { width: 100%; }
+  main > header > div:last-child > * { flex: 1 1 auto; }
+}
+
+/* Buttons inside a toolbar keep their intrinsic width on mobile — the
+   full-width rule above is for page-level actions, not inline filters. */
+@media (max-width: 600px) {
+  .glass-card .MuiButton-root { width: auto; }
+}
+
+/* Floating action button clears the safe area on iOS. */
+.fab-root {
+  position: fixed;
+  inset-inline-start: 20px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  z-index: 1200;
+}
+
+/* Shown only on phones — desktop keeps the action in the page header. */
+.mobile-only { display: none !important; }
+@media (max-width: 900px) { .mobile-only { display: inline-flex !important; } }

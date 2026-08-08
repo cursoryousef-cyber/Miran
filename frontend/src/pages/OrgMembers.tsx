@@ -1,6 +1,8 @@
-import { UsersRound, CheckCircle2, UserCog, GraduationCap, AlertTriangle } from 'lucide-react';
+import { UsersRound, CheckCircle2, UserCog, GraduationCap, AlertTriangle, Edit, ShieldAlert } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
-import { PageHeader, DataPageShell } from '../components/ui';
+import { Badge, CardGrid, DataPageShell, EmptyState, EntityCard, Surface, TableCard, ViewToggle } from '../components/ui';
+import { colour, font, radius, space } from '../components/ui/tokens';
+import { Button } from '@mui/material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../api/client';
@@ -121,202 +123,176 @@ export const OrgMembersPage: React.FC = () => {
   const traineeMembers = members.filter((m: any) => (m.roles ?? []).some((r: any) => (r.code ?? r) === 'trainee')).length;
   const withoutDept = members.filter((m: any) => !m.departmentId && !m.department).length;
 
+  const [view, setView] = useState<'cards' | 'table'>('cards');
+
   return (
     <DataPageShell
-        icon={UsersRound}
-        title="أعضاء الجهة"
-        subtitle="إضافة وتعديل وتعطيل الأعضاء وتعيين أدوارهم وفق ضوابط الصلاحيات"
-        stats={[
-          { label: 'إجمالي الأعضاء', value: members.length, icon: UsersRound, tone: 'primary' },
-          { label: 'أعضاء نشطون', value: activeMembers, icon: CheckCircle2, tone: 'success' },
-          { label: 'المدربون', value: trainerMembers, icon: UserCog, tone: 'violet' },
-          { label: 'المتدربون', value: traineeMembers, icon: GraduationCap, tone: 'info' },
-          { label: 'بلا قسم', value: withoutDept, icon: AlertTriangle, tone: withoutDept ? 'warning' : 'success' },
-        ]}
-    >
-        {error && (
-          <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.15)', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', marginTop: '12px' }}>
-            {error}
+      icon={UsersRound}
+      title="أعضاء الجهة"
+      subtitle="إضافة وتعديل وتعطيل الأعضاء وتعيين أدوارهم وفق ضوابط الصلاحيات"
+      stats={[
+        { label: 'إجمالي الأعضاء', value: members.length, icon: UsersRound, tone: 'primary' },
+        { label: 'أعضاء نشطون', value: activeMembers, icon: CheckCircle2, tone: 'success' },
+        { label: 'المدربون', value: trainerMembers, icon: UserCog, tone: 'violet' },
+        { label: 'المتدربون', value: traineeMembers, icon: GraduationCap, tone: 'info' },
+        { label: 'بلا قسم', value: withoutDept, icon: AlertTriangle, tone: withoutDept ? 'warning' : 'success' },
+      ]}
+      toolbar={
+        <div style={{ display: 'flex', gap: space.md, alignItems: 'center', flexWrap: 'wrap', width: '100%' }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {roleFilterOptions.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setFilterRole(opt.value)}
+                style={{
+                  padding: '6px 14px', borderRadius: radius.md, border: 'none', cursor: 'pointer',
+                  fontWeight: 700, fontSize: font.caption, transition: 'all 0.2s', fontFamily: 'inherit',
+                  background: filterRole === opt.value ? colour.primary : colour.canvas,
+                  color: filterRole === opt.value ? '#ffffff' : colour.muted,
+                  boxShadow: filterRole === opt.value ? '0 2px 8px rgba(15,118,110,0.25)' : 'none',
+                }}>
+                {opt.label}
+              </button>
+            ))}
           </div>
-        )}
-        {successMsg && (
-          <div style={{ padding: '12px 16px', background: 'rgba(16,185,129,0.15)', borderRadius: '10px', border: '1px solid rgba(16,185,129,0.3)', color: '#6ee7b7', marginTop: '12px' }}>
-            {successMsg}
-          </div>
-        )}
 
-      {/* Filters Row */}
-      <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
-        {/* Role Filters */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {roleFilterOptions.map((opt) => (
-            <button key={opt.value} onClick={() => setFilterRole(opt.value)} style={{
-              padding: '8px 18px', borderRadius: '20px', border: 'none', cursor: 'pointer',
-              fontWeight: 600, fontSize: '13px', transition: 'all 0.2s',
-              background: filterRole === opt.value ? 'linear-gradient(135deg,#059669,#0891B2)' : '#F1F5F9',
-              color: filterRole === opt.value ? '#fff' : '#94a3b8',
-              boxShadow: filterRole === opt.value ? '0 4px 12px rgba(5,150,105,0.3)' : 'none',
-            }}>
-              {opt.label}
-            </button>
-          ))}
+          <input
+            type="text"
+            placeholder="بحث بالاسم أو الهوية أو البريد..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              flex: 1, minWidth: 220, padding: `${space.sm}px ${space.md}px`,
+              background: colour.canvas, border: `1px solid ${colour.border}`,
+              borderRadius: radius.md, color: colour.text, fontSize: font.body, outline: 'none',
+              fontFamily: 'inherit',
+            }}
+          />
+
+          <ViewToggle value={view} onChange={setView} />
+
+          <Button
+            variant="contained"
+            onClick={() => setShowAddModal(true)}
+            sx={{ background: colour.primary, fontWeight: 700, borderRadius: 2, marginRight: 'auto' }}
+          >
+            إضافة عضو جديد +
+          </Button>
         </div>
+      }
+    >
+      {error && (
+        <div style={{ padding: space.md, background: colour.dangerSoft, borderRadius: radius.sm, color: colour.danger, fontWeight: 700 }}>
+          {error}
+        </div>
+      )}
+      {successMsg && (
+        <div style={{ padding: space.md, background: colour.successSoft, borderRadius: radius.sm, color: colour.success, fontWeight: 700 }}>
+          {successMsg}
+        </div>
+      )}
 
-        {/* Search */}
-        <input
-          type="text"
-          placeholder="بحث بالاسم أو الهوية أو البريد..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{
-            flex: 1, minWidth: '240px', padding: '10px 16px',
-            background: '#F1F5F9', border: '1px solid #E2E8F0',
-            borderRadius: '10px', color: '#0F172A', fontSize: '14px', outline: 'none',
-          }}
-        />
-
-        {/* Add Button */}
-        <button onClick={() => setShowAddModal(true)} style={{
-          display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 22px',
-          background: 'linear-gradient(135deg,#059669,#0891B2)', border: 'none',
-          borderRadius: '10px', color: '#fff', fontWeight: 700, fontSize: '14px',
-          cursor: 'pointer', boxShadow: '0 4px 14px rgba(5,150,105,0.4)',
-        }}>
-          <svg width="18" height="18" fill="none" stroke="#fff" strokeWidth="2.5" viewBox="0 0 24 24">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-          إضافة عضو جديد
-        </button>
-      </div>
-
-      {/* Stats Bar */}
-      <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
-        {[
-          { label: 'إجمالي الأعضاء', count: members.length, color: '#059669' },
-          { label: 'مدراء', count: members.filter(m => m.roles.some(r => r.code === 'org_manager')).length, color: '#059669' },
-          { label: 'مشرفون', count: members.filter(m => m.roles.some(r => r.code === 'academic_supervisor')).length, color: '#6D28D9' },
-          { label: 'مدربون', count: members.filter(m => m.roles.some(r => r.code === 'trainer')).length, color: '#0E7490' },
-          { label: 'متدربون', count: members.filter(m => m.roles.some(r => r.code === 'trainee')).length, color: '#2563EB' },
-        ].map((stat) => (
-          <div key={stat.label} style={{
-            flex: 1, minWidth: '120px', padding: '16px', textAlign: 'center',
-            background: '#F8FAFC', borderRadius: '12px',
-            border: `1px solid ${stat.color}30`,
-          }}>
-            <div style={{ fontSize: '28px', fontWeight: 800, color: stat.color }}>{stat.count}</div>
-            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>{stat.label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Table */}
       {isLoading ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#059669' }}>
-          <div style={{ fontSize: '18px', marginBottom: '12px' }}>⏳ جاري التحميل...</div>
+        <div style={{ textAlign: 'center', padding: space['3xl'], color: colour.primary }}>
+          <div style={{ fontSize: font.sectionTitle, fontWeight: 700 }}>⏳ جاري التحميل...</div>
         </div>
       ) : filteredMembers.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '80px', color: '#64748b' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
-          <div style={{ fontSize: '18px' }}>لا يوجد أعضاء</div>
-        </div>
+        <Surface>
+          <EmptyState icon={UsersRound} title="لا يوجد أعضاء مطابقون" hint="جرّب تغيير فلتر الدور أو كلمات البحث." />
+        </Surface>
+      ) : view === 'cards' ? (
+        <CardGrid min={320}>
+          {filteredMembers.map((member) => {
+            const primaryRoleObj = member.roles[0];
+            const roleCode = primaryRoleObj?.code || 'trainee';
+            return (
+              <EntityCard
+                key={member.id}
+                icon={roleCode === 'trainer' ? UserCog : roleCode === 'academic_supervisor' ? GraduationCap : UsersRound}
+                tone={roleCode === 'org_manager' ? 'primary' : roleCode === 'trainer' ? 'violet' : roleCode === 'academic_supervisor' ? 'warning' : 'info'}
+                title={member.nameAr || member.email}
+                subtitle={member.username ? `@${member.username}` : member.email}
+                badges={[
+                  { label: member.isActive ? 'نشط' : 'معطل', tone: member.isActive ? 'success' : 'danger' },
+                  ...member.roles.map((r) => ({ label: ROLE_LABELS[r.code] || r.nameAr, tone: 'info' as const })),
+                ]}
+                metrics={[
+                  { label: 'الهوية الوطنية', value: member.nationalId || '—', tone: 'neutral' },
+                  { label: 'رقم الجوال', value: member.phone || '—', tone: 'neutral' },
+                ]}
+                actions={[
+                  { label: 'تعديل', icon: Edit, tone: 'warning', onClick: () => setEditMember(member) },
+                  {
+                    label: member.isActive ? 'تعطيل' : 'تفعيل',
+                    icon: member.isActive ? ShieldAlert : CheckCircle2,
+                    tone: member.isActive ? 'danger' : 'success',
+                    onClick: () => member.isActive ? handleDeactivate(member.id) : handleActivate(member.id),
+                  },
+                ]}
+              />
+            );
+          })}
+        </CardGrid>
       ) : (
-        <div style={{ background: 'rgba(15,23,42,0.7)', borderRadius: '16px', border: '1px solid #F1F5F9', overflow: 'hidden' }}>
+        <TableCard>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
+              <tr style={{ background: colour.subtle, borderBottom: `1px solid ${colour.border}` }}>
                 {['الاسم', 'البريد الإلكتروني', 'الهوية', 'الأدوار', 'الحالة', 'الإجراءات'].map((h) => (
-                  <th key={h} style={{ padding: '14px 20px', textAlign: 'right', fontSize: '13px', fontWeight: 700, color: '#64748b', whiteSpace: 'nowrap' }}>{h}</th>
+                  <th key={h} style={{ padding: `${space.md}px ${space.lg}px`, textAlign: 'right', fontSize: font.caption, fontWeight: 700, color: colour.muted, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filteredMembers.map((member, idx) => (
                 <tr key={member.id} style={{
-                  borderBottom: idx < filteredMembers.length - 1 ? '1px solid #F1F5F9' : 'none',
-                  transition: 'background 0.15s',
+                  borderBottom: idx < filteredMembers.length - 1 ? `1px solid ${colour.border}` : 'none',
                 }}>
-                  {/* Name */}
-                  <td style={{ padding: '16px 20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <td style={{ padding: `${space.md}px ${space.lg}px` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
                       <div style={{
-                        width: '40px', height: '40px', borderRadius: '50%',
-                        background: 'linear-gradient(135deg,rgba(5,150,105,0.3),rgba(6,182,212,0.3))',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '16px', fontWeight: 700, color: '#059669',
+                        width: 36, height: 36, borderRadius: '50%',
+                        background: colour.primarySoft,
+                        display: 'grid', placeItems: 'center',
+                        fontSize: font.label, fontWeight: 700, color: colour.primary,
                       }}>
                         {(member.nameAr || member.email)[0]}
                       </div>
                       <div>
-                        <div style={{ fontWeight: 600, color: '#0F172A', fontSize: '14px' }}>
+                        <div style={{ fontWeight: 700, color: colour.text, fontSize: font.body }}>
                           {member.nameAr || '—'}
                         </div>
-                        <div style={{ fontSize: '12px', color: '#64748b' }}>{member.username}</div>
+                        <div style={{ fontSize: font.caption, color: colour.muted }}>{member.username}</div>
                       </div>
                     </div>
                   </td>
-
-                  {/* Email */}
-                  <td style={{ padding: '16px 20px', color: '#64748B', fontSize: '14px' }}>{member.email}</td>
-
-                  {/* National ID */}
-                  <td style={{ padding: '16px 20px', color: '#64748b', fontSize: '13px', fontFamily: 'monospace' }}>
+                  <td style={{ padding: `${space.md}px ${space.lg}px`, color: colour.muted, fontSize: font.body }}>{member.email}</td>
+                  <td style={{ padding: `${space.md}px ${space.lg}px`, color: colour.muted, fontSize: font.caption, fontFamily: 'monospace' }}>
                     {member.nationalId || '—'}
                   </td>
-
-                  {/* Roles */}
-                  <td style={{ padding: '16px 20px' }}>
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      {member.roles.length === 0 ? (
-                        <span style={{ color: '#64748b', fontSize: '12px' }}>بدون دور</span>
-                      ) : member.roles.map((role) => {
-                        const c = getRoleColor(role.code);
-                        return (
-                          <span key={role.id} style={{
-                            padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600,
-                            background: c.bg, color: c.text,
-                          }}>
-                            {ROLE_LABELS[role.code] || role.nameAr}
-                          </span>
-                        );
-                      })}
+                  <td style={{ padding: `${space.md}px ${space.lg}px` }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {member.roles.map((role) => (
+                        <Badge key={role.id} label={ROLE_LABELS[role.code] || role.nameAr} tone="info" />
+                      ))}
                     </div>
                   </td>
-
-                  {/* Status */}
-                  <td style={{ padding: '16px 20px' }}>
-                    <span style={{
-                      padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600,
-                      background: member.isActive ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
-                      color: member.isActive ? '#059669' : '#DC2626',
-                    }}>
-                      {member.isActive ? 'نشط' : 'معطل'}
-                    </span>
+                  <td style={{ padding: `${space.md}px ${space.lg}px` }}>
+                    <Badge label={member.isActive ? 'نشط' : 'معطل'} tone={member.isActive ? 'success' : 'danger'} />
                   </td>
-
-                  {/* Actions */}
-                  <td style={{ padding: '16px 20px' }}>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={() => setEditMember(member)} style={{
-                        padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(6,182,212,0.3)',
-                        background: 'rgba(6,182,212,0.1)', color: '#0E7490', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
-                      }}>
+                  <td style={{ padding: `${space.md}px ${space.lg}px` }}>
+                    <div style={{ display: 'flex', gap: space.sm }}>
+                      <Button size="small" variant="outlined" onClick={() => setEditMember(member)} sx={{ borderColor: colour.warning, color: colour.warning, fontWeight: 700 }}>
                         تعديل
-                      </button>
-
+                      </Button>
                       {member.isActive ? (
-                        <button onClick={() => handleDeactivate(member.id)} style={{
-                          padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.3)',
-                          background: 'rgba(239,68,68,0.1)', color: '#DC2626', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
-                        }}>
+                        <Button size="small" variant="outlined" onClick={() => handleDeactivate(member.id)} sx={{ borderColor: colour.danger, color: colour.danger, fontWeight: 700 }}>
                           تعطيل
-                        </button>
+                        </Button>
                       ) : (
-                        <button onClick={() => handleActivate(member.id)} style={{
-                          padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(16,185,129,0.3)',
-                          background: 'rgba(16,185,129,0.1)', color: '#059669', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
-                        }}>
+                        <Button size="small" variant="outlined" onClick={() => handleActivate(member.id)} sx={{ borderColor: colour.success, color: colour.success, fontWeight: 700 }}>
                           تفعيل
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </td>
@@ -324,7 +300,7 @@ export const OrgMembersPage: React.FC = () => {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableCard>
       )}
 
       {/* Add Member Modal */}

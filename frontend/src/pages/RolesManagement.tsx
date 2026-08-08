@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader, DataPageShell } from '../components/ui';
+import { PageHeader, DataPageShell, CardGrid, EmptyState, EntityCard, ViewToggle } from '../components/ui';
 import { Shield, Plus, Lock, Key, CheckCircle, Edit, Trash2, UserCog, Layers } from 'lucide-react';
 import {
   Button,
@@ -27,6 +27,7 @@ import { apiClient } from '../api/client';
 
 export const RolesManagement: React.FC = () => {
   const [openModal, setOpenModal] = useState(false);
+  const [view, setView] = useState<'cards' | 'table'>('cards');
   const [newRoleCode, setNewRoleCode] = useState('');
   const [newRoleName, setNewRoleName] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
@@ -83,6 +84,7 @@ export const RolesManagement: React.FC = () => {
         title="🔑 إدارة الأدوار والصلاحيات الديناميكية (Dynamic RBAC Engine)"
         subtitle="تخصيص الأدوار، ربط الصلاحيات، وإدارة مستويات الوصول التشغيلية والسحابية بكل مرونة"
         actions={<>
+          <ViewToggle value={view} onChange={setView} />
 
         <Button
           variant="contained"
@@ -107,6 +109,28 @@ export const RolesManagement: React.FC = () => {
       {isErrorRoles && <Alert severity="error">تعذر تحميل الأدوار من الخادم</Alert>}
 
       {/* Roles Table */}
+      {view === 'cards' ? (
+        (roles).length === 0 ? (
+          <div className="glass-card"><EmptyState icon={Key} title="لا توجد أدوار" /></div>
+        ) : (
+          <CardGrid>
+            {roles.map((r: any) => (
+              <EntityCard
+                key={r.id}
+                icon={Key}
+                tone={r.isSystem ? 'info' : 'violet'}
+                title={r.nameAr ?? r.code}
+                subtitle={r.code}
+                badges={[
+                  { label: r.isSystem ? 'دور نظام' : 'دور مخصص', tone: r.isSystem ? 'info' : 'violet' },
+                  ...(r.scope ? [{ label: r.scope, tone: 'neutral' as const }] : []),
+                ]}
+                metrics={[{ label: 'الصلاحيات', value: r.permissions?.length ?? r._count?.permissions ?? 0, tone: 'primary' }]}
+              />
+            ))}
+          </CardGrid>
+        )
+      ) : (
       <TableContainer component={Paper} className="glass-card">
         <Table>
           <TableHead>
@@ -136,6 +160,7 @@ export const RolesManagement: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
+      )}
 
       {/* Create Role Modal */}
       <Dialog open={openModal} onClose={() => setOpenModal(false)} maxWidth="md" fullWidth>

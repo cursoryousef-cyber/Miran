@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader, DataPageShell } from '../components/ui';
+import { PageHeader, DataPageShell, CardGrid, EmptyState, EntityCard, ViewToggle } from '../components/ui';
 import { apiClient } from '../api/client';
 import { GitMerge, Plus, CheckCircle2, Clock, AlertTriangle, Layers, Boxes } from 'lucide-react';
 import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, LinearProgress, Alert } from '@mui/material';
 
 export const Workflows: React.FC = () => {
+  const [view, setView] = useState<'cards' | 'table'>('cards');
   const { data, isLoading, isError } = useQuery({
     queryKey: ['workflows'],
     queryFn: async () => {
@@ -24,6 +25,7 @@ export const Workflows: React.FC = () => {
         title="محرك سير العمل (Workflow Engine)"
         subtitle="تخصيص وإدارة مسارات اعتماد طلبات التدريب والبطاقات والروتيشنات دون تعديل الكود البرمجي"
         actions={<>
+          <ViewToggle value={view} onChange={setView} />
 
         <Button
           variant="contained"
@@ -45,6 +47,28 @@ export const Workflows: React.FC = () => {
       {isLoading && <LinearProgress sx={{ borderRadius: 1 }} />}
       {isError && <Alert severity="error">تعذر تحميل سير العمل من الخادم</Alert>}
 
+      {view === 'cards' ? (
+        (flows).length === 0 ? (
+          <div className="glass-card"><EmptyState icon={GitMerge} title="لا توجد تعريفات سير عمل" /></div>
+        ) : (
+          <CardGrid>
+            {flows.map((wf: any) => (
+              <EntityCard
+                key={wf.id}
+                icon={GitMerge}
+                tone={wf.isActive === false ? 'neutral' : 'primary'}
+                title={wf.nameAr ?? wf.name ?? 'سير عمل'}
+                subtitle={wf.code ?? wf.entityType}
+                badges={[
+                  { label: wf.isActive === false ? 'معطّل' : 'مفعّل', tone: wf.isActive === false ? 'neutral' : 'success' },
+                  ...(wf.entityType ? [{ label: wf.entityType, tone: 'info' as const }] : []),
+                ]}
+                metrics={[{ label: 'عدد الخطوات', value: wf.steps?.length ?? 0, tone: 'violet' }]}
+              />
+            ))}
+          </CardGrid>
+        )
+      ) : (
       <TableContainer component={Paper} className="glass-card">
         <Table>
           <TableHead>
@@ -71,6 +95,7 @@ export const Workflows: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
+      )}
     </DataPageShell>
   );
 };

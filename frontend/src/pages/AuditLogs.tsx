@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader, DataPageShell } from '../components/ui';
+import { PageHeader, DataPageShell, CardGrid, EmptyState, EntityCard, ViewToggle } from '../components/ui';
 import { Shield, Search, Download, Filter, Eye, RefreshCw, CalendarClock, UserCheck, Layers, FilePenLine } from 'lucide-react';
 import {
   Button,
@@ -22,6 +22,7 @@ import { apiClient } from '../api/client';
 
 export const AuditLogs: React.FC = () => {
   const [search, setSearch] = useState('');
+  const [view, setView] = useState<'cards' | 'table'>('cards');
   const [entityType, setEntityType] = useState('');
 
   const { data, isLoading, refetch } = useQuery({
@@ -47,6 +48,7 @@ export const AuditLogs: React.FC = () => {
         title="🛡️ سجلات التدقيق والمراقبة الأمنية (Audit Logs & Compliance)"
         subtitle={`تتبع غير قابل للتغيير لكل عملية تمت في النظام (المستخدم، الوقت، IP، الجهاز، البيانات السابقة والحالية)`}
         actions={<>
+          <ViewToggle value={view} onChange={setView} />
           <Button
             variant="outlined"
             startIcon={<Download size={18} />}
@@ -105,6 +107,28 @@ export const AuditLogs: React.FC = () => {
       </div>
 
       {/* Audit Table */}
+      {view === 'cards' ? (
+        (logs).length === 0 ? (
+          <div className="glass-card"><EmptyState icon={Shield} title="لا توجد سجلات تدقيق" /></div>
+        ) : (
+          <CardGrid>
+            {logs.map((log: any) => (
+              <EntityCard
+                key={log.id}
+                icon={Shield}
+                tone={/delete|reject|fail/i.test(log.action || '') ? 'danger' : /create|approve|allocate/i.test(log.action || '') ? 'success' : 'info'}
+                title={log.action}
+                subtitle={log.actor?.person?.nameAr || log.actor?.email || 'النظام'}
+                badges={[
+                  ...(log.entityType ? [{ label: log.entityType, tone: 'neutral' as const }] : []),
+                  ...(log.ipAddress ? [{ label: log.ipAddress, tone: 'info' as const }] : []),
+                ]}
+                footnote={new Date(log.createdAt).toLocaleString('ar-SA')}
+              />
+            ))}
+          </CardGrid>
+        )
+      ) : (
       <TableContainer component={Paper} className="glass-card">
         <Table>
           <TableHead>
@@ -123,7 +147,7 @@ export const AuditLogs: React.FC = () => {
                   <Chip label={log.action} color="primary" size="small" variant="outlined" style={{ fontWeight: 700 }} />
                 </TableCell>
                 <TableCell>
-                  <div style={{ fontWeight: 700, color: '#fff' }}>{log.actor?.person?.nameAr || 'المستخدم'}</div>
+                  <div style={{ fontWeight: 700, color: '#0F172A' }}>{log.actor?.person?.nameAr || 'المستخدم'}</div>
                   <div style={{ fontSize: '11px', color: '#0891B2' }}>{log.actor?.email}</div>
                 </TableCell>
                 <TableCell>
@@ -144,6 +168,7 @@ export const AuditLogs: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
+      )}
     </DataPageShell>
   );
 };

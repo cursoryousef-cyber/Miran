@@ -47,7 +47,9 @@ export const theme = createTheme({
           borderRadius: 12,
           fontWeight: 700,
           padding: '8px 20px',
+          minHeight: 42,
           boxShadow: 'none',
+          '@media (max-width:600px)': { minHeight: 46, width: '100%' },
           '&:hover': {
             boxShadow: '0 4px 12px rgba(15, 118, 110, 0.15)',
           },
@@ -73,6 +75,43 @@ export const theme = createTheme({
           border: '1px solid #E2E8F0',
           boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03)',
         },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          '@media (max-width:600px)': {
+            margin: 0,
+            width: '100%',
+            maxWidth: '100%',
+            maxHeight: '100%',
+            height: '100%',
+            borderRadius: 0,
+          },
+        },
+      },
+    },
+    MuiDialogActions: {
+      styleOverrides: {
+        root: {
+          padding: '16px 24px',
+          gap: 8,
+          '@media (max-width:600px)': {
+            flexDirection: 'column-reverse',
+            '& > :not(style)': { width: '100%', marginLeft: 0 },
+          },
+        },
+      },
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        // Comfortable touch target — 34px icon buttons were below the 44px guideline.
+        root: { '@media (max-width:900px)': { minWidth: 44, minHeight: 44 } },
+      },
+    },
+    MuiTab: {
+      styleOverrides: {
+        root: { minHeight: 46, '@media (max-width:600px)': { minHeight: 48, fontSize: 13 } },
       },
     },
     MuiTableCell: {

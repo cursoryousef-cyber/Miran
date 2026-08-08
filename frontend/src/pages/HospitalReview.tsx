@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader, DataPageShell } from '../components/ui';
+import { PageHeader, DataPageShell, CardGrid, EmptyState, EntityCard, ViewToggle } from '../components/ui';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
-  XCircle, ArrowRightLeft, FileText, Edit3, PauseCircle, PlayCircle, AlertTriangle, Inbox, Clock3, CheckCircle2, FileWarning } from 'lucide-react';
+  XCircle, ArrowRightLeft, FileText, Edit3, PauseCircle, PlayCircle, AlertTriangle, Inbox, Clock3, CheckCircle2, FileWarning, Eye } from 'lucide-react';
 import {
   Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
   Chip, Dialog, DialogTitle, DialogContent, DialogActions, Alert, CircularProgress,
@@ -30,6 +30,7 @@ export const HospitalReview: React.FC = () => {
   const qc = useQueryClient();
 
   const [selectedRow, setSelectedRow] = useState<any>(null);
+  const [view, setView] = useState<'cards' | 'table'>('cards');
   const [dialog, setDialog] = useState<string | null>(null); // 'reject'|'return'|'docs'|'correction'|'assign'|'hold'
   const [reason, setReason] = useState('');
   const [notes, setNotes] = useState('');
@@ -182,6 +183,40 @@ export const HospitalReview: React.FC = () => {
       {successMsg && <Alert severity="success" onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
 
+      {view === 'cards' ? (
+        (rows).length === 0 ? (
+          <div className="glass-card"><EmptyState icon={Inbox} title="لا توجد حالات للمراجعة حالياً" /></div>
+        ) : (
+          <CardGrid>
+            {rows.map((row: any) => {
+              const st = STATUS_LABELS[row.status] || { label: row.status };
+              return (
+                <EntityCard
+                  key={row.id}
+                  avatarText={(row.nameAr ?? '?').slice(0, 2)}
+                  tone={row.status === 'on_hold' ? 'warning' : row.status === 'rejected' ? 'danger' : 'primary'}
+                  title={row.nameAr}
+                  subtitle={`${row.nationalId ?? ''} · ${row.trainingRequest?.sourceOrg?.nameAr ?? ''}`}
+                  badges={[
+                    { label: st.label, tone: row.status === 'on_hold' ? 'warning' : row.status === 'rejected' ? 'danger' : 'info' },
+                    ...(row.specialty ? [{ label: row.specialty, tone: 'success' as const }] : []),
+                  ]}
+                  metrics={[
+                    { label: 'القسم', value: row.assignedDepartment?.nameAr ?? 'غير محدد', tone: 'info' },
+                    { label: 'المدرب', value: row.assignedTrainer?.person?.nameAr ?? 'غير محدد', tone: 'violet' },
+                  ]}
+                  footnote={row.trainingRequest?.requestNumber}
+                  actions={[
+                    { label: 'بدء المراجعة', icon: PlayCircle, tone: 'info',
+                      visible: row.status === 'allocated', onClick: () => startReviewMut.mutate(row.id) },
+                    { label: 'تفاصيل', icon: Eye, tone: 'neutral', onClick: () => setSelectedRow(row) },
+                  ]}
+                />
+              );
+            })}
+          </CardGrid>
+        )
+      ) : (
       <TableContainer component={Paper} className="glass-card">
         <Table>
           <TableHead>
@@ -293,6 +328,7 @@ export const HospitalReview: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
+      )}
 
       {/* Reject Dialog */}
       <Dialog open={dialog === 'reject'} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>

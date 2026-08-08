@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DataPageShell } from '../components/ui';
+import { CardGrid, DataPageShell, EmptyState, EntityCard, MobileFab, ViewToggle } from '../components/ui';
 import { Users as UsersIcon, MailCheck, KeyRound, UserPlus2 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -19,7 +19,8 @@ export const UsersPage: React.FC = () => {
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(12);
+  const [view, setView] = useState<'cards' | 'table'>('cards');
 
   // Modals
   const [openCreate, setOpenCreate] = useState(false);
@@ -125,6 +126,7 @@ export const UsersPage: React.FC = () => {
       ]}
       actions={
         <>
+          <ViewToggle value={view} onChange={setView} />
           <Tooltip title="تحديث السجلات">
             <IconButton onClick={() => refetch()} sx={{ border: '1px solid #E2E8F0', borderRadius: 2 }}>
               <RefreshCw size={17} color="#0F766E" />
@@ -154,6 +156,44 @@ export const UsersPage: React.FC = () => {
         />
       </div>
 
+      {view === 'cards' ? (
+        accounts.length === 0 ? (
+          <div className="glass-card"><EmptyState icon={UsersIcon} title="لا توجد حسابات مطابقة" hint="جرّب تغيير كلمة البحث." /></div>
+        ) : (
+          <CardGrid>
+            {accounts.map((u: any) => (
+              <EntityCard
+                key={u.id}
+                avatarText={(u.person?.nameAr ?? u.email ?? '?').trim().slice(0, 2)}
+                tone={u.isActive === false ? 'neutral' : 'primary'}
+                title={u.person?.nameAr || u.email}
+                subtitle={u.email}
+                badges={[
+                  { label: u.isActive === false ? 'معلّق' : 'نشط', tone: u.isActive === false ? 'danger' : 'success' },
+                  ...(u.isEmailVerified ? [{ label: 'بريد موثّق', tone: 'info' as const }] : []),
+                  ...(u.mfaEnabled ? [{ label: '2FA', tone: 'violet' as const }] : []),
+                  ...(u.roles ?? []).map((r: any) => ({ label: r.role?.nameAr || r.role?.code || String(r), tone: 'neutral' as const })),
+                ]}
+                footnote={u.person?.nationalId ? `هوية ${u.person.nationalId}` : (u.lastLoginAt ? `آخر دخول ${String(u.lastLoginAt).slice(0, 10)}` : 'لم يسجّل دخول بعد')}
+                actions={[
+                  { label: 'عرض التفاصيل', icon: Eye, onClick: () => setOpenDetails(u), tone: 'info' },
+                  { label: 'تعديل', icon: Edit, tone: 'warning', visible: canUpdate,
+                    onClick: () => {
+                      setOpenEdit(u);
+                      setFormData({
+                        nationalId: u.person?.nationalId || '', nameAr: u.person?.nameAr || '',
+                        nameEn: u.person?.nameEn || '', email: u.email || '',
+                        phone: u.person?.phone || '', password: '',
+                        roleCode: u.roles?.[0]?.role?.code || 'trainee',
+                      });
+                    } },
+                  { label: 'حذف', icon: Trash2, onClick: () => setDeleteId(u.id), tone: 'danger', visible: canDelete },
+                ]}
+              />
+            ))}
+          </CardGrid>
+        )
+      ) : (
       <TableContainer component={Paper} className="glass-card">
         <Table>
           <TableHead>
@@ -234,9 +274,9 @@ export const UsersPage: React.FC = () => {
           </TableBody>
         </Table>
 
-        <TablePagination
-          component="div"
-          count={data?.meta?.total || 0}
+      <TablePagination
+        component="div"
+        count={data?.meta?.total || 0}
           page={page}
           onPageChange={(_, newPage) => setPage(newPage)}
           rowsPerPage={rowsPerPage}
@@ -245,6 +285,7 @@ export const UsersPage: React.FC = () => {
           labelRowsPerPage="عدد الصفوف:"
         />
       </TableContainer>
+      )}
 
       {/* Dialog: Create */}
       <Dialog open={openCreate} onClose={() => setOpenCreate(false)} maxWidth="sm" fullWidth>
@@ -316,6 +357,10 @@ export const UsersPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      {canCreate && (
+        <MobileFab label="إضافة مستخدم" icon={Plus} onClick={() => { resetForm(); setOpenCreate(true); }} />
+      )}
+
     </DataPageShell>
   );
 };

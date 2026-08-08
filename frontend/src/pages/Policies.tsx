@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader, DataPageShell } from '../components/ui';
+import { PageHeader, DataPageShell, CardGrid, EmptyState, EntityCard, ViewToggle } from '../components/ui';
 import { apiClient } from '../api/client';
 import { ShieldCheck, Plus, Play, CheckCircle2, XCircle, FileSignature, ShieldAlert, Layers, GitBranch } from 'lucide-react';
 import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, TextField, Alert, LinearProgress } from '@mui/material';
 
 export const Policies: React.FC = () => {
   const [testResource, setTestResource] = useState('organization');
+  const [view, setView] = useState<'cards' | 'table'>('cards');
   const [testAction, setTestAction] = useState('create');
   const [evalResult, setEvalResult] = useState<any>(null);
 
@@ -41,6 +42,7 @@ export const Policies: React.FC = () => {
         title="سياسات التحكم بالوصول (Policy Engine ABAC)"
         subtitle="سياسات مرنة مبنية على الخصائص (Attribute-Based Access Control) بدلاً من الشروط الثابتة في الكود"
         actions={<>
+          <ViewToggle value={view} onChange={setView} />
 
         <Button
           variant="contained"
@@ -100,6 +102,32 @@ export const Policies: React.FC = () => {
       </div>
 
       {/* Policies Table */}
+      {view === 'cards' ? (
+        (policies).length === 0 ? (
+          <div className="glass-card"><EmptyState icon={ShieldAlert} title="لا توجد سياسات" /></div>
+        ) : (
+          <CardGrid>
+            {policies.map((p: any) => (
+              <EntityCard
+                key={p.id}
+                icon={ShieldAlert}
+                tone={p.effect === 'allow' ? 'success' : 'danger'}
+                title={p.nameAr}
+                subtitle={p.code}
+                badges={[
+                  { label: p.effect === 'allow' ? 'سماح' : 'حجب', tone: p.effect === 'allow' ? 'success' : 'danger' },
+                  ...(p.isActive === false ? [{ label: 'معطّلة', tone: 'neutral' as const }] : []),
+                ]}
+                metrics={[
+                  { label: 'المورد', value: p.resource ?? '—', tone: 'info' },
+                  { label: 'الإجراء', value: p.action ?? '—', tone: 'neutral' },
+                  { label: 'الأولوية', value: p.priority ?? 0, tone: 'violet' },
+                ]}
+              />
+            ))}
+          </CardGrid>
+        )
+      ) : (
       <TableContainer component={Paper} className="glass-card">
         <Table>
           <TableHead>
@@ -132,6 +160,7 @@ export const Policies: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
+      )}
     </DataPageShell>
   );
 };

@@ -12,7 +12,7 @@ import {
   TablePagination, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip, Skeleton
 } from '@mui/material';
 import {
-  EmptyState, KpiCard, KpiGrid, Metric, MetricRow, PageHeader, StatBar, Surface,
+  DataPageShell, EmptyState, KpiCard, KpiGrid, Metric, MetricRow, PageHeader, StatBar, Surface, ViewToggle,
   colour, radius, space,
 } from '../components/ui';
 
@@ -160,75 +160,57 @@ export const Organizations: React.FC = () => {
   const occupancyPct = summary.capacity > 0 ? Math.round((summary.accepted / summary.capacity) * 100) : 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'] }}>
-      <PageHeader
-        eyebrow="ORGANISATION DIRECTORY"
-        icon={Building2}
-        title="الجهات والتجمعات الصحية"
-        subtitle="استعراض الجهات وسعتها ونسب إشغالها قبل الدخول إلى التفاصيل"
-        actions={
-          <>
-            <Tooltip title="تحديث البيانات">
-              <IconButton onClick={() => refetch()} sx={{ border: `1px solid ${colour.border}`, borderRadius: 2 }}>
-                <RefreshCw size={17} color={colour.primary} />
-              </IconButton>
-            </Tooltip>
-            <div style={{ display: 'inline-flex', border: `1px solid ${colour.border}`, borderRadius: 10, overflow: 'hidden' }}>
-              {([['cards', 'بطاقات', LayoutGrid], ['table', 'جدول', List]] as const).map(([mode, label, Icon]) => (
-                <button
-                  key={mode}
-                  onClick={() => setView(mode)}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', border: 'none',
-                    cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5,
-                    background: view === mode ? colour.primarySoft : colour.surface,
-                    color: view === mode ? colour.primary : colour.muted,
-                  }}
-                >
-                  <Icon size={15} /> {label}
-                </button>
-              ))}
-            </div>
-            {canCreate && (
-              <Button variant="contained" startIcon={<Plus size={17} />}
-                onClick={() => { resetForm(); setOpenCreate(true); }}>
-                إضافة جهة
-              </Button>
-            )}
-          </>
-        }
-      />
-
-      {/* Summary before detail — the page opens on numbers, not a grid of rows. */}
-      <KpiGrid>
-        <KpiCard label="الجهات المعروضة" value={data?.meta?.total ?? rows.length} icon={Building2} tone="primary" loading={isLoading} />
-        <KpiCard label="جهات نشطة" value={summary.active} icon={CheckCircle2} tone="success" loading={isLoading} />
-        <KpiCard label="السعة الإجمالية" value={summary.capacity} icon={BedDouble} tone="info" loading={isLoading} />
-        <KpiCard label="المتدربون" value={summary.accepted} icon={Users} tone="violet" loading={isLoading} />
-        <KpiCard label="نسبة الإشغال" value={`${occupancyPct}%`} icon={Gauge}
-          tone={occupancyPct >= 90 ? 'danger' : occupancyPct >= 70 ? 'warning' : 'success'} loading={isLoading} />
-        <KpiCard label="جهات تحت ضغط" value={summary.pressured} icon={AlertCircle}
-          tone={summary.pressured ? 'warning' : 'success'} hint="إشغال 80% فأكثر" loading={isLoading} />
-      </KpiGrid>
-
-      <div className="glass-card" style={{ padding: `${space.lg}px ${space['2xl']}px`, display: 'flex', gap: space.lg, alignItems: 'center', flexWrap: 'wrap' }}>
-        <TextField
-          placeholder="بحث بالاسم أو الرمز أو المدينة..."
-          size="small"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          sx={{ minWidth: 280, flex: '0 1 320px' }}
-          InputProps={{ startAdornment: <Search size={17} color={colour.faint} style={{ marginLeft: 8 }} /> }}
-        />
-        <Tabs value={tabValue} onChange={(_, val) => setTabValue(val)} variant="scrollable" scrollButtons="auto"
-          sx={{ minHeight: 40, '& .MuiTab-root': { minHeight: 40, fontSize: 12.5, fontWeight: 700 } }}>
-          <Tab label="الكل" value="all" />
-          <Tab label="نشط" value="active" />
-          <Tab label="مسودة" value="draft" />
-          <Tab label="معلق" value="suspended" />
-          <Tab label="مؤرشف" value="archived" />
-        </Tabs>
-      </div>
+    <DataPageShell
+      eyebrow="ORGANISATION DIRECTORY"
+      icon={Building2}
+      title="الجهات والتجمعات الصحية"
+      subtitle="استعراض الجهات وسعتها ونسب إشغالها قبل الدخول إلى التفاصيل"
+      loading={isLoading}
+      stats={[
+        { label: 'الجهات المعروضة', value: data?.meta?.total ?? rows.length, icon: Building2, tone: 'primary' },
+        { label: 'جهات نشطة', value: summary.active, icon: CheckCircle2, tone: 'success' },
+        { label: 'السعة الإجمالية', value: summary.capacity, icon: BedDouble, tone: 'info' },
+        { label: 'المتدربون', value: summary.accepted, icon: Users, tone: 'violet' },
+        { label: 'نسبة الإشغال', value: `${occupancyPct}%`, icon: Gauge, tone: occupancyPct >= 90 ? 'danger' : occupancyPct >= 70 ? 'warning' : 'success' },
+        { label: 'جهات تحت ضغط', value: summary.pressured, icon: AlertCircle, tone: summary.pressured ? 'warning' : 'success', hint: 'إشغال 80% فأكثر' },
+      ]}
+      actions={
+        <>
+          <Tooltip title="تحديث البيانات">
+            <IconButton onClick={() => refetch()} sx={{ border: `1px solid ${colour.border}`, borderRadius: 2 }}>
+              <RefreshCw size={17} color={colour.primary} />
+            </IconButton>
+          </Tooltip>
+          <ViewToggle value={view} onChange={setView} />
+          {canCreate && (
+            <Button variant="contained" startIcon={<Plus size={17} />}
+              onClick={() => { resetForm(); setOpenCreate(true); }}>
+              إضافة جهة
+            </Button>
+          )}
+        </>
+      }
+      toolbar={
+        <>
+          <TextField
+            placeholder="بحث بالاسم أو الرمز أو المدينة..."
+            size="small"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{ minWidth: 280, flex: '0 1 320px' }}
+            InputProps={{ startAdornment: <Search size={17} color={colour.faint} style={{ marginLeft: 8 }} /> }}
+          />
+          <Tabs value={tabValue} onChange={(_, val) => setTabValue(val)} variant="scrollable" scrollButtons="auto"
+            sx={{ minHeight: 40, '& .MuiTab-root': { minHeight: 40, fontSize: 12.5, fontWeight: 700 } }}>
+            <Tab label="الكل" value="all" />
+            <Tab label="نشط" value="active" />
+            <Tab label="مسودة" value="draft" />
+            <Tab label="معلق" value="suspended" />
+            <Tab label="مؤرشف" value="archived" />
+          </Tabs>
+        </>
+      }
+    >
 
       {isLoading ? (
         <div style={{ display: 'grid', gap: space.xl, gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))' }}>
@@ -452,6 +434,6 @@ export const Organizations: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader, DataPageShell } from '../components/ui';
+import { PageHeader, DataPageShell, CardGrid, EmptyState, EntityCard, ViewToggle } from '../components/ui';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -25,6 +25,7 @@ export const Graduation: React.FC = () => {
   const qc = useQueryClient();
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [view, setView] = useState<'cards' | 'table'>('cards');
   const [approveOpen, setApproveOpen] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [eligibility, setEligibility] = useState<any>(null);
@@ -99,6 +100,7 @@ export const Graduation: React.FC = () => {
         title="إدارة التخرج — Stage 12"
         subtitle={<>{user?.activeOrganization?.nameAr} — متابعة أهلية التخرج واعتماد نهاية التدريب</>}
         actions={<>
+          <ViewToggle value={view} onChange={setView} />
         <Tooltip title="تحديث">
           <IconButton onClick={() => refetch()} style={{ color: '#059669', border: '1px solid rgba(16,185,129,0.3)' }}>
             <RefreshCw size={18} />
@@ -131,6 +133,43 @@ export const Graduation: React.FC = () => {
         ))}
       </div>
 
+      {view === 'cards' ? (
+        (trainees).length === 0 ? (
+          <div className="glass-card"><EmptyState icon={GraduationCap} title="لا يوجد متدربون" /></div>
+        ) : (
+          <CardGrid>
+            {trainees.map((profile: any) => {
+              const done = (profile.rotations || []).filter((r: any) => r.status === 'completed').length;
+              const total = (profile.rotations || []).length;
+              const compDone = (profile.competencies || []).filter((c: any) => c.completedCount >= c.requiredCount).length;
+              const compTotal = (profile.competencies || []).length;
+              const isGraduated = profile.applicationStatus === 'graduated';
+              return (
+                <EntityCard
+                  key={profile.id}
+                  avatarText={(profile.person?.nameAr ?? '?').slice(0, 2)}
+                  tone={isGraduated ? 'success' : 'primary'}
+                  title={profile.person?.nameAr || '—'}
+                  subtitle={profile.person?.nationalId || profile.traineeNumber}
+                  badges={[
+                    { label: isGraduated ? 'متخرج' : 'قيد التدريب', tone: isGraduated ? 'success' : 'info' },
+                    ...(profile.isLocked ? [{ label: 'ملف مغلق', tone: 'neutral' as const }] : []),
+                  ]}
+                  progress={{ label: 'الروتيشنات المكتملة', value: done, max: total || 1 }}
+                  metrics={[
+                    { label: 'الكفاءات', value: `${compDone}/${compTotal}`, tone: 'violet' },
+                    { label: 'الموافقات', value: profile.graduationApprovals?.length ?? 0, tone: 'info' },
+                  ]}
+                  actions={[
+                    { label: 'فحص الأهلية', icon: CheckCircle2, tone: 'success',
+                      onClick: () => setSelectedProfile(profile) },
+                  ]}
+                />
+              );
+            })}
+          </CardGrid>
+        )
+      ) : (
       <TableContainer component={Paper} className="glass-card">
         <Table>
           <TableHead>
@@ -275,6 +314,7 @@ export const Graduation: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
+      )}
 
       {/* Graduation Approval Dialog */}
       <Dialog open={approveOpen} onClose={() => { setApproveOpen(false); setEligibility(null); }} maxWidth="sm" fullWidth>

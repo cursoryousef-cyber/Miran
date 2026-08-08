@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader, DataPageShell } from '../components/ui';
+import { PageHeader, DataPageShell, CardGrid, EmptyState, EntityCard, ViewToggle } from '../components/ui';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -44,6 +44,7 @@ export const Incidents: React.FC = () => {
   const qc = useQueryClient();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [view, setView] = useState<'cards' | 'table'>('cards');
   const [statusOpen, setStatusOpen] = useState(false);
   const [selectedIncident, setSelectedIncident] = useState<any>(null);
   const [filterStatus, setFilterStatus] = useState('');
@@ -118,6 +119,7 @@ export const Incidents: React.FC = () => {
     <DataPageShell
         title="البلاغات والحوادث"
         actions={<>
+          <ViewToggle value={view} onChange={setView} />
           <Tooltip title="تحديث">
             <IconButton onClick={() => refetch()} style={{ color: '#059669', border: '1px solid rgba(16,185,129,0.3)' }}>
               <RefreshCw size={18} />
@@ -168,6 +170,38 @@ export const Incidents: React.FC = () => {
         </FormControl>
       </div>
 
+      {view === 'cards' ? (
+        (incidents).length === 0 ? (
+          <div className="glass-card"><EmptyState icon={AlertTriangle} title="لا توجد بلاغات مسجلة" /></div>
+        ) : (
+          <CardGrid>
+            {incidents.map((inc: any) => {
+              const sev = SEVERITY_MAP[inc.severity] ?? { label: inc.severity };
+              const st = STATUS_MAP[inc.status] ?? { label: inc.status };
+              return (
+                <EntityCard
+                  key={inc.id}
+                  icon={AlertTriangle}
+                  tone={['critical', 'high'].includes(inc.severity) ? 'danger' : inc.status === 'resolved' ? 'success' : 'warning'}
+                  title={INCIDENT_TYPES.find((t) => t.value === inc.incidentType)?.label ?? inc.incidentType}
+                  subtitle={inc.description}
+                  badges={[
+                    { label: sev.label, tone: ['critical', 'high'].includes(inc.severity) ? 'danger' : 'warning' },
+                    { label: st.label, tone: inc.status === 'resolved' ? 'success' : inc.status === 'open' ? 'danger' : 'info' },
+                  ]}
+                  footnote={`${inc.reportedBy?.person?.nameAr ?? 'مُبلِّغ'} · ${new Date(inc.createdAt).toLocaleDateString('ar-SA')}`}
+                >
+                  {inc.resolution && (
+                    <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: '#ECFDF5', fontSize: 12, color: '#047857' }}>
+                      الحل: {inc.resolution}
+                    </div>
+                  )}
+                </EntityCard>
+              );
+            })}
+          </CardGrid>
+        )
+      ) : (
       <TableContainer component={Paper} className="glass-card">
         <Table>
           <TableHead>
@@ -242,6 +276,7 @@ export const Incidents: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
+      )}
 
       {/* Create Incident Dialog */}
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>

@@ -1,14 +1,16 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button, TextField, Select, MenuItem, FormControl,
-  InputLabel, Chip, LinearProgress, Tooltip,
+  InputLabel, Tooltip,
 } from '@mui/material';
 import {
-  Phone, PhoneOff, CheckCircle2, Clock, MapPin,
-  TrendingUp, Users, Zap, AlertCircle, Radio,
+  Phone, PhoneOff, Clock, MapPin,
+  TrendingUp, Zap, Radio,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
+import { Badge, DataPageShell, EmptyState, Panel, StatBar, Surface } from '../../components/ui';
+import { colour, font, radius, space } from '../../components/ui/tokens';
 import { useAuth } from '../../context/AuthContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -48,20 +50,20 @@ interface TrainerCall {
 
 // ─── State badge helpers ──────────────────────────────────────────────────────
 
-const STATE_META: Record<string, { label: string; color: string; bg: string }> = {
-  notified:           { label: 'مُبلَّغ',         color: '#64748B', bg: '#F1F5F9' },
-  acknowledged:       { label: 'أكّد الاستلام',   color: '#B45309', bg: '#FEF3C7' },
-  self_arrived:       { label: 'في الطريق',       color: '#0891B2', bg: '#CFFAFE' },
-  confirmed_arrived:  { label: 'وصل ✓',           color: '#0F766E', bg: '#CCFBF1' },
-  no_show:            { label: 'لم يحضر',         color: '#DC2626', bg: '#FEE2E2' },
+const STATE_META: Record<string, { label: string; tone: 'neutral' | 'warning' | 'info' | 'success' | 'danger' }> = {
+  notified:           { label: 'مُبلَّغ',         tone: 'neutral' },
+  acknowledged:       { label: 'أكّد الاستلام',   tone: 'warning' },
+  self_arrived:       { label: 'في الطريق',       tone: 'info' },
+  confirmed_arrived:  { label: 'وصل ✓',           tone: 'success' },
+  no_show:            { label: 'لم يحضر',         tone: 'danger' },
 };
 
-const CALL_TYPE_META: Record<string, { label: string; icon: string; accent: string }> = {
-  urgent:           { label: 'حالة عاجلة',           icon: '🚨', accent: '#DC2626' },
-  interesting_case: { label: 'حالة مثيرة للاهتمام', icon: '🔬', accent: '#B45309' },
-  skill_training:   { label: 'تدريب على مهارة',     icon: '🩺', accent: '#0891B2' },
-  teaching_round:   { label: 'راوند تعليمي',        icon: '📚', accent: '#7E22CE' },
-  general:          { label: 'عام',                  icon: '📢', accent: '#0F766E' },
+const CALL_TYPE_META: Record<string, { label: string; icon: string; tone: 'danger' | 'warning' | 'info' | 'violet' | 'primary' }> = {
+  urgent:           { label: 'حالة عاجلة',           icon: '🚨', tone: 'danger' },
+  interesting_case: { label: 'حالة مثيرة للاهتمام', icon: '🔬', tone: 'warning' },
+  skill_training:   { label: 'تدريب على مهارة',     icon: '🩺', tone: 'info' },
+  teaching_round:   { label: 'راوند تعليمي',        icon: '📚', tone: 'violet' },
+  general:          { label: 'عام',                  icon: '📢', tone: 'primary' },
 };
 
 export const CallsHub: React.FC = () => {
@@ -188,199 +190,175 @@ export const CallsHub: React.FC = () => {
   };
 
   const activeIncoming = (incomingData ?? []).filter((p: any) => p.call?.status === 'active');
+  const activeCount = (activeData ?? []).length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div style={{
-        padding: '24px 28px',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16, border: '1px solid #E2E8F0',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16,
-      }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <Radio size={20} color="#0F766E" />
-            <span style={{ fontSize: 12, color: '#0F766E', fontWeight: 700 }}>مركز النداءات الميدانية السريعة</span>
-          </div>
-          <h2 style={{ fontSize: 22, fontWeight: 800, color: '#0F172A', margin: 0 }}>
-            {isTrainer ? 'إطلاق ومتابعة النداءات السريرية (Live Call Dispatch)' : 'النداءات الواردة (My Incoming Calls)'}
-          </h2>
-          <p style={{ fontSize: 13, color: '#64748B', marginTop: 4 }}>
-            تنبيه استدعاء لحظي لجميع أطباء الامتياز بالأقسام السريرية واستجابة مباشرة مع حساب مؤشر الحرص
-          </p>
-        </div>
-
-        {isTrainer && (activeData ?? []).length > 0 && (
-          <Chip
-            icon={<Radio size={14} color="#0F766E" />}
-            label={`${activeData!.length} نداء نشط الآن`}
-            sx={{ backgroundColor: '#CCFBF1', color: '#0F766E', fontWeight: 800, fontSize: 13, padding: '4px 8px' }}
-          />
-        )}
-      </div>
-
+    <DataPageShell
+      eyebrow="LIVE CALL DISPATCH"
+      icon={Radio}
+      title={isTrainer ? 'النداءات السريرية' : 'النداءات الواردة'}
+      subtitle="تنبيه استدعاء لحظي لأطباء الامتياز بالأقسام السريرية واستجابة مباشرة"
+      stats={isTrainer ? [
+        { label: 'النداءات النشطة', value: activeCount, icon: Radio, tone: activeCount ? 'primary' : 'neutral' },
+        { label: 'إجمالي السجل', value: (historyData ?? []).length, icon: Clock, tone: 'info' },
+        { label: 'المتدربون بالمؤشر', value: (diligenceData ?? []).length, icon: TrendingUp, tone: 'success' },
+      ] : undefined}
+      actions={
+        isTrainer && activeCount > 0 ? (
+          <Badge label={`${activeCount} نداء نشط الآن`} tone="primary" />
+        ) : undefined
+      }
+    >
       {/* ── TRAINEE VIEW ─────────────────────────────────────────────────── */}
       {isTrainee && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
           {activeIncoming.map((p: any) => {
             const c: TrainerCall = p.call;
             const meta = CALL_TYPE_META[c.callType] ?? CALL_TYPE_META.general;
             const stateMeta = STATE_META[p.state] ?? STATE_META.notified;
 
             return (
-              <div key={p.id} className="glass-card" style={{
-                padding: 24, border: `2px solid ${meta.accent}`,
-                background: `#FFFFFF`, borderRadius: 16,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 20 }}>{meta.icon}</span>
-                      <span style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>
-                        {c.customTitle ?? meta.label}
-                      </span>
-                    </div>
-                    {c.note && <p style={{ margin: '8px 0 0', fontSize: 13.5, color: '#334155' }}>{c.note}</p>}
-                    {c.location && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, color: '#64748B', marginTop: 6 }}>
-                        <MapPin size={13} color="#0F766E" /> {c.location}
-                      </div>
-                    )}
+              <Panel
+                key={p.id}
+                title={`${meta.icon} ${c.customTitle ?? meta.label}`}
+                tone={meta.tone}
+                action={<Badge label={stateMeta.label} tone={stateMeta.tone} />}
+              >
+                {c.note && <p style={{ margin: `0 0 ${space.sm}px`, fontSize: font.body, color: colour.text }}>{c.note}</p>}
+                {c.location && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: font.caption, color: colour.muted, marginBottom: space.md }}>
+                    <MapPin size={13} color={colour.primary} /> {c.location}
                   </div>
-                  <Chip label={stateMeta.label} sx={{ background: stateMeta.bg, color: stateMeta.color, fontWeight: 800 }} />
-                </div>
+                )}
 
-                <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                <div style={{ display: 'flex', gap: space.md, marginTop: space.lg, flexWrap: 'wrap' }}>
                   {p.state === 'notified' && (
                     <Button variant="contained" onClick={() => handleAck(c.id)}
-                      style={{ background: '#0F766E', fontWeight: 700, borderRadius: 10 }}>
+                      sx={{ background: colour.primary, fontWeight: 700, borderRadius: 2 }}>
                       تأكيد الاستلام ✋
                     </Button>
                   )}
                   {['notified', 'acknowledged'].includes(p.state) && (
                     <Button variant="contained" onClick={() => handleArrived(c.id)}
-                      style={{ background: '#0891B2', fontWeight: 700, borderRadius: 10 }}>
+                      sx={{ background: colour.info, fontWeight: 700, borderRadius: 2 }}>
                       أنا في الطريق / وصلت 🏃
                     </Button>
                   )}
                   {['self_arrived', 'confirmed_arrived'].includes(p.state) && (
-                    <Chip label="تم تسليم الاستجابة بنجاح ✓" color="success" sx={{ fontWeight: 700 }} />
+                    <Badge label="تم تسليم الاستجابة بنجاح ✓" tone="success" />
                   )}
                 </div>
-              </div>
+              </Panel>
             );
           })}
 
           {activeIncoming.length === 0 && (
-            <div className="glass-card" style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>
-              <Phone size={36} style={{ margin: '0 auto 12px', opacity: 0.4, color: '#0F766E' }} />
-              <p style={{ margin: 0, fontWeight: 700, fontSize: 15, color: '#0F172A' }}>لا توجد نداءات نشطة في الوقت الحالي</p>
-            </div>
+            <Surface>
+              <EmptyState icon={Phone} title="لا توجد نداءات نشطة في الوقت الحالي" hint="سيظهر أي استدعاء عاجل هنا فور إطلاقه من المدرب." />
+            </Surface>
           )}
         </div>
       )}
 
       {/* ── TRAINER / SUPERVISOR VIEW ────────────────────────────────────── */}
       {isTrainer && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: space.xl }}>
 
           {/* Active Calls Grid */}
-          {(activeData ?? []).length > 0 && (activeData ?? []).map((call) => (
-            <div key={call.id} className="glass-card" style={{
-              padding: 24,
-              border: `2px solid ${CALL_TYPE_META[call.callType]?.accent ?? '#0F766E'}`,
-              backgroundColor: '#FFFFFF', borderRadius: 16,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Chip label="نشط الآن" size="small" sx={{ background: '#CCFBF1', color: '#0F766E', fontWeight: 800 }} />
-                    <span style={{ fontSize: 17, fontWeight: 800, color: '#0F172A' }}>
-                      {CALL_TYPE_META[call.callType]?.icon} {call.customTitle ?? CALL_TYPE_META[call.callType]?.label}
-                    </span>
+          {(activeData ?? []).map((call) => {
+            const meta = CALL_TYPE_META[call.callType] ?? CALL_TYPE_META.general;
+            return (
+              <Panel
+                key={call.id}
+                title={`${meta.icon} ${call.customTitle ?? meta.label}`}
+                tone={meta.tone}
+                action={
+                  <Button
+                    variant="outlined" size="small"
+                    disabled={ending === call.id}
+                    onClick={() => handleEnd(call.id)}
+                    startIcon={<PhoneOff size={14} />}
+                    sx={{ borderColor: colour.danger, color: colour.danger, fontWeight: 700, borderRadius: 2 }}>
+                    {ending === call.id ? 'جارٍ الإنهاء...' : 'إنهاء النداء'}
+                  </Button>
+                }
+              >
+                {call.note && <p style={{ margin: `0 0 ${space.xs}px`, fontSize: font.body, color: colour.muted }}>{call.note}</p>}
+                {call.location && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: font.caption, color: colour.faint, marginBottom: space.md }}>
+                    <MapPin size={12} color={colour.primary} /> {call.location}
                   </div>
-                  {call.note && <p style={{ margin: '6px 0 0', fontSize: 13.5, color: '#475569' }}>{call.note}</p>}
-                  {call.location && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#64748B', marginTop: 4 }}>
-                      <MapPin size={12} color="#0F766E" /> {call.location}
-                    </div>
-                  )}
-                </div>
-                <Button
-                  variant="outlined" size="small"
-                  disabled={ending === call.id}
-                  onClick={() => handleEnd(call.id)}
-                  startIcon={<PhoneOff size={14} />}
-                  style={{ borderColor: '#DC2626', color: '#DC2626', fontWeight: 700, borderRadius: 10 }}>
-                  {ending === call.id ? 'جارٍ الإنهاء...' : 'إنهاء النداء'}
-                </Button>
-              </div>
+                )}
 
-              {call.participants.length > 0 && (() => {
-                const stats = {
-                  total: call.participants.length,
-                  acked: call.participants.filter(p => ['acknowledged','self_arrived','confirmed_arrived'].includes(p.state)).length,
-                  arrived: call.participants.filter(p => ['self_arrived','confirmed_arrived'].includes(p.state)).length,
-                  confirmed: call.participants.filter(p => p.state === 'confirmed_arrived').length,
-                };
-                return (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 10, marginBottom: 16 }}>
-                    {[
-                      { label: 'مُبلَّغ', val: stats.total, color: '#64748B', bg: '#F1F5F9' },
-                      { label: 'أكّد', val: stats.acked, color: '#B45309', bg: '#FEF3C7' },
-                      { label: 'في الطريق', val: stats.arrived, color: '#0891B2', bg: '#CFFAFE' },
-                      { label: 'وصل', val: stats.confirmed, color: '#0F766E', bg: '#CCFBF1' },
-                    ].map(s => (
-                      <div key={s.label} style={{ padding: '10px 12px', background: s.bg, borderRadius: 10, textAlign: 'center' }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.val}</div>
-                        <div style={{ fontSize: 11, color: '#475569', marginTop: 2, fontWeight: 600 }}>{s.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 10 }}>
-                {call.participants.map((p) => {
-                  const meta = STATE_META[p.state] ?? { label: p.state, color: '#64748B', bg: '#F1F5F9' };
+                {call.participants.length > 0 && (() => {
+                  const stats = {
+                    total: call.participants.length,
+                    acked: call.participants.filter(p => ['acknowledged','self_arrived','confirmed_arrived'].includes(p.state)).length,
+                    arrived: call.participants.filter(p => ['self_arrived','confirmed_arrived'].includes(p.state)).length,
+                    confirmed: call.participants.filter(p => p.state === 'confirmed_arrived').length,
+                  };
                   return (
-                    <div key={p.id} style={{
-                      padding: '10px 14px', borderRadius: 10,
-                      background: meta.bg, border: `1px solid ${meta.color}20`,
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    <div style={{
+                      display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+                      gap: space.md, marginBottom: space.lg,
                     }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{p.traineeProfile?.person?.nameAr ?? '—'}</div>
-                        <div style={{ fontSize: 11, color: meta.color, marginTop: 2, fontWeight: 700 }}>{meta.label}</div>
-                      </div>
-                      {(p.state === 'self_arrived') && (
-                        <Tooltip title="تأكيد الوصول الفعلي">
-                          <button
-                            disabled={confirming === p.traineeProfile?.person?.nameAr}
-                            onClick={() => handleConfirmArrival(call.id, (p as any).traineeProfileId ?? p.id)}
-                            style={{
-                              background: '#0F766E', border: 'none',
-                              borderRadius: 8, padding: '4px 10px', cursor: 'pointer', color: '#FFFFFF', fontSize: 11, fontWeight: 700,
-                            }}>
-                            تأكيد ✓
-                          </button>
-                        </Tooltip>
-                      )}
+                      {[
+                        { label: 'مُبلَّغ', val: stats.total, tone: 'neutral' as const },
+                        { label: 'أكّد', val: stats.acked, tone: 'warning' as const },
+                        { label: 'في الطريق', val: stats.arrived, tone: 'info' as const },
+                        { label: 'وصل', val: stats.confirmed, tone: 'success' as const },
+                      ].map(s => (
+                        <div key={s.label} style={{
+                          padding: `${space.sm}px ${space.md}px`,
+                          background: colour.canvas, borderRadius: radius.sm,
+                          textAlign: 'center', border: `1px solid ${colour.border}`,
+                        }}>
+                          <div style={{ fontSize: font.kpiSm, fontWeight: 800, color: colour.text }}>{s.val}</div>
+                          <div style={{ fontSize: font.caption, color: colour.muted, fontWeight: 600 }}>{s.label}</div>
+                        </div>
+                      ))}
                     </div>
                   );
-                })}
-              </div>
-            </div>
-          ))}
+                })()}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: space.md }}>
+                  {call.participants.map((p) => {
+                    const sm = STATE_META[p.state] ?? { label: p.state, tone: 'neutral' };
+                    return (
+                      <div key={p.id} style={{
+                        padding: `${space.sm}px ${space.md}px`, borderRadius: radius.sm,
+                        background: colour.canvas, border: `1px solid ${colour.border}`,
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      }}>
+                        <div>
+                          <div style={{ fontSize: font.label, fontWeight: 700, color: colour.text }}>{p.traineeProfile?.person?.nameAr ?? '—'}</div>
+                          <div style={{ marginTop: 2 }}><Badge label={sm.label} tone={sm.tone} /></div>
+                        </div>
+                        {(p.state === 'self_arrived') && (
+                          <Tooltip title="تأكيد الوصول الفعلي">
+                            <button
+                              disabled={confirming === p.traineeProfile?.person?.nameAr}
+                              onClick={() => handleConfirmArrival(call.id, (p as any).traineeProfileId ?? p.id)}
+                              style={{
+                                background: colour.primary, border: 'none',
+                                borderRadius: radius.sm, padding: '4px 10px', cursor: 'pointer',
+                                color: '#FFFFFF', fontSize: font.caption, fontWeight: 700,
+                              }}>
+                              تأكيد ✓
+                            </button>
+                          </Tooltip>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </Panel>
+            );
+          })}
 
           {/* Launch Form */}
-          <div className="glass-card" style={{ padding: 24 }}>
-            <h3 style={{ fontSize: 17, fontWeight: 700, color: '#0F172A', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Phone size={18} color="#0F766E" /> إطلاق نداء جديد
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14, marginBottom: 16 }}>
+          <Panel title="إطلاق نداء جديد" icon={Phone} tone="primary">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: space.md, marginBottom: space.md }}>
               <FormControl size="small" fullWidth>
                 <InputLabel>نوع النداء</InputLabel>
                 <Select defaultValue="urgent" inputProps={{ id: 'launch-type' }} label="نوع النداء">
@@ -395,77 +373,66 @@ export const CallsHub: React.FC = () => {
             </div>
             <TextField label="ملاحظة للمتدربين" size="small" fullWidth multiline rows={2} inputProps={{ id: 'launch-note' }} sx={{ mb: 2 }} />
             {launchMsg && (
-              <div style={{ marginBottom: 12, color: launchMsg.startsWith('✅') ? '#0F766E' : '#DC2626', fontWeight: 700, fontSize: 13 }}>
+              <div style={{ marginBottom: space.md, color: launchMsg.startsWith('✅') ? colour.primary : colour.danger, fontWeight: 700, fontSize: font.body }}>
                 {launchMsg}
               </div>
             )}
-            <Button variant="contained" disabled={launching} onClick={handleLaunch}
+            <Button
+              variant="contained" disabled={launching} onClick={handleLaunch}
               startIcon={<Zap size={16} />}
-              style={{ background: 'linear-gradient(135deg, #0F766E 0%, #0D9488 100%)', fontWeight: 700, minWidth: 160, borderRadius: 12 }}>
+              sx={{ background: colour.primary, fontWeight: 700, minWidth: 160, borderRadius: 2 }}>
               {launching ? 'جارٍ الإطلاق...' : 'إطلاق النداء 🔔'}
             </Button>
-          </div>
+          </Panel>
 
           {/* Diligence Leaderboard */}
           {(diligenceData ?? []).length > 0 && (
-            <div className="glass-card" style={{ padding: 24 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <TrendingUp size={16} color="#0F766E" /> مؤشر الحرص — ترتيب المتدربين
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Panel title="مؤشر الحرص — ترتيب المتدربين" icon={TrendingUp} tone="success">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
                 {(diligenceData ?? []).slice(0, 10).map((d: any, idx: number) => (
                   <div key={d.traineeProfileId} style={{
-                    display: 'grid', gridTemplateColumns: '28px 1fr 80px 80px 80px 90px',
-                    alignItems: 'center', gap: 12, padding: '10px 14px',
-                    background: idx === 0 ? '#F0FDF4' : '#F8FAFC',
-                    borderRadius: 10, border: `1px solid ${idx === 0 ? '#99F6E4' : '#E2E8F0'}`,
+                    display: 'grid', gridTemplateColumns: '28px 1fr 80px 80px 80px 140px',
+                    alignItems: 'center', gap: space.md, padding: `${space.sm}px ${space.md}px`,
+                    background: idx === 0 ? colour.primarySoft : colour.canvas,
+                    borderRadius: radius.sm, border: `1px solid ${idx === 0 ? colour.primary : colour.border}`,
                   }}>
-                    <span style={{ fontSize: 13, color: idx < 3 ? '#0F766E' : '#64748B', fontWeight: 800 }}>#{idx + 1}</span>
-                    <span style={{ fontWeight: 700, color: '#0F172A' }}>{d.nameAr}</span>
+                    <span style={{ fontSize: font.body, color: idx < 3 ? colour.primary : colour.muted, fontWeight: 800 }}>#{idx + 1}</span>
+                    <span style={{ fontWeight: 700, color: colour.text }}>{d.nameAr}</span>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, color: '#64748B' }}>أكّد</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#B45309' }}>{d.ackRate}%</div>
+                      <div style={{ fontSize: font.caption, color: colour.muted }}>أكّد</div>
+                      <div style={{ fontSize: font.label, fontWeight: 700, color: colour.warning }}>{d.ackRate}%</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, color: '#64748B' }}>حضر</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#0891B2' }}>{d.arrivalRate}%</div>
+                      <div style={{ fontSize: font.caption, color: colour.muted }}>حضر</div>
+                      <div style={{ fontSize: font.label, fontWeight: 700, color: colour.info }}>{d.arrivalRate}%</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, color: '#64748B' }}>نداءات</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#64748B' }}>{d.totalCalls}</div>
+                      <div style={{ fontSize: font.caption, color: colour.muted }}>نداءات</div>
+                      <div style={{ fontSize: font.label, fontWeight: 700, color: colour.muted }}>{d.totalCalls}</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, color: '#64748B', marginBottom: 4 }}>الحرص</div>
-                      <LinearProgress variant="determinate" value={d.diligenceScore}
-                        sx={{
-                          height: 6, borderRadius: 3,
-                          background: '#E2E8F0',
-                          '& .MuiLinearProgress-bar': {
-                            background: d.diligenceScore >= 80 ? '#0F766E' : d.diligenceScore >= 50 ? '#D97706' : '#DC2626',
-                          },
-                        }} />
-                      <div style={{ fontSize: 12, fontWeight: 700, color: d.diligenceScore >= 80 ? '#0F766E' : d.diligenceScore >= 50 ? '#D97706' : '#DC2626', marginTop: 2 }}>
-                        {d.diligenceScore}
-                      </div>
+                      <StatBar
+                        label=""
+                        value={d.diligenceScore}
+                        max={100}
+                        tone={d.diligenceScore >= 80 ? 'success' : d.diligenceScore >= 50 ? 'warning' : 'danger'}
+                      />
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
+            </Panel>
           )}
 
           {/* Call History Table */}
           {(historyData ?? []).length > 0 && (
-            <div className="glass-card" style={{ padding: 24 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Clock size={16} color="#0F766E" /> سجل النداءات
-              </h3>
+            <Panel title="سجل النداءات" icon={Clock} tone="info">
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.body }}>
                   <thead>
-                    <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC' }}>
+                    <tr style={{ borderBottom: `1px solid ${colour.border}`, backgroundColor: colour.subtle }}>
                       {['النوع', 'العنوان', 'التاريخ', 'الحالة', 'المشاركون', 'وصلوا', 'نسبة الوصول'].map(h => (
-                        <th key={h} style={{ padding: '10px 12px', textAlign: 'right', color: '#475569', fontWeight: 700 }}>{h}</th>
+                        <th key={h} style={{ padding: `${space.sm}px ${space.md}px`, textAlign: 'right', color: colour.muted, fontWeight: 700 }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -474,20 +441,17 @@ export const CallsHub: React.FC = () => {
                       const meta = CALL_TYPE_META[c.callType] ?? CALL_TYPE_META.general;
                       const s = (c as any).stats ?? { total: 0, arrived: 0, arrivalRatePct: 0 };
                       return (
-                        <tr key={c.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                          <td style={{ padding: '10px 12px', color: meta.accent, fontWeight: 700 }}>{meta.icon} {meta.label}</td>
-                          <td style={{ padding: '10px 12px', color: '#0F172A' }}>{c.customTitle ?? '—'}</td>
-                          <td style={{ padding: '10px 12px', color: '#64748B' }}>{new Date(c.launchedAt).toLocaleDateString('ar-SA')}</td>
-                          <td style={{ padding: '10px 12px' }}>
-                            <Chip label={c.status === 'ended' ? 'منتهٍ' : 'نشط'} size="small"
-                              sx={{ background: c.status === 'ended' ? '#F1F5F9' : '#CCFBF1', color: c.status === 'ended' ? '#64748B' : '#0F766E', fontWeight: 700 }} />
+                        <tr key={c.id} style={{ borderBottom: `1px solid ${colour.border}` }}>
+                          <td style={{ padding: `${space.sm}px ${space.md}px`, color: colour.text, fontWeight: 700 }}>{meta.icon} {meta.label}</td>
+                          <td style={{ padding: `${space.sm}px ${space.md}px`, color: colour.text }}>{c.customTitle ?? '—'}</td>
+                          <td style={{ padding: `${space.sm}px ${space.md}px`, color: colour.muted }}>{new Date(c.launchedAt).toLocaleDateString('ar-SA')}</td>
+                          <td style={{ padding: `${space.sm}px ${space.md}px` }}>
+                            <Badge label={c.status === 'ended' ? 'منتهٍ' : 'نشط'} tone={c.status === 'ended' ? 'neutral' : 'primary'} />
                           </td>
-                          <td style={{ padding: '10px 12px', color: '#0F172A', textAlign: 'center', fontWeight: 700 }}>{s.total}</td>
-                          <td style={{ padding: '10px 12px', color: '#0891B2', textAlign: 'center', fontWeight: 700 }}>{s.arrived}</td>
-                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                            <span style={{ color: s.arrivalRatePct >= 80 ? '#0F766E' : s.arrivalRatePct >= 50 ? '#B45309' : '#DC2626', fontWeight: 700 }}>
-                              {s.arrivalRatePct}%
-                            </span>
+                          <td style={{ padding: `${space.sm}px ${space.md}px`, color: colour.text, textAlign: 'center', fontWeight: 700 }}>{s.total}</td>
+                          <td style={{ padding: `${space.sm}px ${space.md}px`, color: colour.info, textAlign: 'center', fontWeight: 700 }}>{s.arrived}</td>
+                          <td style={{ padding: `${space.sm}px ${space.md}px`, textAlign: 'center' }}>
+                            <Badge label={`${s.arrivalRatePct}%`} tone={s.arrivalRatePct >= 80 ? 'success' : s.arrivalRatePct >= 50 ? 'warning' : 'danger'} />
                           </td>
                         </tr>
                       );
@@ -495,21 +459,20 @@ export const CallsHub: React.FC = () => {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </Panel>
           )}
 
           {/* Empty state */}
           {(activeData ?? []).length === 0 && (historyData ?? []).length === 0 && (
-            <div className="glass-card" style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>
-              <Phone size={40} style={{ margin: '0 auto 12px', opacity: 0.4, color: '#0F766E' }} />
-              <p style={{ margin: 0, fontWeight: 700, fontSize: 16, color: '#0F172A' }}>لم يُطلق أي نداء بعد</p>
-              <p style={{ margin: '8px 0 0', fontSize: 13 }}>استخدم النموذج أعلاه لإطلاق أول نداء</p>
-            </div>
+            <Panel title="سجل النداءات" icon={Phone} tone="neutral">
+              <EmptyState icon={Phone} title="لم يُطلق أي نداء بعد" hint="استخدم النموذج أعلاه لإطلاق أول نداء سريعي لأطباء الامتياز." />
+            </Panel>
           )}
         </div>
       )}
-    </div>
+    </DataPageShell>
   );
 };
 
 export default CallsHub;
+

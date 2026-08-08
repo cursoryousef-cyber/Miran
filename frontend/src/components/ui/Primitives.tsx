@@ -361,4 +361,30 @@ export const MetricRow: React.FC<{ children: React.ReactNode; min?: number }> = 
   </div>
 );
 
+/**
+ * Primary action as a floating button on mobile.
+ *
+ * The page header scrolls away; on a phone the main action of a page should
+ * stay reachable without scrolling back up.
+ */
+export const MobileFab: React.FC<{ label: string; icon: any; onClick: () => void }> = ({
+  label, icon: Icon, onClick,
+}) => (
+  <button
+    className="fab-root mobile-only"
+    onClick={onClick}
+    aria-label={label}
+    style={{
+      display: 'none', alignItems: 'center', gap: space.sm,
+      padding: '14px 20px', borderRadius: 999, border: 'none', cursor: 'pointer',
+      background: colour.primary, color: '#fff', fontFamily: 'inherit',
+      fontWeight: 700, fontSize: font.body,
+      boxShadow: '0 8px 20px rgba(15,118,110,0.35)',
+    }}
+  >
+    <Icon size={18} />
+    {label}
+  </button>
+);
+
 export { Tooltip };

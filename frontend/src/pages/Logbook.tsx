@@ -253,7 +253,7 @@ export const LogbookPage: React.FC = () => {
                       color={log.complexity === 'high' ? 'error' : 'default'}
                     />
                   </TableCell>
-                  <TableCell style={{ fontSize: '12px', color: '#fff', fontWeight: 600 }}>
+                  <TableCell style={{ fontSize: '12px', color: '#0F172A', fontWeight: 600 }}>
                     {log.trainerProfile?.person?.nameAr || 'د. سالم العتيبي'}
                   </TableCell>
                   <TableCell>
@@ -300,11 +300,11 @@ export const LogbookPage: React.FC = () => {
               return (
                 <div key={comp.id} style={{ padding: '16px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '15px', fontWeight: 700, color: '#fff' }}>{comp.procedure?.titleAr || 'إجراء سريري'}</span>
+                    <span style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>{comp.procedure?.titleAr || 'إجراء سريري'}</span>
                     <Chip label={comp.status === 'completed' ? 'مكتمل' : 'قيد التدريب'} color={comp.status === 'completed' ? 'success' : 'warning'} size="small" />
                   </div>
                   <div style={{ fontSize: '12px', color: '#64748B' }}>
-                    التنفيذ: <strong style={{ color: '#059669' }}>{comp.completedCount}</strong> من أصل <strong style={{ color: '#fff' }}>{comp.requiredCount}</strong> مهارات مطلوبة
+                    التنفيذ: <strong style={{ color: '#059669' }}>{comp.completedCount}</strong> من أصل <strong style={{ color: '#0F172A' }}>{comp.requiredCount}</strong> مهارات مطلوبة
                   </div>
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>
