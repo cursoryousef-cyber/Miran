@@ -14,13 +14,13 @@ meta:
     stack: osx-xcode-15.x
 
 workflows:
-  release:
-    summary: Build Xcode Release Archive, export App Store IPA, and deploy artifact to Bitrise & TestFlight.
+  build:
+    summary: Default Bitrise build workflow. Executes full Release Archive, IPA Export, and TestFlight Deployment.
     steps:
     - activate-ssh-key@4: {}
     - git-clone@8: {}
     - script@1:
-        title: Ensure Built Web Frontend & Resolve Dependencies
+        title: Ensure Built Web Frontend & Resolve Xcode Dependencies
         inputs:
         - content: |-
             #!/bin/bash
@@ -45,7 +45,7 @@ workflows:
         - export_method: app-store
         - automatic_code_signing: api-key
     - script@1:
-        title: Verify & Export Miran.ipa (FAIL IF MISSING)
+        title: Verify & Export Miran.ipa (FAIL BUILD IF MISSING)
         inputs:
         - content: |-
             #!/bin/bash
@@ -53,33 +53,33 @@ workflows:
             echo "================ Verifying Miran.ipa Artifact ================"
             mkdir -p "$BITRISE_DEPLOY_DIR"
             
-            # Find exported IPA
-            IPA_PATH=$(find "$BITRISE_DEPLOY_DIR" ~/Library/Developer/Xcode/Archives -name "*.ipa" 2>/dev/null | head -n 1)
+            # 1. Look for pre-exported IPA
+            FOUND_IPA=$(find "$BITRISE_DEPLOY_DIR" ~/Library/Developer/Xcode/Archives -name "*.ipa" 2>/dev/null | head -n 1)
             
-            if [ -z "$IPA_PATH" ]; then
-              echo "⚠️ IPA file not automatically placed in deploy dir. Checking Xcode archive..."
+            if [ -n "$FOUND_IPA" ]; then
+              echo "Found IPA at: $FOUND_IPA"
+              if [ "$FOUND_IPA" != "$BITRISE_DEPLOY_DIR/Miran.ipa" ]; then
+                cp "$FOUND_IPA" "$BITRISE_DEPLOY_DIR/Miran.ipa"
+              fi
+            else
+              echo "⚠️ IPA not found directly in deploy dir. Searching for Xcode Archive payload..."
               ARCHIVE_PATH=$(find "$BITRISE_DEPLOY_DIR" ~/Library/Developer/Xcode/Archives -name "*.xcarchive" 2>/dev/null | head -n 1)
               
               if [ -n "$ARCHIVE_PATH" ]; then
-                echo "Found Archive: $ARCHIVE_PATH. Packaging IPA..."
+                echo "Found Archive: $ARCHIVE_PATH. Exporting Miran.ipa payload..."
                 mkdir -p /tmp/ipa_pack/Payload
                 cp -R "$ARCHIVE_PATH/Products/Applications/"*.app /tmp/ipa_pack/Payload/
                 cd /tmp/ipa_pack
                 zip -r "$BITRISE_DEPLOY_DIR/Miran.ipa" Payload
-                IPA_PATH="$BITRISE_DEPLOY_DIR/Miran.ipa"
-              fi
-            else
-              if [ "$IPA_PATH" != "$BITRISE_DEPLOY_DIR/Miran.ipa" ]; then
-                cp "$IPA_PATH" "$BITRISE_DEPLOY_DIR/Miran.ipa"
               fi
             fi
             
-            # Final Assertion Check
+            # 2. Strict Assertion Check: Fail build if Miran.ipa is missing
             if [ -f "$BITRISE_DEPLOY_DIR/Miran.ipa" ]; then
-              echo "✅ SUCCESS: Miran.ipa verified at $BITRISE_DEPLOY_DIR/Miran.ipa"
+              echo "✅ ASSERTION SUCCESS: Miran.ipa exists at $BITRISE_DEPLOY_DIR/Miran.ipa"
               ls -lh "$BITRISE_DEPLOY_DIR/Miran.ipa"
             else
-              echo "❌ CRITICAL ERROR: Miran.ipa was NOT created! Failing build."
+              echo "❌ CRITICAL FAILURE: $BITRISE_DEPLOY_DIR/Miran.ipa was NOT created!"
               exit 1
             fi
     - deploy-to-itunesconnect-deliver@3:
@@ -89,18 +89,18 @@ workflows:
         inputs:
         - deploy_path: "$BITRISE_DEPLOY_DIR"
 
-  build:
-    summary: Entrypoint workflow triggered by Bitrise default triggers. Executes release workflow.
+  release:
+    summary: Release distribution workflow for App Store Connect / TestFlight.
     before_run:
-    - release
+    - build
 
   primary:
-    summary: Primary workflow entrypoint. Executes release workflow.
+    summary: Primary workflow entrypoint.
     before_run:
-    - release
+    - build
 
 trigger_map:
 - push_branch: "*"
-  workflow: release
+  workflow: build
 - pull_request_source_branch: "*"
-  workflow: release
+  workflow: build
