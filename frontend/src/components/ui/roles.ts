@@ -147,7 +147,7 @@ const HOSPITAL_TRAINING_NAV: NavSection[] = [
     title: 'المتدربون',
     items: [
       {
-        name: 'المتدربون المسندون', path: '/hospital?tab=requests', icon: Users,
+        name: 'المتدربون الموزعون للمستشفى', path: '/hospital?tab=requests', icon: Users,
         requires: ['trainee.view.hospital'],
       },
       { name: 'السجل السريري', path: '/logbook', icon: BookOpen, requires: ['logbook.view'] },

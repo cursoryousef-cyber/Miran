@@ -167,8 +167,8 @@ export const HospitalReview: React.FC = () => {
 
   return (
     <DataPageShell
-        title="مراجعة المستشفى للمتدربين الموزَّعين (Stage 6 — Hospital Review)"
-        subtitle={<>{user?.activeOrganization?.nameAr} — مراجعة المتدربين المُحالين وإتخاذ القرارات</>}
+        title="المتدربون الموزعون للمستشفى (Hospital Allocated Trainees)"
+        subtitle={<>{user?.activeOrganization?.nameAr} — إسناد المتدربين الموزَّعين للأقسام والمدربين وإدارة التوزيع الداخلي</>}
         loading={isLoading}
         stats={[
           { label: 'إجمالي الصفوف', value: rows.length, icon: Inbox, tone: 'primary' },
