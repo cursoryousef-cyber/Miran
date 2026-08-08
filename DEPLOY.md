@@ -13,8 +13,10 @@ cd backend && npm install && npx prisma generate && npm run build
 
 ### 2. Start Command
 ```bash
-cd backend && npx prisma db push && npx ts-node src/seed/seed.ts && node dist/main.js
+cd backend && npx prisma migrate deploy && node dist/main.js
 ```
+Applies committed migrations only. The legacy demo seed (`src/seed/seed.ts`) is
+**not** run automatically — see below.
 
 ### 3. Required Environment Variables
 Configure these in Render Dashboard (**Environment Settings**):
@@ -35,18 +37,20 @@ Configure these in Render Dashboard (**Environment Settings**):
 ---
 
 ## 🔍 Health Check Endpoint
-- **URL**: `https://<your-render-app>.onrender.com/api/v1/health`
+- **URL**: `https://<your-render-app>.onrender.com/health` (excluded from the `api/v1` prefix — not `/api/v1/health`)
 - **Swagger Documentation**: `https://<your-render-app>.onrender.com/api/docs`
 
 ---
 
 ## 🗄️ Database Migration Command
-To manually run Prisma schema sync against Neon:
+To manually apply pending migrations against Neon:
 ```bash
-npx prisma db push
+npx prisma migrate deploy
 ```
 
-To run Prisma seed data:
+To manually seed the legacy demo dataset (organizations, trainer/trainee demo
+accounts, etc. — upserted by fixed codes) — run only when you actually want
+that demo data in the target database, never as part of a normal deploy:
 ```bash
 npx ts-node src/seed/seed.ts
 ```
