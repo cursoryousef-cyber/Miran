@@ -45,11 +45,18 @@ export class UserAccountsService {
         include: {
           person: true,
           organizations: {
-            include: { organization: true },
+            // The organisation type is what lets a caller tell the hospital
+            // assignment apart from the parent organisation one; without it
+            // every assignment looks identical.
+            include: {
+              organization: {
+                include: { organizationType: true, parent: { select: { id: true, nameAr: true } } },
+              },
+            },
           },
           userRoles: {
             ...(organizationId && organizationId !== 'all' && organizationId !== 'global' ? { where: { organizationId } } : {}),
-            include: { role: true, organization: true },
+            include: { role: true, organization: { include: { organizationType: true } } },
           },
         },
       }),
@@ -72,10 +79,14 @@ export class UserAccountsService {
       include: {
         person: true,
         organizations: {
-          include: { organization: true },
+          include: {
+            organization: {
+              include: { organizationType: true, parent: { select: { id: true, nameAr: true } } },
+            },
+          },
         },
         userRoles: {
-          include: { role: true, organization: true },
+          include: { role: true, organization: { include: { organizationType: true } } },
         },
         userPermissions: {
           include: { permission: true, organization: true },
