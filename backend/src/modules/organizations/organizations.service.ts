@@ -186,8 +186,119 @@ export class OrganizationsService {
     });
   }
 
+  /**
+   * Hospitals under an organisation, for the organisation → hospital cascade.
+   *
+   * Passing no organisation returns every hospital, which is what a platform
+   * owner needs; passing one returns only its children, which is what keeps a
+   * cluster administrator from attaching an account to another cluster's
+   * hospital. The backend re-checks this on write — this endpoint exists so the
+   * form cannot offer an invalid combination in the first place.
+   */
+  /**
+   * Canonical organisation KPIs.
+   *
+   * The dashboards and the directory page were each deriving these from their
+   * own paginated fetch, so the directory's totals only covered the page being
+   * viewed and disagreed with the dashboard. Both now read this one endpoint,
+   * which counts across the whole set with one definition per figure.
+   */
+  async getStatistics(scopeOrganizationId?: string) {
+    // Scope: everything, or one organisation and its descendants.
+    const scopeIds = scopeOrganizationId
+      ? [scopeOrganizationId, ...(await this.hierarchyService.getDescendantIds(scopeOrganizationId))]
+      : null;
+    const scopeWhere = scopeIds ? { id: { in: scopeIds } } : {};
+
+    const [types, orgs] = await Promise.all([
+      this.prisma.organizationType.findMany({ select: { id: true, code: true } }),
+      this.prisma.organization.findMany({
+        where: { deletedAt: null, ...scopeWhere },
+        select: {
+          id: true, status: true, capacity: true, organizationTypeId: true,
+          _count: { select: { traineeProfiles: true, trainerProfiles: true, departments: true } },
+        },
+      }),
+    ]);
+    const typeById = new Map(types.map((t) => [t.id, t.code]));
+    const countOf = (code: string) =>
+      orgs.filter((o) => typeById.get(o.organizationTypeId) === code).length;
+
+    const hospitals = orgs.filter((o) => typeById.get(o.organizationTypeId) === 'hospital');
+    const totalCapacity = hospitals.reduce((sum, h) => sum + (h.capacity ?? 0), 0);
+    const totalTrainees = orgs.reduce((sum, o) => sum + o._count.traineeProfiles, 0);
+    const totalTrainers = orgs.reduce((sum, o) => sum + o._count.trainerProfiles, 0);
+    const totalDepartments = orgs.reduce((sum, o) => sum + o._count.departments, 0);
+
+    // Occupancy is measured against hospital capacity only, since that is the
+    // only capacity that exists — clusters and universities do not host.
+    const hospitalTrainees = hospitals.reduce((sum, h) => sum + h._count.traineeProfiles, 0);
+    const occupancyPercentage = totalCapacity > 0
+      ? Math.min(100, Math.round((hospitalTrainees / totalCapacity) * 100)) : 0;
+
+    const pressured = hospitals.filter(
+      (h) => (h.capacity ?? 0) > 0 && h._count.traineeProfiles / h.capacity! >= 0.8,
+    ).length;
+
+    return {
+      data: {
+        totalOrganizations: orgs.length,
+        activeOrganizations: orgs.filter((o) => o.status === 'active').length,
+        inactiveOrganizations: orgs.filter((o) => o.status !== 'active').length,
+        universities: countOf('university'),
+        clusters: countOf('cluster'),
+        hospitals: hospitals.length,
+        totalCapacity,
+        totalTrainees,
+        hospitalTrainees,
+        totalTrainers,
+        totalDepartments,
+        availableSeats: Math.max(0, totalCapacity - hospitalTrainees),
+        occupancyPercentage,
+        pressuredHospitals: pressured,
+        hospitalsWithoutCapacity: hospitals.filter((h) => !h.capacity).length,
+      },
+    };
+  }
+
+  async getHospitalsForOrganization(organizationId?: string) {
+    const hospitalType = await this.prisma.organizationType.findUnique({
+      where: { code: 'hospital' },
+      select: { id: true },
+    });
+    if (!hospitalType) return { data: [] };
+
+    const data = await this.prisma.organization.findMany({
+      where: {
+        organizationTypeId: hospitalType.id,
+        deletedAt: null,
+        ...(organizationId ? { OR: [{ parentId: organizationId }, { id: organizationId }] } : {}),
+      },
+      select: {
+        id: true,
+        code: true,
+        nameAr: true,
+        nameEn: true,
+        parentId: true,
+        status: true,
+        capacity: true,
+        parent: { select: { id: true, nameAr: true } },
+      },
+      orderBy: { nameAr: 'asc' },
+    });
+    return { data };
+  }
+
   async getHospitalCardsMetrics(clusterId?: string) {
+    // Restricted to actual hospitals — without the type filter this returned
+    // clusters and universities as "hospital cards" whenever no cluster was
+    // supplied, which is what made the counts disagree with the dashboards.
+    const hospitalType = await this.prisma.organizationType.findUnique({
+      where: { code: 'hospital' },
+      select: { id: true },
+    });
     const where: any = { deletedAt: null };
+    if (hospitalType) where.organizationTypeId = hospitalType.id;
     if (clusterId) {
       where.OR = [{ id: clusterId }, { parentId: clusterId }];
     }
@@ -222,8 +333,8 @@ export class OrganizationsService {
           code: hosp.code,
           nameAr: hosp.nameAr,
           nameEn: hosp.nameEn,
-          cityAr: hosp.cityAr || 'طريف',
-          cityEn: hosp.cityEn || 'Turaif',
+          cityAr: hosp.cityAr,
+          cityEn: hosp.cityEn,
           status: hosp.status,
           capacity,
           occupied,

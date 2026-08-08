@@ -2,10 +2,30 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 
 export class CreateUserAccountDto {
-  @ApiProperty({ description: 'معرف الشخص (Person ID) المرتبط' })
+  @ApiPropertyOptional({ description: 'معرف الشخص (Person ID) المرتبط' })
+  @IsOptional()
   @IsUUID('4', { message: 'معرف الشخص غير صالح' })
-  @IsNotEmpty({ message: 'معرف الشخص مطلوب' })
-  personId!: string;
+  personId?: string;
+
+  @ApiPropertyOptional({ description: 'الهوية الوطنية' })
+  @IsOptional()
+  @IsString()
+  nationalId?: string;
+
+  @ApiPropertyOptional({ description: 'الاسم بالعربية' })
+  @IsOptional()
+  @IsString()
+  nameAr?: string;
+
+  @ApiPropertyOptional({ description: 'الاسم بالإنجليزية' })
+  @IsOptional()
+  @IsString()
+  nameEn?: string;
+
+  @ApiPropertyOptional({ description: 'رقم الجوال' })
+  @IsOptional()
+  @IsString()
+  phone?: string;
 
   @ApiProperty({ description: 'البريد الإلكتروني للحساب' })
   @IsEmail({}, { message: 'البريد الإلكتروني غير صالح' })
@@ -24,9 +44,12 @@ export class CreateUserAccountDto {
   password?: string;
 
   @ApiProperty({ description: 'معرف الجهة التابع لها الحساب' })
-  @IsUUID('4', { message: 'معرف الجهة غير صالح' })
   @IsNotEmpty({ message: 'معرف الجهة مطلوب' })
   organizationId!: string;
+
+  @ApiPropertyOptional({ description: 'معرف المستشفى التابع له الحساب' })
+  @IsOptional()
+  hospitalId?: string;
 
   @ApiPropertyOptional({ description: 'رمز الدور المطلوب تعيينه للمستخدم في هذه الجهة' })
   @IsOptional()

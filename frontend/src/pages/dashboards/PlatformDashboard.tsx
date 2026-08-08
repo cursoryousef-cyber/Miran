@@ -35,6 +35,16 @@ export const PlatformDashboard: React.FC = () => {
     },
   });
 
+  // Same canonical source the organisation directory reads, so the national
+  // totals and the directory totals can never disagree.
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ['organization-statistics'],
+    queryFn: async () => {
+      const res = await apiClient.get('/organizations/statistics').catch(() => ({ data: { data: null } }));
+      return res.data?.data ?? null;
+    },
+  });
+
   const { data: requests } = useQuery({
     queryKey: ['pf-requests'],
     queryFn: async () => {
@@ -55,9 +65,6 @@ export const PlatformDashboard: React.FC = () => {
   const universities = byType('university');
   const clusters = byType('cluster');
   const hospitals = byType('hospital');
-
-  const totalTrainees = (orgs ?? []).reduce((s: number, o: any) => s + (o._count?.traineeProfiles ?? 0), 0);
-  const totalCapacity = hospitals.reduce((s: number, h: any) => s + (h.capacity ?? 0), 0);
   const suspended = (orgs ?? []).filter((o: any) => o.status && o.status !== 'active');
   const pendingRequests = (requests ?? []).filter((r: any) => ['submitted', 'under_review'].includes(r.status));
 
@@ -91,16 +98,16 @@ export const PlatformDashboard: React.FC = () => {
       />
 
       <KpiGrid>
-        <KpiCard label="إجمالي الجهات" value={(orgs ?? []).length} icon={Globe2} tone="primary"
-          loading={orgsLoading} onClick={() => navigate('/organizations')} />
-        <KpiCard label="الجامعات" value={universities.length} icon={GraduationCap} tone="info"
-          loading={orgsLoading} onClick={() => navigate('/organizations')} />
-        <KpiCard label="التجمعات الصحية" value={clusters.length} icon={Network} tone="primary"
-          loading={orgsLoading} onClick={() => navigate('/organizations')} />
-        <KpiCard label="المستشفيات" value={hospitals.length} icon={Stethoscope} tone="violet"
-          loading={orgsLoading} onClick={() => navigate('/organizations')} />
-        <KpiCard label="المتدربون وطنياً" value={totalTrainees} icon={Users} tone="success"
-          hint={totalCapacity ? `من سعة ${totalCapacity}` : undefined} loading={orgsLoading} />
+        <KpiCard label="إجمالي الجهات" value={stats?.totalOrganizations ?? 0} icon={Globe2} tone="primary"
+          loading={statsLoading} onClick={() => navigate('/organizations')} />
+        <KpiCard label="الجامعات" value={stats?.universities ?? 0} icon={GraduationCap} tone="info"
+          loading={statsLoading} onClick={() => navigate('/organizations')} />
+        <KpiCard label="التجمعات الصحية" value={stats?.clusters ?? 0} icon={Network} tone="primary"
+          loading={statsLoading} onClick={() => navigate('/organizations')} />
+        <KpiCard label="المستشفيات" value={stats?.hospitals ?? 0} icon={Stethoscope} tone="violet"
+          loading={statsLoading} onClick={() => navigate('/organizations')} />
+        <KpiCard label="المتدربون وطنياً" value={stats?.totalTrainees ?? 0} icon={Users} tone="success"
+          hint={stats?.totalCapacity ? `من سعة ${stats.totalCapacity}` : undefined} loading={statsLoading} />
         <KpiCard label="الطلبات الوطنية" value={(requests ?? []).length} icon={GitMerge} tone="warning"
           hint={`${pendingRequests.length} بانتظار المعالجة`} />
       </KpiGrid>

@@ -57,6 +57,22 @@ export class OrganizationsController {
     return this.organizationsService.getHospitalCardsMetrics(clusterId);
   }
 
+  @Get('statistics')
+  @ApiOperation({ summary: 'مؤشرات الجهات الموحّدة — مصدر واحد للوحات وصفحة الجهات' })
+  @ApiQuery({ name: 'organizationId', required: false, type: String })
+  async getStatistics(@Query('organizationId') organizationId?: string) {
+    return this.organizationsService.getStatistics(organizationId);
+  }
+
+  @Get('hospitals')
+  @ApiOperation({
+    summary: 'مستشفيات جهة محددة — لتسلسل الاختيار (جهة ← مستشفى) في نماذج الحسابات',
+  })
+  @ApiQuery({ name: 'organizationId', required: false, type: String })
+  async getHospitals(@Query('organizationId') organizationId?: string) {
+    return this.organizationsService.getHospitalsForOrganization(organizationId);
+  }
+
   @Get('tree')
   @ApiOperation({ summary: 'الهيكل التنظيمي الكامل كشجرة ديناميكية' })
   @RequirePermissions('view_organizations')

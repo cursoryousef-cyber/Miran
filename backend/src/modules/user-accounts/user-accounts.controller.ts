@@ -24,18 +24,23 @@ export class UserAccountsController {
   constructor(private userAccountsService: UserAccountsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'قائمة حسابات الدخول في الجهة الحالية' })
+  @ApiOperation({ summary: 'قائمة حسابات الدخول في الجهة الحالية أو جميع الجهات للمدير العام' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'allOrgs', required: false, type: String })
   @RequirePermissions('view_users')
   async findAll(
+    @CurrentUser() currentUser: IAuthenticatedUser,
     @OrgContext() orgId: string,
     @Query('page') page = 1,
     @Query('limit') limit = 20,
     @Query('search') search?: string,
+    @Query('allOrgs') allOrgs?: string,
   ) {
-    return this.userAccountsService.findAll(orgId, +page, +limit, search);
+    const isPlatformOwner = currentUser?.roles?.includes('platform_owner');
+    const effectiveOrgId = (isPlatformOwner || allOrgs === 'true') ? null : orgId;
+    return this.userAccountsService.findAll(effectiveOrgId, +page, +limit, search);
   }
 
   @Get(':id')

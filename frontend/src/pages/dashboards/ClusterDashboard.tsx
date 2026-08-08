@@ -42,6 +42,18 @@ export const ClusterDashboard: React.FC = () => {
     },
   });
 
+  // Scoped to this cluster, from the same canonical source the directory uses.
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ['organization-statistics', user?.activeOrganization?.id],
+    enabled: Boolean(user?.activeOrganization?.id),
+    queryFn: async () => {
+      const res = await apiClient
+        .get('/organizations/statistics', { params: { organizationId: user?.activeOrganization?.id } })
+        .catch(() => ({ data: { data: null } }));
+      return res.data?.data ?? null;
+    },
+  });
+
   const { data: timeline } = useQuery({
     queryKey: ['cl-timeline'],
     queryFn: async () => {
@@ -67,10 +79,12 @@ export const ClusterDashboard: React.FC = () => {
     })
     .sort((a: any, b: any) => b.pct - a.pct);
 
-  const totalCapacity = withLoad.reduce((s: number, h: any) => s + h.capacity, 0);
-  const totalOccupied = withLoad.reduce((s: number, h: any) => s + h.occupied, 0);
-  const occupancy = totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0;
-  const remaining = Math.max(0, totalCapacity - totalOccupied);
+  // Capacity figures come from the shared statistics endpoint so the cluster
+  // board, the directory and the national board all quote the same numbers.
+  const totalCapacity = stats?.totalCapacity ?? 0;
+  const totalOccupied = stats?.hospitalTrainees ?? 0;
+  const occupancy = stats?.occupancyPercentage ?? 0;
+  const remaining = stats?.availableSeats ?? 0;
 
   const pending = (requests ?? []).filter((r: any) => ['submitted', 'under_review'].includes(r.status));
   const awaitingAllocation = (requests ?? []).filter((r: any) => ['approved', 'cluster_approved'].includes(r.status));
@@ -93,13 +107,13 @@ export const ClusterDashboard: React.FC = () => {
       />
 
       <KpiGrid>
-        <KpiCard label="مستشفيات التجمع" value={hospitals.length} icon={Stethoscope} tone="primary"
-          loading={orgsLoading} onClick={() => navigate('/organizations')} />
-        <KpiCard label="السعة الإجمالية" value={totalCapacity} icon={BedDouble} tone="info" loading={orgsLoading} />
+        <KpiCard label="مستشفيات التجمع" value={stats?.hospitals ?? hospitals.length} icon={Stethoscope} tone="primary"
+          loading={statsLoading} onClick={() => navigate('/organizations')} />
+        <KpiCard label="السعة الإجمالية" value={totalCapacity} icon={BedDouble} tone="info" loading={statsLoading} />
         <KpiCard label="نسبة الإشغال" value={`${occupancy}%`} icon={Gauge}
           tone={occupancy >= 90 ? 'danger' : occupancy >= 70 ? 'warning' : 'success'}
-          hint={`${remaining} مقعد متاح`} loading={orgsLoading} />
-        <KpiCard label="المتدربون الحاليون" value={totalOccupied} icon={Users} tone="success" loading={orgsLoading} />
+          hint={`${remaining} مقعد متاح`} loading={statsLoading} />
+        <KpiCard label="المتدربون الحاليون" value={totalOccupied} icon={Users} tone="success" loading={statsLoading} />
         <KpiCard label="الطلبات الواردة" value={pending.length} icon={Inbox} tone="warning"
           hint="بانتظار المراجعة" loading={reqLoading} onClick={() => navigate('/affiliations')} />
         <KpiCard label="بانتظار التوزيع" value={awaitingAllocation.length} icon={Sparkles} tone="violet"

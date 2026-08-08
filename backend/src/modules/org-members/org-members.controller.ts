@@ -1,9 +1,13 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Query } from '@nestjs/common';
+import {
+  Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Query,
+  BadRequestException,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
+import { roleScope } from '../../common/role-scope';
 import { OrganizationAssignmentService } from '../organization-assignments/organization-assignment.service';
 import * as bcrypt from 'bcrypt';
 
@@ -58,6 +62,40 @@ export class OrgMembersController {
   @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'university_administrator')
   @ApiOperation({ summary: 'إضافة عضو جديد للجهة' })
   async create(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
+    // Hospital-scoped roles must resolve to an actual hospital before anything
+    // is written. Previously the member was attached to whatever organisation
+    // the creator happened to be in, so a cluster administrator adding a trainer
+    // produced a trainer sitting on the cluster with no hospital at all.
+    const scopeRule = roleScope(dto.roleCode);
+    const targetOrgId: string = dto.hospitalId || dto.organizationId || user.organizationId;
+
+    const targetOrg = await this.prisma.organization.findFirst({
+      where: { id: targetOrgId, deletedAt: null },
+      select: { id: true, parentId: true, organizationType: { select: { code: true } } },
+    });
+    if (!targetOrg) {
+      throw new BadRequestException('الجهة المحددة غير موجودة');
+    }
+
+    if (scopeRule.requiresHospital) {
+      if (targetOrg.organizationType?.code !== 'hospital') {
+        throw new BadRequestException(
+          `الدور "${dto.roleCode}" يتطلب تحديد مستشفى — الجهة المختارة ليست مستشفى`,
+        );
+      }
+      // Cascading: the hospital must belong to the creator's organisation,
+      // unless the creator is already inside that hospital.
+      if (
+        user.organizationId &&
+        targetOrg.id !== user.organizationId &&
+        targetOrg.parentId !== user.organizationId
+      ) {
+        throw new BadRequestException('المستشفى المحدد لا يتبع جهتك');
+      }
+    }
+
+    const memberOrgId = targetOrg.id;
+
     const passwordHash = await bcrypt.hash(dto.password || 'Miran@Admin2024!', 10);
 
     // إنشاء/تحديث Person
@@ -90,13 +128,13 @@ export class OrgMembersController {
 
     // ربط بالجهة — يُكتب في النموذجين للحفاظ على التوافق
     await this.prisma.userOrganization.upsert({
-      where: { userAccountId_organizationId: { userAccountId: account.id, organizationId: user.organizationId } },
-      create: { userAccountId: account.id, organizationId: user.organizationId, isPrimary: true },
+      where: { userAccountId_organizationId: { userAccountId: account.id, organizationId: memberOrgId } },
+      create: { userAccountId: account.id, organizationId: memberOrgId, isPrimary: true },
       update: { isActive: true },
     });
     await this.orgAssignments.upsertMembership({
       userAccountId: account.id,
-      organizationId: user.organizationId,
+      organizationId: memberOrgId,
       isPrimary: true,
       createdById: user.accountId,
     });
@@ -106,8 +144,8 @@ export class OrgMembersController {
       const role = await this.prisma.role.findUnique({ where: { code: dto.roleCode } });
       if (role) {
         await this.prisma.userRole.upsert({
-          where: { userAccountId_roleId_organizationId: { userAccountId: account.id, roleId: role.id, organizationId: user.organizationId } },
-          create: { userAccountId: account.id, roleId: role.id, organizationId: user.organizationId, assignedById: user.accountId },
+          where: { userAccountId_roleId_organizationId: { userAccountId: account.id, roleId: role.id, organizationId: memberOrgId } },
+          create: { userAccountId: account.id, roleId: role.id, organizationId: memberOrgId, assignedById: user.accountId },
           update: {},
         });
       }
@@ -120,7 +158,7 @@ export class OrgMembersController {
         await this.prisma.traineeProfile.create({
           data: {
             personId: person.id,
-            organizationId: user.organizationId,
+            organizationId: memberOrgId,
             traineeNumber: dto.traineeNumber,
             level: dto.level || 'intern',
             specialtyAr: dto.specialtyAr || 'طب بشري',
@@ -133,18 +171,27 @@ export class OrgMembersController {
       }
     }
 
-    // إنشاء TrainerProfile إذا كان المدرب
-    if (dto.roleCode === 'trainer' && dto.departmentId) {
+    // A trainer account without a TrainerProfile is a trainer with no hospital
+    // record — it cannot be allocated to, cannot hold rotations and does not
+    // appear in capacity. The profile is now always created, with the department
+    // optional rather than a precondition.
+    if (dto.roleCode === 'trainer') {
       const existing = await this.prisma.trainerProfile.findFirst({ where: { personId: person.id } });
       if (!existing) {
         await this.prisma.trainerProfile.create({
           data: {
             personId: person.id,
-            organizationId: user.organizationId,
-            departmentId: dto.departmentId,
-            titleAr: dto.titleAr || 'استشاري',
-            maxTrainees: dto.maxTrainees || 10,
+            organizationId: memberOrgId,
+            departmentId: dto.departmentId || null,
+            titleAr: dto.titleAr || null,
+            maxTrainees: dto.maxTrainees ?? 5,
           },
+        });
+      } else if (existing.organizationId !== memberOrgId) {
+        // Keep the profile in step when the member is moved to another hospital.
+        await this.prisma.trainerProfile.update({
+          where: { id: existing.id },
+          data: { organizationId: memberOrgId, departmentId: dto.departmentId ?? existing.departmentId },
         });
       }
     }

@@ -35,6 +35,7 @@ import {
 import { CurrentUser, OrgContext, RequireRoles } from '../../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
+import { PLATFORM_SCOPED_ROLES } from '../../common/role-scope';
 
 const CLUSTER_ROLES = ['cluster_administrator', 'training_director', 'platform_owner'] as const;
 const UNIVERSITY_ROLES = ['university_administrator', 'academic_affairs', 'platform_owner'] as const;
@@ -80,12 +81,17 @@ export class TrainingRequestsController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async findAll(
+    @CurrentUser() currentUser: IAuthenticatedUser,
     @OrgContext() orgId: string,
     @Query('orgId') overrideOrgId?: string,
     @Query('page') page = 1,
     @Query('limit') limit = 20,
   ) {
-    return this.trainingRequestsService.findAll(overrideOrgId || orgId, +page, +limit);
+    // A platform-scoped role governs the whole federation, so its view is not
+    // narrowed by whichever organisation happens to be in context.
+    const isPlatform = (currentUser?.roles ?? []).some((r) => PLATFORM_SCOPED_ROLES.includes(r));
+    const effectiveOrgId = overrideOrgId ?? (isPlatform ? undefined : orgId);
+    return this.trainingRequestsService.findAll(effectiveOrgId, +page, +limit);
   }
 
   @Get('hospital-review')

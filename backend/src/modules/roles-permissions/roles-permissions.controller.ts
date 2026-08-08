@@ -3,6 +3,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { RequireRoles } from '../../common/decorators';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ROLE_SCOPES } from '../../common/role-scope';
 
 @ApiTags('Dynamic RBAC (إدارة الأدوار والصلاحيات الديناميكية)')
 @Controller('roles-permissions')
@@ -23,6 +24,16 @@ export class RolesPermissionsController {
       orderBy: { hierarchyLevel: 'desc' },
     });
     return { data: roles };
+  }
+
+  @Get('role-scopes')
+  @ApiOperation({
+    summary: 'عقد نطاق الأدوار — ما يتطلبه كل دور من جهة/مستشفى (مصدر موحّد للواجهة والخادم)',
+  })
+  async getRoleScopes() {
+    return {
+      data: Object.entries(ROLE_SCOPES).map(([code, rule]) => ({ code, ...rule })),
+    };
   }
 
   @Get('permissions')

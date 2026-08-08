@@ -47,12 +47,15 @@ export const Affiliations: React.FC = () => {
   });
 
   // Fetch hospitals for allocation
+  // Capacity, occupancy and availability come from the hospital-cards endpoint,
+  // which derives them through CapacityService. Recomputing
+  // `capacity - traineeProfiles` here produced a second, subtly different
+  // definition of "available seats" than the one the allocation engine enforces.
   const { data: hospitalsData } = useQuery({
     queryKey: ['hospitals-for-allocation'],
     queryFn: async () => {
-      const res = await apiClient.get('/organizations', { params: { limit: 50 } }).catch(() => ({ data: { data: [] } }));
-      const allOrgs = res.data?.data || [];
-      return allOrgs.filter((o: any) => o.organizationType?.code === 'hospital');
+      const res = await apiClient.get('/organizations/hospitals-cards').catch(() => ({ data: [] }));
+      return Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
     },
   });
 
@@ -258,11 +261,11 @@ export const Affiliations: React.FC = () => {
           )}
 
           {hospitals.map((h: any) => {
-            const remaining = Math.max(0, (h.capacity || 0) - (h._count?.traineeProfiles || 0));
+            const remaining = h.available ?? 0;
             return (
               <div key={h.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <TextField
-                  label={`${h.nameAr} (متاح: ${remaining} من ${h.capacity || 0})`}
+                  label={`${h.nameAr} — متاح ${remaining} من ${h.capacity ?? 0} (إشغال ${h.occupancyPercentage ?? 0}%)`}
                   type="number"
                   value={allocations[h.id] || 0}
                   onChange={(e) => setAllocations({ ...allocations, [h.id]: Number(e.target.value) })}

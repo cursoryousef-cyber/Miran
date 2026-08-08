@@ -202,9 +202,17 @@ export const TrainerReassignment: React.FC = () => {
   const steps = ['نوع الإسناد', 'اختيار المتدربين', 'السبب', 'المدرب البديل', 'المراجعة'];
 
   const totalCapacity = trainers.reduce((s: number, t: any) => s + (t.maxTrainees ?? 0), 0);
-  const totalLoad = trainers.reduce((s: number, t: any) => s + (t.rotations?.length ?? t._count?.rotations ?? 0), 0);
-  const overloaded = trainers.filter((t: any) => (t.rotations?.length ?? 0) >= (t.maxTrainees ?? 0) && (t.maxTrainees ?? 0) > 0).length;
-  const freeTrainers = trainers.filter((t: any) => (t.rotations?.length ?? 0) < (t.maxTrainees ?? 0)).length;
+  // `/trainers` returns `_count.rotations` scoped to active rotations, which is
+  // the same definition CapacityService uses for trainer occupancy. Reading a
+  // non-existent `rotations` array made "overloaded" permanently zero.
+  const loadOf = (t: any) => t._count?.rotations ?? 0;
+  const totalLoad = trainers.reduce((sum: number, t: any) => sum + loadOf(t), 0);
+  const overloaded = trainers.filter(
+    (t: any) => (t.maxTrainees ?? 0) > 0 && loadOf(t) >= t.maxTrainees,
+  ).length;
+  const freeTrainers = trainers.filter(
+    (t: any) => (t.maxTrainees ?? 0) > 0 && loadOf(t) < t.maxTrainees,
+  ).length;
 
   return (
     <DataPageShell

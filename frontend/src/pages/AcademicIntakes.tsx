@@ -91,12 +91,18 @@ export const AcademicIntakes: React.FC = () => {
 
   const submitRequestMutation = useMutation({
     mutationFn: async () => {
-      const targetOrgId = targetClusterId || orgsData?.[0]?.id || '5ff7f3e8-efa8-4552-ba25-b04304e235ef';
+      // The target cluster must be chosen or resolvable from real data — the
+      // hardcoded fallback id pointed at one specific cluster and silently sent
+      // every request there regardless of who submitted it.
+      const targetOrgId = targetClusterId || orgsData?.[0]?.id;
+      if (!targetOrgId) {
+        throw new Error('يجب اختيار التجمع الصحي المستقبِل قبل إرسال الطلب');
+      }
       return apiClient.post('/training-requests', {
         targetOrgId,
         studentCount,
         priority: 'normal',
-        notes: `طلب توزيع ${studentCount} طالب امتياز من جامعة الحدود الشمالية على مستشفيات التجمع الصحي`,
+        notes: `طلب توزيع ${studentCount} متدرب من ${user?.activeOrganization?.nameAr ?? 'الجهة الموفدة'}`,
       });
     },
     onSuccess: () => {
@@ -194,7 +200,7 @@ export const AcademicIntakes: React.FC = () => {
                         <div style={{ fontFamily: 'monospace', fontSize: '11px', color: '#0891B2' }}>{intake.code}</div>
                       </TableCell>
                       <TableCell style={{ color: '#475569', fontWeight: 600 }}>
-                        {intake.organization?.nameAr || 'جامعة الحدود الشمالية'}
+                        {intake.organization?.nameAr ?? '—'}
                       </TableCell>
                       <TableCell style={{ color: '#047857', fontWeight: 600 }}>
                         {intake.program?.nameAr || 'برنامج امتياز الطب البشري'}
@@ -256,7 +262,7 @@ export const AcademicIntakes: React.FC = () => {
                       {req.requestNumber}
                     </TableCell>
                     <TableCell style={{ color: '#0F172A', fontWeight: 700 }}>
-                      {req.sourceOrg?.nameAr || 'جامعة الحدود الشمالية'}
+                      {req.sourceOrg?.nameAr ?? '—'}
                     </TableCell>
                     <TableCell style={{ color: '#475569' }}>
                       {req.targetOrg?.nameAr || 'تجمع الحدود الشمالية الصحي'}

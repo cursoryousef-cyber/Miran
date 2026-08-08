@@ -497,7 +497,7 @@ export const ClusterTrainees: React.FC = () => {
                         <div style={{ fontSize: '11px', color: '#64748B' }}>{t.person?.gender === 'female' ? 'أنثى' : 'ذكر'}</div>
                       </TableCell>
                       <TableCell style={{ color: '#475569' }}>
-                        {t.sponsorOrganization?.nameAr || t.academicIntake?.organization?.nameAr || 'جامعة الحدود الشمالية'}
+                        {t.sponsorOrganization?.nameAr ?? t.academicIntake?.organization?.nameAr ?? '—'}
                       </TableCell>
                       <TableCell style={{ color: '#047857', fontWeight: 600 }}>
                         {t.specialtyAr || 'طب وجراحة عامة'}

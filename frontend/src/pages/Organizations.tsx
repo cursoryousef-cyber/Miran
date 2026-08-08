@@ -63,6 +63,15 @@ export const Organizations: React.FC = () => {
     },
   });
 
+  // Canonical KPI source, shared with the dashboards.
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ['organization-statistics'],
+    queryFn: async () => {
+      const res = await apiClient.get('/organizations/statistics').catch(() => ({ data: { data: null } }));
+      return res.data?.data ?? null;
+    },
+  });
+
   // Query Org Types
   const { data: orgTypes } = useQuery({
     queryKey: ['organization-types'],
@@ -145,19 +154,10 @@ export const Organizations: React.FC = () => {
   };
 
   const rows = data?.data ?? [];
-  const summary = rows.reduce(
-    (acc: any, o: any) => {
-      const capacity = o.capacity || 0;
-      const accepted = o._count?.traineeProfiles || 0;
-      acc.capacity += capacity;
-      acc.accepted += accepted;
-      if (o.status === 'active') acc.active += 1;
-      if (capacity > 0 && accepted / capacity >= 0.8) acc.pressured += 1;
-      return acc;
-    },
-    { capacity: 0, accepted: 0, active: 0, pressured: 0 },
-  );
-  const occupancyPct = summary.capacity > 0 ? Math.round((summary.accepted / summary.capacity) * 100) : 0;
+  // KPIs read the shared statistics endpoint rather than the current page —
+  // summing `rows` made every total change as you paged, and disagree with the
+  // dashboard which fetched a different page size.
+  const orgStats = stats ?? null;
 
   return (
     <DataPageShell
@@ -165,14 +165,18 @@ export const Organizations: React.FC = () => {
       icon={Building2}
       title="الجهات والتجمعات الصحية"
       subtitle="استعراض الجهات وسعتها ونسب إشغالها قبل الدخول إلى التفاصيل"
-      loading={isLoading}
+      loading={isLoading || statsLoading}
       stats={[
-        { label: 'الجهات المعروضة', value: data?.meta?.total ?? rows.length, icon: Building2, tone: 'primary' },
-        { label: 'جهات نشطة', value: summary.active, icon: CheckCircle2, tone: 'success' },
-        { label: 'السعة الإجمالية', value: summary.capacity, icon: BedDouble, tone: 'info' },
-        { label: 'المتدربون', value: summary.accepted, icon: Users, tone: 'violet' },
-        { label: 'نسبة الإشغال', value: `${occupancyPct}%`, icon: Gauge, tone: occupancyPct >= 90 ? 'danger' : occupancyPct >= 70 ? 'warning' : 'success' },
-        { label: 'جهات تحت ضغط', value: summary.pressured, icon: AlertCircle, tone: summary.pressured ? 'warning' : 'success', hint: 'إشغال 80% فأكثر' },
+        { label: 'إجمالي الجهات', value: orgStats?.totalOrganizations ?? 0, icon: Building2, tone: 'primary' },
+        { label: 'جهات نشطة', value: orgStats?.activeOrganizations ?? 0, icon: CheckCircle2, tone: 'success' },
+        { label: 'السعة الإجمالية', value: orgStats?.totalCapacity ?? 0, icon: BedDouble, tone: 'info',
+          hint: `${orgStats?.hospitals ?? 0} مستشفى` },
+        { label: 'المتدربون', value: orgStats?.totalTrainees ?? 0, icon: Users, tone: 'violet' },
+        { label: 'نسبة الإشغال', value: `${orgStats?.occupancyPercentage ?? 0}%`, icon: Gauge,
+          tone: (orgStats?.occupancyPercentage ?? 0) >= 90 ? 'danger' : (orgStats?.occupancyPercentage ?? 0) >= 70 ? 'warning' : 'success',
+          hint: `${orgStats?.availableSeats ?? 0} مقعد متاح` },
+        { label: 'مستشفيات تحت ضغط', value: orgStats?.pressuredHospitals ?? 0, icon: AlertCircle,
+          tone: (orgStats?.pressuredHospitals ?? 0) ? 'warning' : 'success', hint: 'إشغال 80% فأكثر' },
       ]}
       actions={
         <>

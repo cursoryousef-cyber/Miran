@@ -104,6 +104,20 @@ async function main() {
       ],
     },
     {
+      code: 'hospital_training_admin',
+      nameAr: 'مدير إدارة التدريب بالمستشفى',
+      nameEn: 'Hospital Training Administrator',
+      descriptionAr: 'يدير جميع عمليات التدريب والروتيشنات والمدربين داخل مستشفى محدد',
+      hierarchyLevel: 8,
+      permissions: [
+        'manage_accounts', 'manage_trainers', 'manage_trainees',
+        'approve_rotations', 'assign_rotations', 'view_rotations',
+        'view_reports', 'track_attendance', 'send_notifications',
+        'submit_evaluations', 'view_evaluations',
+        'view_active_calls', 'track_call_responses',
+      ],
+    },
+    {
       code: 'trainee',
       nameAr: 'متدرب',
       nameEn: 'Trainee',
