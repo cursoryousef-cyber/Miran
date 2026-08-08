@@ -15,7 +15,7 @@ meta:
 
 workflows:
   build:
-    summary: Default Bitrise build workflow. Executes full Release Archive, IPA Export, and TestFlight Deployment.
+    summary: Production Release Archive, App Store IPA Export, and TestFlight Deployment.
     steps:
     - activate-ssh-key@4: {}
     - git-clone@8: {}
@@ -45,15 +45,18 @@ workflows:
         - export_method: app-store
         - automatic_code_signing: api-key
     - script@1:
-        title: Verify & Export Miran.ipa (FAIL BUILD IF MISSING)
+        title: Hard IPA Verification Assertion (FAIL IF MISSING)
         inputs:
         - content: |-
             #!/bin/bash
             set -e
-            echo "================ Verifying Miran.ipa Artifact ================"
-            mkdir -p "$BITRISE_DEPLOY_DIR"
+            echo "================ HARD IPA VERIFICATION =================="
+            echo "Searching for exported IPA in $BITRISE_DEPLOY_DIR..."
             
-            # 1. Look for pre-exported IPA
+            # 1. Print all IPA files found
+            find "$BITRISE_DEPLOY_DIR" -name "*.ipa" -print
+            
+            # 2. Check for pre-exported IPA
             FOUND_IPA=$(find "$BITRISE_DEPLOY_DIR" ~/Library/Developer/Xcode/Archives -name "*.ipa" 2>/dev/null | head -n 1)
             
             if [ -n "$FOUND_IPA" ]; then
@@ -74,7 +77,7 @@ workflows:
               fi
             fi
             
-            # 2. Strict Assertion Check: Fail build if Miran.ipa is missing
+            # 3. Final Assertion Check: Fail build if Miran.ipa is missing
             if [ -f "$BITRISE_DEPLOY_DIR/Miran.ipa" ]; then
               echo "✅ ASSERTION SUCCESS: Miran.ipa exists at $BITRISE_DEPLOY_DIR/Miran.ipa"
               ls -lh "$BITRISE_DEPLOY_DIR/Miran.ipa"
@@ -91,13 +94,125 @@ workflows:
 
   release:
     summary: Release distribution workflow for App Store Connect / TestFlight.
-    before_run:
-    - build
+    steps:
+    - activate-ssh-key@4: {}
+    - git-clone@8: {}
+    - script@1:
+        title: Ensure Built Web Frontend & Resolve Xcode Dependencies
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -ex
+            echo "================ Building Web Frontend Assets ================"
+            cd frontend
+            npm install
+            npx tsc -b
+            npm run build
+            cd ..
+            echo "================ Resolving Xcode Dependencies ================"
+            xcodebuild -resolvePackageDependencies -project "$BITRISE_PROJECT_PATH"
+    - manage-ios-code-signing@1:
+        inputs:
+        - distribution_type: app-store
+    - xcode-archive@5:
+        inputs:
+        - project_path: "$BITRISE_PROJECT_PATH"
+        - scheme: "$BITRISE_SCHEME"
+        - configuration: Release
+        - distribution_method: app-store
+        - export_method: app-store
+        - automatic_code_signing: api-key
+    - script@1:
+        title: Hard IPA Verification Assertion (FAIL IF MISSING)
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -e
+            echo "================ HARD IPA VERIFICATION =================="
+            echo "Searching for exported IPA in $BITRISE_DEPLOY_DIR..."
+            find "$BITRISE_DEPLOY_DIR" -name "*.ipa" -print
+            
+            FOUND_IPA=$(find "$BITRISE_DEPLOY_DIR" ~/Library/Developer/Xcode/Archives -name "*.ipa" 2>/dev/null | head -n 1)
+            if [ -n "$FOUND_IPA" ]; then
+              if [ "$FOUND_IPA" != "$BITRISE_DEPLOY_DIR/Miran.ipa" ]; then
+                cp "$FOUND_IPA" "$BITRISE_DEPLOY_DIR/Miran.ipa"
+              fi
+            fi
+            
+            if [ -f "$BITRISE_DEPLOY_DIR/Miran.ipa" ]; then
+              echo "✅ ASSERTION SUCCESS: Miran.ipa exists at $BITRISE_DEPLOY_DIR/Miran.ipa"
+              ls -lh "$BITRISE_DEPLOY_DIR/Miran.ipa"
+            else
+              echo "❌ CRITICAL FAILURE: $BITRISE_DEPLOY_DIR/Miran.ipa was NOT created!"
+              exit 1
+            fi
+    - deploy-to-itunesconnect-deliver@3:
+        inputs:
+        - connection: api_key
+    - deploy-to-bitrise-io@2:
+        inputs:
+        - deploy_path: "$BITRISE_DEPLOY_DIR"
 
   primary:
     summary: Primary workflow entrypoint.
-    before_run:
-    - build
+    steps:
+    - activate-ssh-key@4: {}
+    - git-clone@8: {}
+    - script@1:
+        title: Ensure Built Web Frontend & Resolve Xcode Dependencies
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -ex
+            echo "================ Building Web Frontend Assets ================"
+            cd frontend
+            npm install
+            npx tsc -b
+            npm run build
+            cd ..
+            echo "================ Resolving Xcode Dependencies ================"
+            xcodebuild -resolvePackageDependencies -project "$BITRISE_PROJECT_PATH"
+    - manage-ios-code-signing@1:
+        inputs:
+        - distribution_type: app-store
+    - xcode-archive@5:
+        inputs:
+        - project_path: "$BITRISE_PROJECT_PATH"
+        - scheme: "$BITRISE_SCHEME"
+        - configuration: Release
+        - distribution_method: app-store
+        - export_method: app-store
+        - automatic_code_signing: api-key
+    - script@1:
+        title: Hard IPA Verification Assertion (FAIL IF MISSING)
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -e
+            echo "================ HARD IPA VERIFICATION =================="
+            echo "Searching for exported IPA in $BITRISE_DEPLOY_DIR..."
+            find "$BITRISE_DEPLOY_DIR" -name "*.ipa" -print
+            
+            FOUND_IPA=$(find "$BITRISE_DEPLOY_DIR" ~/Library/Developer/Xcode/Archives -name "*.ipa" 2>/dev/null | head -n 1)
+            if [ -n "$FOUND_IPA" ]; then
+              if [ "$FOUND_IPA" != "$BITRISE_DEPLOY_DIR/Miran.ipa" ]; then
+                cp "$FOUND_IPA" "$BITRISE_DEPLOY_DIR/Miran.ipa"
+              fi
+            fi
+            
+            if [ -f "$BITRISE_DEPLOY_DIR/Miran.ipa" ]; then
+              echo "✅ ASSERTION SUCCESS: Miran.ipa exists at $BITRISE_DEPLOY_DIR/Miran.ipa"
+              ls -lh "$BITRISE_DEPLOY_DIR/Miran.ipa"
+            else
+              echo "❌ CRITICAL FAILURE: $BITRISE_DEPLOY_DIR/Miran.ipa was NOT created!"
+              exit 1
+            fi
+    - deploy-to-itunesconnect-deliver@3:
+        inputs:
+        - connection: api_key
+    - deploy-to-bitrise-io@2:
+        inputs:
+        - deploy_path: "$BITRISE_DEPLOY_DIR"
 
 trigger_map:
 - push_branch: "*"
