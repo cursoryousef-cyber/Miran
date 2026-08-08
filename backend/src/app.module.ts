@@ -37,6 +37,7 @@ import { OrganizationAssignmentModule } from './modules/organization-assignments
 import { ProgramsModule } from './modules/programs/programs.module';
 import { TrainingPlansModule } from './modules/training-plans/training-plans.module';
 import { TimelineModule } from './modules/timeline/timeline.module';
+import { AuthzModule } from './common/authz/authz.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { TimelineModule } from './modules/timeline/timeline.module';
 
     // Core Infrastructure
     PrismaModule,
+    AuthzModule,
     HealthModule,
 
     // Domain Modules

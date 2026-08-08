@@ -12,6 +12,7 @@ import {
   TRAINING_REQUEST_TRANSITIONS,
 } from '../../common/state-machine/transition-guard';
 import { TRAINING_REQUEST_STATUS } from '../../common/status-constants';
+import { CAPABILITIES, ScopeContext } from '../../common/authz';
 
 @Injectable()
 export class TrainingRequestsService {
@@ -24,12 +25,35 @@ export class TrainingRequestsService {
     private composition: RequestCompositionService,
   ) {}
 
-  async findAll(orgId?: string, page = 1, limit = 20) {
+  /**
+   * The single query behind both the incoming-requests screen and the dashboard
+   * counters. Scope comes from the resolved ScopeContext, so the notification
+   * bell and this list can no longer disagree about which organisations the
+   * session belongs to — they read the same `visibleOrgIds`.
+   *
+   * A cluster context sees requests addressed to the cluster *and* those of its
+   * hospitals; a university sees the ones it sent.
+   */
+  async findAll(
+    scope: ScopeContext,
+    opts: { status?: string; page?: number; limit?: number } = {},
+  ) {
+    const page = opts.page ?? 1;
+    const limit = opts.limit ?? 20;
     const skip = (page - 1) * limit;
     const where: Record<string, unknown> = {};
 
-    if (orgId) {
-      where.OR = [{ sourceOrgId: orgId }, { targetOrgId: orgId }];
+    // null means platform scope — unrestricted, and distinct from an empty list.
+    if (scope.visibleOrgIds !== null) {
+      where.OR = [
+        { sourceOrgId: { in: scope.visibleOrgIds } },
+        { targetOrgId: { in: scope.visibleOrgIds } },
+      ];
+    }
+
+    if (opts.status) {
+      const statuses = opts.status.split(',').map((s) => s.trim()).filter(Boolean);
+      if (statuses.length > 0) where.status = { in: statuses };
     }
 
     const [total, data] = await Promise.all([
@@ -77,10 +101,56 @@ export class TrainingRequestsService {
     return { data: request };
   }
 
+  /**
+   * Requests flow one way only: a sponsoring university asks a cluster to host
+   * its students. The direction used to be unchecked, and production contains a
+   * request whose source is a cluster and whose target is a hospital — a path
+   * that bypasses cluster review entirely, because a hospital has no capability
+   * to approve anything. Validating the endpoints here closes that path at the
+   * only place it can be created.
+   */
+  private async assertRequestDirection(sourceOrgId: string, targetOrgId: string) {
+    if (sourceOrgId === targetOrgId) {
+      throw new BadRequestException('لا يمكن أن تكون الجهة المرسلة والمستقبلة واحدة');
+    }
+
+    const [source, target] = await Promise.all([
+      this.prisma.organization.findUnique({
+        where: { id: sourceOrgId },
+        select: { nameAr: true, organizationType: { select: { code: true } } },
+      }),
+      this.prisma.organization.findUnique({
+        where: { id: targetOrgId },
+        select: { nameAr: true, organizationType: { select: { code: true } } },
+      }),
+    ]);
+
+    if (!source) throw new BadRequestException('الجهة المرسلة غير موجودة');
+    if (!target) throw new BadRequestException('الجهة المستقبلة غير موجودة');
+
+    const sourceType = source.organizationType?.code;
+    const targetType = target.organizationType?.code;
+
+    if (sourceType !== 'university' && sourceType !== 'college') {
+      throw new BadRequestException(
+        `طلب التدريب يُقدَّم من جامعة أو كلية فقط — «${source.nameAr}» جهة من نوع «${sourceType ?? 'غير محدد'}»`,
+      );
+    }
+
+    if (targetType !== 'cluster') {
+      throw new BadRequestException(
+        `طلب التدريب يُوجَّه إلى تجمع صحي فقط — «${target.nameAr}» جهة من نوع «${targetType ?? 'غير محدد'}». ` +
+          'التوزيع على المستشفيات يتم من إدارة التدريب بالتجمع بعد اعتماد الطلب.',
+      );
+    }
+  }
+
   async create(dto: CreateTrainingRequestDto, user?: IAuthenticatedUser) {
     const reqCount = await this.prisma.trainingRequest.count();
     const requestNumber = `TR-${new Date().getFullYear()}-${(reqCount + 1).toString().padStart(4, '0')}`;
     const sourceOrgId = user?.organizationId || dto.targetOrgId;
+
+    await this.assertRequestDirection(sourceOrgId, dto.targetOrgId);
 
     // Dates and the program/plan/version combination are validated together
     // before anything is written, so an incoherent request is never persisted.
@@ -114,11 +184,12 @@ export class TrainingRequestsService {
       },
     });
 
-    // Send notification to target cluster admin
+    // Addressed by capability, so whoever owns request review in that cluster is
+    // told — training_director included, which the hard-coded role code missed.
     try {
-      await this.notificationService.notifyOrgUsers(
+      await this.notificationService.notifyCapableUsers(
         dto.targetOrgId,
-        'cluster_administrator',
+        CAPABILITIES.TRAINING_REQUEST_REVIEW,
         {
           titleAr: 'طلب تدريب جديد وارد',
           titleEn: 'New Training Request',

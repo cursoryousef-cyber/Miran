@@ -37,3 +37,4 @@ uploads/
 .DS_Store
 *.swp
 *~
+.env.test

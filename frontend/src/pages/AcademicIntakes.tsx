@@ -27,7 +27,10 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 export const AcademicIntakes: React.FC = () => {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, hasCapability } = useAuth();
+  // Reads the same capability the API enforces, so the button cannot appear for a
+  // session whose request would be refused.
+  const canCreateRequest = hasCapability('training_request.create');
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState(0);
@@ -122,25 +125,31 @@ export const AcademicIntakes: React.FC = () => {
 
   return (
     <DataPageShell
-        title="الدفعات الأكاديمية وطلبات التدريب (Academic Intakes & Training Requests)"
+        title="الدفعات الأكاديمية (Academic Batches)"
         actions={<>
-          <Button
-            variant="outlined"
-            startIcon={<Send size={18} />}
-            onClick={() => setOpenReqModal(true)}
-            style={{ borderColor: '#0891B2', color: '#0891B2', fontWeight: 700 }}
-          >
-            إرسال طلب تدريب جديد
-          </Button>
+          {/*
+            Creating a training request belongs to the sponsoring university, and
+            only there. It used to sit on this screen — the same page the cluster
+            reached via "توزيع المتدربين" — which put request creation, batch
+            management and distribution behind one button bar and made it possible
+            to start a new request from the middle of the distribution stage. The
+            action now renders only for a session that can actually create one,
+            which in practice means a university context.
 
-          <Button
-            variant="contained"
-            startIcon={<Plus size={18} />}
-            onClick={() => setOpenModal(true)}
-            style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', fontWeight: 700 }}
-          >
-            إنشاء دفعة أكاديمية
-          </Button>
+            There is no "create batch" button either: a batch is produced by
+            approving a request, so it is an outcome of the workflow rather than
+            something typed in beside it.
+          */}
+          {canCreateRequest && (
+            <Button
+              variant="outlined"
+              startIcon={<Send size={18} />}
+              onClick={() => setOpenReqModal(true)}
+              style={{ borderColor: '#0891B2', color: '#0891B2', fontWeight: 700 }}
+            >
+              إرسال طلب تدريب جديد
+            </Button>
+          )}
         </>}
         loading={isLoadingIntakes}
         stats={[

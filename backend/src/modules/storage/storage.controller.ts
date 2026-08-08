@@ -16,15 +16,24 @@ import { StorageService } from './storage.service';
 import { CurrentUser } from '../../common/decorators';
 import { JwtAuthGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
+import {
+  CAPABILITIES, CapabilityGuard, RequireCapability,
+} from '../../common/authz';
 
 @ApiTags('Storage (طبقة التخزين المجردة - Storage Provider)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CapabilityGuard)
 @Controller('files')
 export class StorageController {
   constructor(private storageService: StorageService) {}
 
+  // Uploading and retrieving files by id needs a stated reason to be in the
+  // system at all; bare authentication let any account fetch any stored file.
   @Post('upload')
+  @RequireCapability(
+    CAPABILITIES.LOGBOOK_SUBMIT, CAPABILITIES.LOGBOOK_VIEW,
+    CAPABILITIES.ORG_MEMBER_VIEW, CAPABILITIES.SELF_VIEW,
+  )
   @ApiOperation({ summary: 'رفع ملف جديد عبر Storage Provider المجرد' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -48,6 +57,9 @@ export class StorageController {
   }
 
   @Get(':id/download')
+  @RequireCapability(
+    CAPABILITIES.LOGBOOK_VIEW, CAPABILITIES.ORG_MEMBER_VIEW, CAPABILITIES.SELF_VIEW,
+  )
   @ApiOperation({ summary: 'تحميل ملف المباشر عبر Storage Key' })
   async downloadFile(@Param('id') id: string, @Res() res: Response) {
     const { storedFile, buffer } = await this.storageService.getFileDownload(id);
@@ -57,6 +69,9 @@ export class StorageController {
   }
 
   @Get(':id/url')
+  @RequireCapability(
+    CAPABILITIES.LOGBOOK_VIEW, CAPABILITIES.ORG_MEMBER_VIEW, CAPABILITIES.SELF_VIEW,
+  )
   @ApiOperation({ summary: 'الحصول على رابط موقّع مؤقت للملف' })
   async getSignedUrl(@Param('id') id: string) {
     return this.storageService.getSignedUrl(id);

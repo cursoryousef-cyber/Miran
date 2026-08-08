@@ -4,10 +4,13 @@ import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  CAPABILITIES, CapabilityGuard, RequireCapability,
+} from '../../common/authz';
 
 @ApiTags('Rotations & Departments (الروتيشنات والأقسام السريرية)')
 @Controller('rotations')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CapabilityGuard)
 @ApiBearerAuth('JWT-auth')
 export class RotationsController {
   constructor(private prisma: PrismaService) {}
@@ -27,6 +30,12 @@ export class RotationsController {
   }
 
   @Get()
+  @RequireCapability(
+    CAPABILITIES.TRAINEE_VIEW_SCOPE,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+    CAPABILITIES.TRAINEE_VIEW_DEPARTMENT,
+    CAPABILITIES.TRAINEE_VIEW_ASSIGNED,
+  )
   async findAll(@CurrentUser() user: IAuthenticatedUser) {
     const rotations = await this.prisma.rotation.findMany({
       where: { organizationId: user.organizationId },
@@ -114,6 +123,11 @@ export class RotationsController {
 
   // ─── Departments Endpoints ───────────────────────────────────────────────
   @Get('departments')
+  @RequireCapability(
+    CAPABILITIES.DEPARTMENT_MANAGE,
+    CAPABILITIES.CAPACITY_VIEW,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+  )
   @ApiOperation({ summary: 'قائمة الأقسام السريرية وطاقتها الاستيعابية' })
   async getDepartments(@CurrentUser() user: IAuthenticatedUser) {
     const departments = await this.prisma.department.findMany({

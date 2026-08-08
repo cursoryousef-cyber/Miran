@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TrainingRequestsService } from './training-requests.service';
+import { TraineeAllocationService } from './trainee-allocation.service';
 import { TrainingRequestTraineesService } from './training-request-trainees.service';
 import { GraduationService } from './graduation.service';
 import { RequestCompositionService } from './request-composition.service';
@@ -35,15 +36,28 @@ import {
 import { CurrentUser, OrgContext, RequireRoles } from '../../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
-import { PLATFORM_SCOPED_ROLES } from '../../common/role-scope';
+import {
+  CAPABILITIES,
+  CapabilityGuard,
+  RequireCapability,
+  Scope,
+  ScopeContext,
+  ScopeGuard,
+  ScopedResource,
+} from '../../common/authz';
 
 const CLUSTER_ROLES = ['cluster_administrator', 'training_director', 'platform_owner'] as const;
 const UNIVERSITY_ROLES = ['university_administrator', 'academic_affairs', 'platform_owner'] as const;
-const HOSPITAL_ROLES = ['hospital_administrator', 'department_head', 'training_supervisor', 'platform_owner'] as const;
+// The hospital side of the training workflow belongs to the hospital training
+// administration. `hospital_administrator` is deliberately absent: it administers
+// the hospital, it does not run training. Role lists are retained only for the
+// legacy RolesGuard on endpoints not yet migrated to capabilities; capability
+// checks are the authority wherever both are present.
+const HOSPITAL_ROLES = ['hospital_training_admin', 'department_head', 'training_supervisor', 'platform_owner'] as const;
 
 @ApiTags('Training Requests (طلبات التدريب التشغيلية الواردة للتجمع)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CapabilityGuard, ScopeGuard)
 @Controller('training-requests')
 export class TrainingRequestsController {
   constructor(
@@ -51,6 +65,7 @@ export class TrainingRequestsController {
     private traineesService: TrainingRequestTraineesService,
     private graduationService: GraduationService,
     private compositionService: RequestCompositionService,
+    private allocationService: TraineeAllocationService,
   ) {}
 
   // ─── University request composition (Module 5) ──────────────────────────────
@@ -76,22 +91,22 @@ export class TrainingRequestsController {
   }
 
   @Get()
+  @RequireCapability(CAPABILITIES.TRAINING_REQUEST_VIEW)
   @ApiOperation({ summary: 'قائمة طلبات التدريب الواردة للتجمع الصحي أو الصادرة من الجامعة' })
-  @ApiQuery({ name: 'orgId', required: false, type: String })
+  @ApiQuery({ name: 'status', required: false, type: String })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async findAll(
-    @CurrentUser() currentUser: IAuthenticatedUser,
-    @OrgContext() orgId: string,
-    @Query('orgId') overrideOrgId?: string,
+    @Scope() scope: ScopeContext,
+    @Query('status') status?: string,
     @Query('page') page = 1,
     @Query('limit') limit = 20,
   ) {
-    // A platform-scoped role governs the whole federation, so its view is not
-    // narrowed by whichever organisation happens to be in context.
-    const isPlatform = (currentUser?.roles ?? []).some((r) => PLATFORM_SCOPED_ROLES.includes(r));
-    const effectiveOrgId = overrideOrgId ?? (isPlatform ? undefined : orgId);
-    return this.trainingRequestsService.findAll(effectiveOrgId, +page, +limit);
+    // Scope comes from the resolved context, never from a client-supplied orgId:
+    // the old `?orgId=` override let any caller aim the query at an organisation
+    // of their choosing. Platform sessions carry a null visibility list, which
+    // the service reads as "no organisation filter".
+    return this.trainingRequestsService.findAll(scope, { status, page: +page, limit: +limit });
   }
 
   @Get('hospital-review')
@@ -102,19 +117,23 @@ export class TrainingRequestsController {
   }
 
   @Get(':id/summary')
+  @RequireCapability(CAPABILITIES.TRAINING_REQUEST_VIEW)
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'ملخص الطلب: البرنامج والإصدار وعدد الروتيشنات والأسابيع وعدد الطلاب' })
   async summary(@Param('id') id: string) {
     return this.compositionService.getRequestSummary(id);
   }
 
   @Get(':id')
+  @RequireCapability(CAPABILITIES.TRAINING_REQUEST_VIEW)
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'تفاصيل طلب تدريب محدد' })
   async findOne(@Param('id') id: string) {
     return this.trainingRequestsService.findOne(id);
   }
 
   @Post()
-  @RequireRoles(...UNIVERSITY_ROLES, ...CLUSTER_ROLES)
+  @RequireCapability(CAPABILITIES.TRAINING_REQUEST_CREATE)
   @ApiOperation({ summary: 'إنشاء طلب تدريب جديد من الجامعة الموفدة إلى التجمع الصحي' })
   async create(
     @Body() dto: CreateTrainingRequestDto,
@@ -124,7 +143,8 @@ export class TrainingRequestsController {
   }
 
   @Patch(':id')
-  @RequireRoles(...CLUSTER_ROLES, ...UNIVERSITY_ROLES)
+  @RequireCapability(CAPABILITIES.TRAINING_REQUEST_REVIEW, CAPABILITIES.TRAINING_REQUEST_CREATE)
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'تحديث حالة طلب التدريب، الملاحظات، وتوزيع المقاعد على المستشفيات' })
   async update(
     @Param('id') id: string,
@@ -135,20 +155,24 @@ export class TrainingRequestsController {
   }
 
   @Post(':id/auto-allocate')
-  @RequireRoles(...CLUSTER_ROLES)
+  @RequireCapability(CAPABILITIES.ALLOCATION_CLUSTER_AUTO)
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'التوزيع الذكي الآلي على المستشفيات بناء على الطاقة الاستيعابية' })
   async autoAllocate(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
     return this.trainingRequestsService.autoAllocate(id, user);
   }
 
   @Get(':id/validate-capacity')
+  @RequireCapability(CAPABILITIES.CAPACITY_VIEW)
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'التحقق من صحة الطاقة الاستيعابية قبل اعتماد التوزيع' })
   async validateCapacity(@Param('id') id: string) {
     return this.trainingRequestsService.validateCapacity(id);
   }
 
   @Post(':id/approve')
-  @RequireRoles(...CLUSTER_ROLES)
+  @RequireCapability(CAPABILITIES.TRAINING_REQUEST_APPROVE)
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'الموافقة النهائية واعتماد توزيع طلب التدريب' })
   async approve(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
     return this.trainingRequestsService.approve(id, user);
@@ -170,7 +194,8 @@ export class TrainingRequestsController {
   }
 
   @Post(':id/return-to-university')
-  @RequireRoles(...CLUSTER_ROLES)
+  @RequireCapability(CAPABILITIES.TRAINING_REQUEST_RETURN)
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'إعادة طلب التدريب للجامعة للتعديل' })
   async returnToUniversity(
     @Param('id') id: string,
@@ -237,6 +262,12 @@ export class TrainingRequestsController {
   // ─── صفوف المتدربين داخل الدفعة (المراحل 1–3) ───────────────────────────
 
   @Get(':id/trainees')
+  @RequireCapability(
+    CAPABILITIES.TRAINING_REQUEST_VIEW,
+    CAPABILITIES.TRAINEE_VIEW_SCOPE,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+  )
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'صفوف المتدربين داخل دفعة طلب التدريب' })
   async findTrainees(@Param('id') id: string) {
     return this.traineesService.findByRequest(id);
@@ -350,7 +381,11 @@ export class TrainingRequestsController {
   // ─── التوزيع اليدوي / إعادة التوزيع لصف فردي ─────────────────────────────
 
   @Patch('trainees/:rowId/allocation')
-  @RequireRoles(...CLUSTER_ROLES)
+  @RequireCapability(
+    CAPABILITIES.ALLOCATION_CLUSTER_MANUAL,
+    CAPABILITIES.ALLOCATION_CLUSTER_REASSIGN,
+  )
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({
     summary: 'تعيين أو إعادة تعيين متدرب يدوياً لمستشفى محدد عبر سلسلة التحقق الكاملة',
   })
@@ -416,14 +451,19 @@ export class TrainingRequestsController {
   }
 
   @Patch('trainees/:rowId/hospital-review/assignment')
-  @RequireRoles(...HOSPITAL_ROLES, ...CLUSTER_ROLES)
+  @RequireCapability(
+    CAPABILITIES.ALLOCATION_HOSPITAL_ASSIGN,
+    CAPABILITIES.ALLOCATION_HOSPITAL_REASSIGN,
+  )
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'تعديل القسم / المدرب / المشرف / التواريخ مع التحقق من الطاقة' })
   async changeAssignment(
     @Param('rowId') rowId: string,
     @Body() dto: ChangeAssignmentDto,
     @CurrentUser() user: IAuthenticatedUser,
+    @Scope() scope: ScopeContext,
   ) {
-    return this.traineesService.changeAssignment(rowId, dto, user);
+    return this.traineesService.changeAssignment(rowId, dto, user, scope);
   }
 
   @Post('trainees/:rowId/hospital-review/hold')
@@ -469,6 +509,13 @@ export class TrainingRequestsController {
 
   // ─── Phase 8: Graduation ─────────────────────────────────────────────────
   @Get('trainees/:profileId/graduation/eligibility')
+  @RequireCapability(
+    CAPABILITIES.GRADUATION_APPROVE,
+    CAPABILITIES.TRAINEE_VIEW_SCOPE,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+    CAPABILITIES.TRAINEE_VIEW_ASSIGNED,
+    CAPABILITIES.SELF_VIEW,
+  )
   @ApiOperation({ summary: 'التحقق من استيفاء متطلبات التخرج' })
   async checkGraduationEligibility(@Param('profileId') profileId: string) {
     return this.graduationService.checkEligibility(profileId);
@@ -483,5 +530,89 @@ export class TrainingRequestsController {
     @Body('notes') notes?: string,
   ) {
     return this.graduationService.submitApproval(profileId, user, notes);
+  }
+
+  // ─── التخصيص: المصدر الرسمي لتاريخ التوزيع ────────────────────────────────
+  // مسارَان منفصلان تماماً: التجمع يحدد المستشفى، والمستشفى يحدد القسم والمدرب.
+  // لا مسار واحد يقبل الاثنين، حتى لا تُمرَّر صلاحية أحدهما مكان الآخر.
+
+  @Get('trainees/:rowId/allocations')
+  @RequireCapability(
+    CAPABILITIES.TRAINEE_VIEW_SCOPE,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+    CAPABILITIES.TIMELINE_VIEW,
+  )
+  @ScopedResource('trainingRequestTrainee', 'rowId')
+  @ApiOperation({ summary: 'سجل تخصيصات المتدرب الكامل — المفتوح والمغلق بالترتيب الزمني' })
+  async allocationHistory(@Param('rowId') rowId: string, @Scope() scope: ScopeContext) {
+    const data = await this.allocationService.findHistory(rowId, scope);
+    return { data };
+  }
+
+  @Post('trainees/:rowId/allocations/hospital')
+  @RequireCapability(
+    CAPABILITIES.ALLOCATION_CLUSTER_MANUAL,
+    CAPABILITIES.ALLOCATION_CLUSTER_REASSIGN,
+  )
+  @ScopedResource('trainingRequestTrainee', 'rowId')
+  @ApiOperation({
+    summary: 'إسناد المتدرب لمستشفى أو نقله بين المستشفيات — إدارة التدريب بالتجمع',
+  })
+  async allocateToHospital(
+    @Param('rowId') rowId: string,
+    @Body() body: { hospitalId: string; reason?: string; startDate?: string; endDate?: string },
+    @CurrentUser() user: IAuthenticatedUser,
+    @Scope() scope: ScopeContext,
+  ) {
+    const open = await this.allocationService.findOpen(rowId);
+    return this.allocationService.allocateToHospital(
+      rowId,
+      {
+        hospitalId: body.hospitalId,
+        startDate: body.startDate ? new Date(body.startDate) : null,
+        endDate: body.endDate ? new Date(body.endDate) : null,
+      },
+      open ? 'cluster_reassign' : 'manual',
+      user,
+      scope,
+      body.reason,
+    );
+  }
+
+  @Post('trainees/:rowId/allocations/department')
+  @RequireCapability(
+    CAPABILITIES.ALLOCATION_HOSPITAL_ASSIGN,
+    CAPABILITIES.ALLOCATION_HOSPITAL_REASSIGN,
+  )
+  @ScopedResource('trainingRequestTrainee', 'rowId')
+  @ApiOperation({
+    summary: 'إسناد المتدرب لقسم/مدرب داخل المستشفى أو نقله بين أقسامه — إدارة التدريب بالمستشفى',
+  })
+  async assignWithinHospital(
+    @Param('rowId') rowId: string,
+    @Body() body: {
+      departmentId?: string;
+      trainerProfileId?: string;
+      supervisorAccountId?: string;
+      reason?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+    @CurrentUser() user: IAuthenticatedUser,
+    @Scope() scope: ScopeContext,
+  ) {
+    return this.allocationService.assignWithinHospital(
+      rowId,
+      {
+        departmentId: body.departmentId,
+        trainerProfileId: body.trainerProfileId,
+        supervisorAccountId: body.supervisorAccountId,
+        startDate: body.startDate ? new Date(body.startDate) : null,
+        endDate: body.endDate ? new Date(body.endDate) : null,
+      },
+      user,
+      scope,
+      body.reason,
+    );
   }
 }

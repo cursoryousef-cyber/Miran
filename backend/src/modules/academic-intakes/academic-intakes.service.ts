@@ -1,6 +1,14 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateAcademicIntakeDto, UpdateAcademicIntakeDto, AssignTraineesToIntakeDto } from './dto/academic-intake.dto';
+import {
+  CreateAcademicIntakeDto,
+  UpdateAcademicIntakeDto,
+  AssignTraineesToIntakeDto,
+} from './dto/academic-intake.dto';
 import { IAuthenticatedUser } from '../../common/interfaces';
 
 @Injectable()
@@ -14,8 +22,21 @@ export class AcademicIntakesService {
     if (orgId) {
       where.OR = [
         { organizationId: orgId },
-        { traineeProfiles: { some: { OR: [{ organizationId: orgId }, { rotations: { some: { organizationId: orgId } } }] } } },
-        { trainingRequests: { some: { OR: [{ sourceOrgId: orgId }, { targetOrgId: orgId }] } } },
+        {
+          traineeProfiles: {
+            some: {
+              OR: [
+                { organizationId: orgId },
+                { rotations: { some: { organizationId: orgId } } },
+              ],
+            },
+          },
+        },
+        {
+          trainingRequests: {
+            some: { OR: [{ sourceOrgId: orgId }, { targetOrgId: orgId }] },
+          },
+        },
       ];
     }
 
@@ -29,7 +50,9 @@ export class AcademicIntakesService {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          organization: { select: { id: true, nameAr: true, nameEn: true, code: true } },
+          organization: {
+            select: { id: true, nameAr: true, nameEn: true, code: true },
+          },
           program: true,
           coordinator: { include: { person: true } },
           trainingRequests: {
@@ -45,7 +68,8 @@ export class AcademicIntakesService {
 
     const data = await Promise.all(
       rawData.map(async (intake) => {
-        const totalTrainees = intake._count?.traineeProfiles || intake.capacity || 0;
+        const totalTrainees =
+          intake._count?.traineeProfiles || intake.capacity || 0;
         const allocatedCount = await this.prisma.traineeProfile.count({
           where: {
             academicIntakeId: intake.id,
@@ -93,12 +117,26 @@ export class AcademicIntakesService {
     return intake;
   }
 
+  /**
+   * @deprecated Batches are created from an approved training request only —
+   * see AcademicBatchService.createFromApprovedRequest. Retained because the
+   * seeds still build historical intakes, and callers are refused explicitly
+   * rather than silently producing a batch with no provenance.
+   */
   async create(dto: CreateAcademicIntakeDto, user: IAuthenticatedUser) {
+    throw new ConflictException(
+      'لا يمكن إنشاء دفعة أكاديمية مستقلة — الدفعة تُنشأ من طلب تدريب معتمد عبر ' +
+        'POST /academic-intakes/from-request',
+    );
+
     const existing = await this.prisma.academicIntake.findUnique({
       where: { code: dto.code.toUpperCase() },
     });
 
-    if (existing) throw new ConflictException(`رمز الدفعة الأكاديمية (${dto.code}) مستخدم مسبقاً`);
+    if (existing)
+      throw new ConflictException(
+        `رمز الدفعة الأكاديمية (${dto.code}) مستخدم مسبقاً`,
+      );
 
     return this.prisma.academicIntake.create({
       data: {
@@ -124,7 +162,11 @@ export class AcademicIntakesService {
     return { success: true, count: dto.traineeProfileIds.length };
   }
 
-  async update(id: string, dto: UpdateAcademicIntakeDto, user: IAuthenticatedUser) {
+  async update(
+    id: string,
+    dto: UpdateAcademicIntakeDto,
+    user: IAuthenticatedUser,
+  ) {
     await this.findOne(id);
 
     return this.prisma.academicIntake.update({

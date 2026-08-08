@@ -99,10 +99,23 @@ export class OrganizationAssignmentService {
     });
 
     if (assignments.length > 0) {
-      // A user may hold several assignments in one org over time; collapse to one
-      // entry per org, preferring the primary.
+      // Only organisations the user can actually enter are offered as contexts.
+      // Backfilled rows with roleId = NULL are memberships without authority; a
+      // user who has one against a cluster is on that cluster's books but has no
+      // role there, so switching in would yield a session with no capabilities.
+      // Listing such an organisation invites the user to switch into a context
+      // where every screen is empty and every action is refused. UserRole is
+      // consulted as well because the two role models coexist during migration.
+      const roledOrgIds = await this.roledOrgIds(
+        userAccountId,
+        assignments.map((a) => a.organizationId),
+      );
+
       const byOrg = new Map<string, { organization: any; isPrimary: boolean }>();
       for (const a of assignments) {
+        if (!roledOrgIds.has(a.organizationId)) continue;
+        // A user may hold several assignments in one org over time; collapse to
+        // one entry per org, preferring the primary.
         const existing = byOrg.get(a.organizationId);
         if (!existing || (a.isPrimary && !existing.isPrimary)) {
           byOrg.set(a.organizationId, { organization: a.organization, isPrimary: a.isPrimary });
@@ -127,28 +140,78 @@ export class OrganizationAssignmentService {
   }
 
   /**
-   * Whether a user may act within an organization — assignment first, legacy
-   * fallback. Used to authorize organization switching.
+   * Of the given organisations, those in which the user holds a role — from
+   * either role model. Used to keep context lists and switch authorisation
+   * agreeing on the same definition of "may act here".
+   */
+  private async roledOrgIds(userAccountId: string, candidateOrgIds: string[]): Promise<Set<string>> {
+    if (candidateOrgIds.length === 0) return new Set();
+
+    const [roledAssignments, userRoles] = await Promise.all([
+      this.prisma.organizationAssignment.findMany({
+        where: {
+          userAccountId,
+          organizationId: { in: candidateOrgIds },
+          isActive: true,
+          sourceType: { in: MEMBERSHIP_SOURCES },
+          roleId: { not: null },
+        },
+        select: { organizationId: true },
+      }),
+      this.prisma.userRole.findMany({
+        where: { userAccountId, organizationId: { in: candidateOrgIds } },
+        select: { organizationId: true },
+      }),
+    ]);
+
+    return new Set([
+      ...roledAssignments.map((a) => a.organizationId),
+      ...userRoles.map((r) => r.organizationId),
+    ]);
+  }
+
+  /**
+   * Whether a user may act within an organization. Used to authorize organization
+   * switching, so it is the gate on which every downstream scope check rests.
+   *
+   * Access requires a *role* in the organization, not merely a membership row.
+   * Bare membership used to be enough, which produced a null context: switching
+   * succeeded, `getRolesAndPermissions` found no UserRole for that org, and the
+   * session continued with an organisation set and zero roles. Endpoints that had
+   * no role annotation then served that session freely — a trainee holding a
+   * roleless backfill row against the cluster could read the cluster's training
+   * requests. Membership answers "is this person on the books here"; only a role
+   * answers "may they act here".
+   *
+   * A role may be recorded on the assignment itself or in the legacy UserRole
+   * table; either is accepted, since the two models coexist during migration.
    */
   async canAccessOrg(userAccountId: string, organizationId: string): Promise<boolean> {
-    const assignment = await this.prisma.organizationAssignment.findFirst({
-      where: { userAccountId, organizationId, isActive: true, sourceType: { in: MEMBERSHIP_SOURCES } },
+    const roledAssignment = await this.prisma.organizationAssignment.findFirst({
+      where: {
+        userAccountId,
+        organizationId,
+        isActive: true,
+        sourceType: { in: MEMBERSHIP_SOURCES },
+        roleId: { not: null },
+      },
       select: { id: true },
     });
-    if (assignment) return true;
+    if (roledAssignment) return true;
 
-    const anyAssignment = await this.prisma.organizationAssignment.findFirst({
-      where: { userAccountId, sourceType: { in: MEMBERSHIP_SOURCES } },
-      select: { id: true },
+    // The legacy role table is authoritative for accounts whose assignments were
+    // backfilled without a role.
+    const userRole = await this.prisma.userRole.findFirst({
+      where: { userAccountId, organizationId },
+      select: { roleId: true },
     });
-    // Only consult the legacy model for users with no assignments at all.
-    if (anyAssignment) return false;
+    if (userRole) return true;
 
-    const uo = await this.prisma.userOrganization.findUnique({
-      where: { userAccountId_organizationId: { userAccountId, organizationId } },
-      select: { isActive: true },
+    const directPermission = await this.prisma.userPermission.findFirst({
+      where: { userAccountId, organizationId, granted: true },
+      select: { permissionId: true },
     });
-    return !!uo?.isActive;
+    return !!directPermission;
   }
 
   /**

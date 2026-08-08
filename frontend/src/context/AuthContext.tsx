@@ -18,6 +18,13 @@ export interface UserProfile {
   email: string;
   roles?: string[];
   permissions?: string[];
+  /**
+   * What this session may do in the *active* organisation, resolved by the
+   * backend. Navigation and action visibility are driven from this rather than
+   * from role names, so a menu item can never appear for a user the API will
+   * refuse — the two read the same answer.
+   */
+  capabilities?: string[];
   activeOrganization: UserOrg;
   availableOrganizations: UserOrg[];
 }
@@ -32,6 +39,11 @@ interface AuthContextType {
   switchOrganization: (orgId: string) => Promise<void>;
   hasRole: (role: string) => boolean;
   hasAnyRole: (roles: string[]) => boolean;
+  /** Whether the session holds a capability in the active context. */
+  hasCapability: (capability: string) => boolean;
+  /** Whether the session holds at least one of the capabilities. */
+  hasAnyCapability: (capabilities: string[]) => boolean;
+  /** @deprecated Role-derived guesswork — use hasCapability. */
   can: (action: RBACAction, scope: RBACScope) => boolean;
 }
 
@@ -73,7 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       const res = await apiClient.post('/auth/switch-org', { organizationId: orgId });
-      const { activeOrganization, tokens, roles, permissions } = res.data;
+      const { activeOrganization, tokens, roles, permissions, capabilities } = res.data;
 
       localStorage.setItem('access_token', tokens.accessToken);
       localStorage.setItem('refresh_token', tokens.refreshToken);
@@ -85,6 +97,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           activeOrganization,
           roles: roles || user.roles,
           permissions: permissions || user.permissions,
+          // Replaced wholesale, never merged: capabilities belong to the context
+          // just entered, and carrying the previous context's forward would grant
+          // powers the backend will refuse.
+          capabilities: capabilities ?? [],
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
         setUser(updatedUser);
@@ -100,6 +116,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const hasAnyRole = (roles: string[]): boolean => {
     return roles.some((r) => user?.roles?.includes(r) ?? false);
+  };
+
+  const hasCapability = (capability: string): boolean => {
+    return user?.capabilities?.includes(capability) ?? false;
+  };
+
+  const hasAnyCapability = (capabilities: string[]): boolean => {
+    return capabilities.some((c) => user?.capabilities?.includes(c) ?? false);
   };
 
   const can = (action: RBACAction, scope: RBACScope): boolean => {
@@ -118,6 +142,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         switchOrganization,
         hasRole,
         hasAnyRole,
+        hasCapability,
+        hasAnyCapability,
         can,
       }}
     >

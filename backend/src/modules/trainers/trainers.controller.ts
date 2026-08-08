@@ -1,7 +1,23 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { JwtAuthGuard, RolesGuard } from '../../common/guards';
-import { CurrentUser, RequireRoles } from '../../common/decorators';
+import { JwtAuthGuard } from '../../common/guards';
+import { CurrentUser } from '../../common/decorators';
+import {
+  CAPABILITIES,
+  CapabilityGuard,
+  RequireCapability,
+  ScopeGuard,
+} from '../../common/authz';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TrainerReassignmentService } from './trainer-reassignment.service';
@@ -10,7 +26,11 @@ import { TrainerQualificationService } from './trainer-qualification.service';
 
 @ApiTags('Trainers (المدربون)')
 @Controller('trainers')
-@UseGuards(JwtAuthGuard, RolesGuard)
+// Trainer management is hospital training operations. `hospital_administrator`
+// held every route here — including the reassignment routes, which move trainees
+// between trainers and departments — so the hospital director could run training
+// through this controller even after being removed from the others.
+@UseGuards(JwtAuthGuard, CapabilityGuard, ScopeGuard)
 @ApiBearerAuth('JWT-auth')
 export class TrainersController {
   constructor(
@@ -25,22 +45,29 @@ export class TrainersController {
   // segments are not swallowed by ':id'.
 
   @Get('workspace-cards')
-  @RequireRoles(
-    'training_supervisor', 'hospital_administrator', 'cluster_administrator',
-    'training_director', 'platform_owner',
+  @RequireCapability(
+    CAPABILITIES.TRAINER_MANAGE,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+    CAPABILITIES.TRAINEE_VIEW_DEPARTMENT,
   )
-  @ApiOperation({ summary: 'بطاقات المدربين لمساحة عمل المستشفى — التأهيل والسعة والإشغال والإجازة' })
+  @ApiOperation({
+    summary:
+      'بطاقات المدربين لمساحة عمل المستشفى — التأهيل والسعة والإشغال والإجازة',
+  })
   async workspaceCards(
     @CurrentUser() user: IAuthenticatedUser,
     @Query('organizationId') organizationId?: string,
   ) {
-    return this.qualificationService.listWorkspaceCards(organizationId || user.organizationId);
+    return this.qualificationService.listWorkspaceCards(
+      organizationId || user.organizationId,
+    );
   }
 
   @Get('qualified')
-  @RequireRoles(
-    'training_supervisor', 'hospital_administrator', 'cluster_administrator',
-    'training_director', 'platform_owner',
+  @RequireCapability(
+    CAPABILITIES.TRAINER_MANAGE,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+    CAPABILITIES.TRAINEE_VIEW_DEPARTMENT,
   )
   @ApiOperation({ summary: 'المدربون المؤهلون لبرنامج تدريبي في الجهة' })
   async listQualifiedTrainers(
@@ -55,9 +82,10 @@ export class TrainersController {
   }
 
   @Get(':id/qualifications')
-  @RequireRoles(
-    'training_supervisor', 'hospital_administrator', 'cluster_administrator',
-    'training_director', 'trainer', 'platform_owner',
+  @RequireCapability(
+    CAPABILITIES.TRAINER_MANAGE,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+    CAPABILITIES.TRAINEE_VIEW_DEPARTMENT,
   )
   @ApiOperation({ summary: 'برامج المدرب المؤهل لها مع السعة والإشغال' })
   async listQualifications(@Param('id') trainerProfileId: string) {
@@ -65,29 +93,37 @@ export class TrainersController {
   }
 
   @Post(':id/qualifications')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
+  @RequireCapability(CAPABILITIES.TRAINER_MANAGE)
   @ApiOperation({ summary: 'تأهيل مدرب لبرنامج تدريبي' })
   async addQualification(
     @Param('id') trainerProfileId: string,
     @Body() dto: { programId: string; maxTrainees?: number },
     @CurrentUser() user: IAuthenticatedUser,
   ) {
-    return this.qualificationService.addQualification(trainerProfileId, dto, user);
+    return this.qualificationService.addQualification(
+      trainerProfileId,
+      dto,
+      user,
+    );
   }
 
   @Patch('qualifications/:qualificationId')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
+  @RequireCapability(CAPABILITIES.TRAINER_MANAGE)
   @ApiOperation({ summary: 'تعديل سعة أو حالة تأهيل المدرب' })
   async updateQualification(
     @Param('qualificationId') qualificationId: string,
     @Body() dto: { maxTrainees?: number; isActive?: boolean },
     @CurrentUser() user: IAuthenticatedUser,
   ) {
-    return this.qualificationService.updateQualification(qualificationId, dto, user);
+    return this.qualificationService.updateQualification(
+      qualificationId,
+      dto,
+      user,
+    );
   }
 
   @Delete('qualifications/:qualificationId')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
+  @RequireCapability(CAPABILITIES.TRAINER_MANAGE)
   @ApiOperation({ summary: 'حذف تأهيل مدرب لبرنامج' })
   async removeQualification(
     @Param('qualificationId') qualificationId: string,
@@ -98,6 +134,7 @@ export class TrainersController {
 
   // ─── Profile Endpoints ──────────────────────────────────────────────────────
 
+  /** Own profile — scoped by the caller's own account, so it needs no capability. */
   @Get('me')
   async getMyProfile(@CurrentUser() user: IAuthenticatedUser) {
     const profile = await this.prisma.trainerProfile.findFirst({
@@ -108,7 +145,19 @@ export class TrainersController {
     return profile;
   }
 
+  /**
+   * The trainer roster is a training resource, not a staff directory: it is who
+   * supervises trainees and how loaded they are. `org_member.view` is deliberately
+   * NOT accepted here — the hospital director holds it, and accepting it would let
+   * them back into training data through a read. General staff listings live at
+   * /org-members.
+   */
   @Get()
+  @RequireCapability(
+    CAPABILITIES.TRAINER_MANAGE,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+    CAPABILITIES.TRAINEE_VIEW_DEPARTMENT,
+  )
   async findAll(@CurrentUser() user: IAuthenticatedUser) {
     const trainers = await this.prisma.trainerProfile.findMany({
       where: { organizationId: user.organizationId },
@@ -124,11 +173,12 @@ export class TrainersController {
   // ─── Reassignment Endpoints ─────────────────────────────────────────────────
 
   @Post('reassign')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
+  @RequireCapability(CAPABILITIES.ALLOCATION_HOSPITAL_REASSIGN)
   @ApiOperation({ summary: 'إعادة إسناد متدرب واحد إلى مدرب آخر' })
   async reassignSingle(
     @CurrentUser() user: IAuthenticatedUser,
-    @Body() dto: {
+    @Body()
+    dto: {
       traineeProfileId: string;
       rotationId: string;
       newTrainerId: string;
@@ -137,15 +187,20 @@ export class TrainersController {
       trainerLeaveId?: string;
     },
   ) {
-    return this.reassignmentService.reassignSingle(dto, user.accountId, user.organizationId);
+    return this.reassignmentService.reassignSingle(
+      dto,
+      user.accountId,
+      user.organizationId,
+    );
   }
 
   @Post('reassign-bulk')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
+  @RequireCapability(CAPABILITIES.ALLOCATION_HOSPITAL_REASSIGN)
   @ApiOperation({ summary: 'إعادة إسناد عدة متدربين إلى مدرب آخر' })
   async reassignBulk(
     @CurrentUser() user: IAuthenticatedUser,
-    @Body() dto: {
+    @Body()
+    dto: {
       traineeProfileIds: string[];
       newTrainerId: string;
       reason: string;
@@ -153,15 +208,20 @@ export class TrainersController {
       trainerLeaveId?: string;
     },
   ) {
-    return this.reassignmentService.reassignMultiple(dto, user.accountId, user.organizationId);
+    return this.reassignmentService.reassignMultiple(
+      dto,
+      user.accountId,
+      user.organizationId,
+    );
   }
 
   @Post('reassign-trainer')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
+  @RequireCapability(CAPABILITIES.ALLOCATION_HOSPITAL_REASSIGN)
   @ApiOperation({ summary: 'نقل جميع متدربي مدرب إلى مدرب آخر' })
   async reassignEntireTrainer(
     @CurrentUser() user: IAuthenticatedUser,
-    @Body() dto: {
+    @Body()
+    dto: {
       fromTrainerId: string;
       toTrainerId: string;
       reason: string;
@@ -169,15 +229,20 @@ export class TrainersController {
       trainerLeaveId?: string;
     },
   ) {
-    return this.reassignmentService.reassignEntireTrainer(dto, user.accountId, user.organizationId);
+    return this.reassignmentService.reassignEntireTrainer(
+      dto,
+      user.accountId,
+      user.organizationId,
+    );
   }
 
   @Post('reassign-department')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
+  @RequireCapability(CAPABILITIES.ALLOCATION_HOSPITAL_REASSIGN)
   @ApiOperation({ summary: 'نقل جميع متدربي قسم إلى مدرب آخر' })
   async reassignEntireDepartment(
     @CurrentUser() user: IAuthenticatedUser,
-    @Body() dto: {
+    @Body()
+    dto: {
       departmentId: string;
       fromTrainerId?: string;
       toTrainerId: string;
@@ -185,18 +250,31 @@ export class TrainersController {
       notes?: string;
     },
   ) {
-    return this.reassignmentService.reassignEntireDepartment(dto, user.accountId, user.organizationId);
+    return this.reassignmentService.reassignEntireDepartment(
+      dto,
+      user.accountId,
+      user.organizationId,
+    );
   }
 
   @Get(':id/suggest-replacements')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
-  @ApiOperation({ summary: 'اقتراح مدربين بدلاء مؤهلين (مرتبين حسب السعة المتاحة)' })
+  @RequireCapability(
+    CAPABILITIES.TRAINER_MANAGE,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+    CAPABILITIES.TRAINEE_VIEW_DEPARTMENT,
+  )
+  @ApiOperation({
+    summary: 'اقتراح مدربين بدلاء مؤهلين (مرتبين حسب السعة المتاحة)',
+  })
   async suggestReplacements(@Param('id') id: string) {
     return this.reassignmentService.suggestReplacements(id);
   }
 
   @Get('reassignment-history')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'cluster_administrator', 'platform_owner')
+  @RequireCapability(
+    CAPABILITIES.ALLOCATION_HOSPITAL_REASSIGN,
+    CAPABILITIES.TIMELINE_VIEW,
+  )
   @ApiOperation({ summary: 'سجل عمليات إعادة الإسناد (audit trail)' })
   async getReassignmentHistory(
     @CurrentUser() user: IAuthenticatedUser,
@@ -217,11 +295,15 @@ export class TrainersController {
   // ─── Leave Endpoints ────────────────────────────────────────────────────────
 
   @Post('leaves')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'trainer', 'platform_owner')
+  @RequireCapability(
+    CAPABILITIES.TRAINER_MANAGE,
+    CAPABILITIES.TRAINEE_VIEW_ASSIGNED,
+  )
   @ApiOperation({ summary: 'تسجيل إجازة مدرب جديدة' })
   async createLeave(
     @CurrentUser() user: IAuthenticatedUser,
-    @Body() dto: {
+    @Body()
+    dto: {
       trainerProfileId: string;
       leaveType: string;
       startDate: string;
@@ -230,11 +312,18 @@ export class TrainersController {
       replacementTrainerId?: string;
     },
   ) {
-    return this.leaveService.createLeave(dto, user.accountId, user.organizationId);
+    return this.leaveService.createLeave(
+      dto,
+      user.accountId,
+      user.organizationId,
+    );
   }
 
   @Get('leaves')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'trainer', 'platform_owner')
+  @RequireCapability(
+    CAPABILITIES.TRAINER_MANAGE,
+    CAPABILITIES.TRAINEE_VIEW_ASSIGNED,
+  )
   @ApiOperation({ summary: 'قائمة إجازات المدربين في المستشفى' })
   async getLeaves(
     @CurrentUser() user: IAuthenticatedUser,
@@ -244,27 +333,34 @@ export class TrainersController {
   }
 
   @Get('leaves/upcoming')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
+  @RequireCapability(CAPABILITIES.TRAINER_MANAGE)
   @ApiOperation({ summary: 'الإجازات القادمة خلال 30 يوماً' })
   async getUpcomingLeaves(
     @CurrentUser() user: IAuthenticatedUser,
     @Query('days') days?: string,
   ) {
-    return this.leaveService.getUpcomingLeaves(user.organizationId, days ? parseInt(days) : 30);
+    return this.leaveService.getUpcomingLeaves(
+      user.organizationId,
+      days ? parseInt(days) : 30,
+    );
   }
 
   @Patch('leaves/:id/approve')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
+  @RequireCapability(CAPABILITIES.TRAINER_MANAGE)
   @ApiOperation({ summary: 'الموافقة على إجازة مدرب' })
   async approveLeave(
     @Param('id') id: string,
     @CurrentUser() user: IAuthenticatedUser,
   ) {
-    return this.leaveService.approveLeave(id, user.accountId, user.organizationId);
+    return this.leaveService.approveLeave(
+      id,
+      user.accountId,
+      user.organizationId,
+    );
   }
 
   @Patch('leaves/:id/cancel')
-  @RequireRoles('training_supervisor', 'hospital_administrator', 'platform_owner')
+  @RequireCapability(CAPABILITIES.TRAINER_MANAGE)
   @ApiOperation({ summary: 'إلغاء إجازة مدرب' })
   async cancelLeave(
     @Param('id') id: string,

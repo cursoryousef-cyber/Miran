@@ -16,10 +16,13 @@ import { CreateOrganizationDto, UpdateOrganizationDto, ProvisionOrgWizardDto } f
 import { CurrentUser, RequirePermissions } from '../../common/decorators';
 import { JwtAuthGuard, PermissionsGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
+import {
+  CAPABILITIES, CapabilityGuard, RequireCapability,
+} from '../../common/authz';
 
 @ApiTags('Organizations (إدارة الجهات والشجرة التنظيمية)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CapabilityGuard)
 @Controller('organizations')
 export class OrganizationsController {
   constructor(
@@ -45,6 +48,8 @@ export class OrganizationsController {
     return this.organizationsService.findAll(+page, +limit, search, typeId, parentId);
   }
 
+  // Reference data — the catalogue of organisation types, not any organisation's
+  // data. Any authenticated session may read it.
   @Get('types')
   @ApiOperation({ summary: 'قائمة أنواع الجهات (مستشفى، جامعة، تجمع صحي...)' })
   async getTypes() {
@@ -52,12 +57,14 @@ export class OrganizationsController {
   }
 
   @Get('hospitals-cards')
+  @RequireCapability(CAPABILITIES.ORG_VIEW, CAPABILITIES.CAPACITY_VIEW)
   @ApiOperation({ summary: 'بطاقات بطاقات المستشفيات مع إحصائيات الطاقة الاستيعابية والنسب المباشرة' })
   async getHospitalCards(@Query('clusterId') clusterId?: string) {
     return this.organizationsService.getHospitalCardsMetrics(clusterId);
   }
 
   @Get('statistics')
+  @RequireCapability(CAPABILITIES.ORG_VIEW, CAPABILITIES.REPORT_VIEW)
   @ApiOperation({ summary: 'مؤشرات الجهات الموحّدة — مصدر واحد للوحات وصفحة الجهات' })
   @ApiQuery({ name: 'organizationId', required: false, type: String })
   async getStatistics(@Query('organizationId') organizationId?: string) {
@@ -65,6 +72,7 @@ export class OrganizationsController {
   }
 
   @Get('hospitals')
+  @RequireCapability(CAPABILITIES.ORG_VIEW, CAPABILITIES.CAPACITY_VIEW)
   @ApiOperation({
     summary: 'مستشفيات جهة محددة — لتسلسل الاختيار (جهة ← مستشفى) في نماذج الحسابات',
   })

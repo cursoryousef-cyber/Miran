@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type CapacityScopeType =
@@ -473,6 +474,12 @@ export class CapacityService {
     return { capacity, occupied, available, occupancyPercentage };
   }
 
+  /**
+   * @deprecated Use `toExplicitResult`. This substituted a default allowance when
+   * no capacity was declared, which meant a hospital that had declared nothing
+   * still appeared to have 50 seats — a number no one entered and no screen could
+   * account for. Kept only for the specialty/supervisor paths still on it.
+   */
   private toResult(capacity: number, occupied: number): OccupancyResult {
     const safeCapacity = capacity > 0 ? capacity : DEFAULT_HOSPITAL_CAPACITY_FALLBACK;
     const available = Math.max(0, safeCapacity - occupied);
@@ -480,42 +487,110 @@ export class CapacityService {
     return { capacity: safeCapacity, occupied, available, occupancyPercentage };
   }
 
-  async getHospitalOccupancy(organizationId: string): Promise<OccupancyResult> {
-    const org = await this.prisma.organization.findUnique({
+  /**
+   * Hospital training capacity is the sum of its active departments' declared
+   * capacity — the single source of truth, maintained by the hospital training
+   * administration.
+   *
+   * `organizations.capacity` is no longer read. It was a second, independently
+   * edited number, and the two disagreed badly in practice: one hospital declared
+   * 50 on the organisation row while its eighteen departments summed to 375.
+   * Screens reading one and screens reading the other could not be reconciled.
+   * The column is retained in the schema (see the deprecation note there) but has
+   * no effect on any calculation.
+   *
+   * Occupancy is the count of OPEN allocations, unioned with active rotations so
+   * trainees recorded before the allocation table existed still occupy a seat.
+   * Counting by trainee identity means a trainee holding both an allocation and a
+   * rotation is one occupant, not two.
+   */
+  async getHospitalOccupancy(organizationId: string, tx?: Prisma.TransactionClient): Promise<OccupancyResult> {
+    const db = tx || this.prisma;
+    const org = await db.organization.findUnique({
       where: { id: organizationId },
-      select: {
-        capacity: true,
-        _count: { select: { traineeProfiles: true } },
-      },
+      select: { id: true },
     });
     if (!org) return { capacity: 0, occupied: 0, available: 0, occupancyPercentage: 0 };
-    return this.toResult(org.capacity, org._count.traineeProfiles);
+
+    const [departments, allocations, rotations] = await Promise.all([
+      db.department.findMany({
+        where: { organizationId, isActive: true, deletedAt: null },
+        select: { capacity: true },
+      }),
+      db.traineeAllocation.findMany({
+        where: { hospitalId: organizationId, status: 'open' },
+        select: { traineeRowId: true },
+      }),
+      db.rotation.findMany({
+        where: { organizationId, status: 'active' },
+        select: { traineeProfileId: true },
+      }),
+    ]);
+
+    const capacity = departments.reduce((total, d) => total + d.capacity, 0);
+    const occupants = new Set<string>([
+      ...allocations.map((a) => `row:${a.traineeRowId}`),
+      ...rotations.map((r) => `profile:${r.traineeProfileId}`),
+    ]);
+
+    return this.toExplicitResult(capacity, occupants.size);
   }
 
-  async getDepartmentOccupancy(departmentId: string): Promise<OccupancyResult> {
-    const dept = await this.prisma.department.findUnique({
+  /**
+   * Department capacity is declared on the department itself; occupancy is the
+   * same union as above, narrowed to this department.
+   */
+  async getDepartmentOccupancy(departmentId: string, tx?: Prisma.TransactionClient): Promise<OccupancyResult> {
+    const db = tx || this.prisma;
+    const dept = await db.department.findUnique({
       where: { id: departmentId },
-      select: { capacity: true },
+      select: { capacity: true, isActive: true },
     });
     if (!dept) return { capacity: 0, occupied: 0, available: 0, occupancyPercentage: 0 };
 
-    const occupied = await this.prisma.rotation.count({
-      where: { departmentId, status: 'active' },
-    });
-    return this.toResult(dept.capacity, occupied);
+    const [allocations, rotations] = await Promise.all([
+      db.traineeAllocation.findMany({
+        where: { departmentId, status: 'open' },
+        select: { traineeRowId: true },
+      }),
+      db.rotation.findMany({
+        where: { departmentId, status: 'active' },
+        select: { traineeProfileId: true },
+      }),
+    ]);
+
+    const occupants = new Set<string>([
+      ...allocations.map((a) => `row:${a.traineeRowId}`),
+      ...rotations.map((r) => `profile:${r.traineeProfileId}`),
+    ]);
+
+    // An inactive department offers no training seats regardless of its number.
+    return this.toExplicitResult(dept.isActive ? dept.capacity : 0, occupants.size);
   }
 
-  async getTrainerOccupancy(trainerProfileId: string): Promise<OccupancyResult> {
-    const trainer = await this.prisma.trainerProfile.findUnique({
+  async getTrainerOccupancy(trainerProfileId: string, tx?: Prisma.TransactionClient): Promise<OccupancyResult> {
+    const db = tx || this.prisma;
+    const trainer = await db.trainerProfile.findUnique({
       where: { id: trainerProfileId },
       select: { maxTrainees: true },
     });
     if (!trainer) return { capacity: 0, occupied: 0, available: 0, occupancyPercentage: 0 };
 
-    const occupied = await this.prisma.rotation.count({
-      where: { trainerProfileId, status: 'active' },
-    });
-    return this.toResult(trainer.maxTrainees, occupied);
+    const [allocations, rotations] = await Promise.all([
+      this.prisma.traineeAllocation.findMany({
+        where: { trainerProfileId, status: 'open' },
+        select: { traineeRowId: true },
+      }),
+      this.prisma.rotation.findMany({
+        where: { trainerProfileId, status: 'active' },
+        select: { traineeProfileId: true },
+      }),
+    ]);
+    const occupants = new Set<string>([
+      ...allocations.map((a) => `row:${a.traineeRowId}`),
+      ...rotations.map((r) => `profile:${r.traineeProfileId}`),
+    ]);
+    return this.toExplicitResult(trainer.maxTrainees, occupants.size);
   }
 
   /**

@@ -4,17 +4,21 @@ import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  CAPABILITIES, CapabilityGuard, RequireCapability,
+} from '../../common/authz';
 
 const VALID_STATUSES = ['open', 'under_review', 'resolved', 'closed'];
 
 @ApiTags('Incidents (البلاغات والحوادث)')
 @ApiBearerAuth('JWT-auth')
 @Controller('incidents')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CapabilityGuard)
 export class IncidentsController {
   constructor(private prisma: PrismaService) {}
 
   @Get()
+  @RequireCapability(CAPABILITIES.INCIDENT_VIEW)
   @ApiOperation({ summary: 'قائمة البلاغات للمنظمة' })
   async findAll(
     @CurrentUser() user: IAuthenticatedUser,
@@ -44,6 +48,7 @@ export class IncidentsController {
   }
 
   @Get(':id')
+  @RequireCapability(CAPABILITIES.INCIDENT_VIEW)
   @ApiOperation({ summary: 'تفاصيل البلاغ' })
   async findOne(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
     const data = await this.prisma.incident.findFirst({

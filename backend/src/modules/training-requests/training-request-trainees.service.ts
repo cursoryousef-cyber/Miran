@@ -12,6 +12,7 @@ import {
   TRAINING_REQUEST_TRAINEE_TRANSITIONS,
 } from '../../common/state-machine/transition-guard';
 import { TRAINEE_ROW_STATUS, TRAINEE_PROFILE_STATUS } from '../../common/status-constants';
+import { ScopeContext, ScopeContextService } from '../../common/authz';
 import {
   ChangeAssignmentDto,
   HospitalRejectDto,
@@ -38,6 +39,7 @@ export class TrainingRequestTraineesService {
     private notificationService: NotificationService,
     private validationEngine: ValidationEngineService,
     private capacityService: CapacityService,
+    private scopeContext: ScopeContextService,
   ) {}
 
   // ─── القراءة ──────────────────────────────────────────────────────────────
@@ -910,16 +912,52 @@ export class TrainingRequestTraineesService {
     return { success: true, message: 'تم إرسال طلب تصحيح البيانات للجامعة' };
   }
 
-  /** تعديل التعيين (قسم / مدرب / مشرف / تواريخ) مع التحقق من الطاقة */
-  async changeAssignment(rowId: string, dto: ChangeAssignmentDto, user: IAuthenticatedUser) {
+  /**
+   * تعديل التعيين (قسم / مدرب / مشرف / تواريخ) مع التحقق من الطاقة والنطاق.
+   *
+   * Hospital-internal by definition, so it is gated on the *active* hospital and
+   * not merely on visibility. Previously it validated status and capacity but
+   * never ownership: a hospital training administrator could pass any rowId and
+   * re-assign a trainee sitting in a different hospital, and a cluster session —
+   * which can legitimately see every hospital in its cluster — could reach inside
+   * one and move a trainee between its departments. Both are refused here.
+   */
+  async changeAssignment(
+    rowId: string,
+    dto: ChangeAssignmentDto,
+    user: IAuthenticatedUser,
+    scope?: ScopeContext,
+  ) {
     const row = await this.loadRow(rowId);
     if (!['allocated', 'hospital_review', 'on_hold'].includes(row.status)) {
       throw new BadRequestException(`لا يمكن تعديل التعيين لصف بحالة "${row.status}"`);
+    }
+
+    if (scope) {
+      this.scopeContext.assertActiveHospital(scope, row.assignedHospitalId);
     }
     const old = this.snapshot(row as any);
 
     // Validate new department capacity if changing
     if (dto.departmentId && dto.departmentId !== row.assignedDepartmentId) {
+      // The department must belong to this hospital — otherwise the trainee would
+      // be moved out of the hospital under the guise of a department change,
+      // which is a cluster-level decision.
+      const dept = await this.prisma.department.findUnique({
+        where: { id: dto.departmentId },
+        select: { organizationId: true, isActive: true, nameAr: true },
+      });
+      if (!dept) throw new NotFoundException('القسم غير موجود');
+      if (dept.organizationId !== row.assignedHospitalId) {
+        throw new BadRequestException(
+          `القسم «${dept.nameAr}» لا يتبع المستشفى المسند إليه المتدرب — نقل المتدرب بين المستشفيات من صلاحية إدارة التدريب بالتجمع`,
+        );
+      }
+      if (!dept.isActive) {
+        throw new BadRequestException(`القسم «${dept.nameAr}» غير مفعّل للتدريب`);
+      }
+      if (scope) this.scopeContext.assertDepartmentInScope(scope, dto.departmentId);
+
       const deptOcc = await this.capacityService.getDepartmentOccupancy(dto.departmentId);
       if (deptOcc.available <= 0) {
         throw new BadRequestException(
@@ -930,6 +968,20 @@ export class TrainingRequestTraineesService {
 
     // Validate new trainer capacity if changing
     if (dto.trainerProfileId && dto.trainerProfileId !== row.assignedTrainerProfileId) {
+      const trainer = await this.prisma.trainerProfile.findUnique({
+        where: { id: dto.trainerProfileId },
+        select: { organizationId: true, isActive: true, person: { select: { nameAr: true } } },
+      });
+      if (!trainer) throw new NotFoundException('المدرب غير موجود');
+      if (trainer.organizationId !== row.assignedHospitalId) {
+        throw new BadRequestException('المدرب المحدد لا يتبع المستشفى المسند إليه المتدرب');
+      }
+      if (!trainer.isActive) {
+        throw new BadRequestException(
+          `المدرب «${trainer.person?.nameAr ?? ''}» غير مفعّل — لا يمكن إسناد متدربين إليه`,
+        );
+      }
+
       const trainerOcc = await this.capacityService.getTrainerOccupancy(dto.trainerProfileId);
       if (trainerOcc.available <= 0) {
         throw new BadRequestException(

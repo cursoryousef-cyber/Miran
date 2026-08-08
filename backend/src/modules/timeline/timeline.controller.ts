@@ -2,13 +2,16 @@ import { Controller, Get, Param, Query, UseGuards, NotFoundException } from '@ne
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
+import {
+  CAPABILITIES, CapabilityGuard, RequireCapability, Scope, ScopeContext,
+} from '../../common/authz';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TimelineService } from './timeline.service';
 
 @ApiTags('Trainee Timeline (الخط الزمني للمتدرب)')
 @Controller('timeline')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CapabilityGuard)
 @ApiBearerAuth('JWT-auth')
 export class TimelineController {
   constructor(
@@ -62,6 +65,23 @@ export class TimelineController {
       programId,
       limit: limit ? Number(limit) : undefined,
     });
+  }
+
+  @Get('journey/:traineeRowId')
+  @RequireCapability(
+    CAPABILITIES.TIMELINE_VIEW,
+    CAPABILITIES.TRAINEE_VIEW_SCOPE,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+  )
+  @ApiOperation({
+    summary:
+      'مسار المتدرب الكامل: الطلب ← المراجعة ← الاعتماد ← الدفعة ← التخصيص ← القسم ← المدرب ← التدريب ← التخرج',
+  })
+  async journey(
+    @Param('traineeRowId') traineeRowId: string,
+    @Scope() scope: ScopeContext,
+  ) {
+    return this.timelineService.getTraineeJourney(traineeRowId, scope);
   }
 
   @Get(':traineeProfileId/readiness')

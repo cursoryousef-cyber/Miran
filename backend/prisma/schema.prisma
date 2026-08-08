@@ -55,6 +55,10 @@ model Organization {
   createdAt                           DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                           DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt                           DateTime?                 @map("deleted_at") @db.Timestamptz(6)
+  /// @deprecated لم يعد يُقرأ في أي حساب للطاقة الاستيعابية. مصدر الحقيقة الوحيد
+  /// لسعة المستشفى التدريبية هو مجموع سعات أقسامه المفعّلة
+  /// (SUM(departments.capacity) WHERE is_active). العمود باقٍ للتوافق التاريخي
+  /// فقط — كان رقماً ثانياً يُحرَّر باستقلال عن الأقسام فتتناقض الشاشات.
   capacity                            Int                       @default(0)
   geoLat                              Decimal?                  @map("geo_lat") @db.Decimal(10, 7)
   geoLng                              Decimal?                  @map("geo_lng") @db.Decimal(10, 7)
@@ -78,6 +82,9 @@ model Organization {
   integrationConfigs                  IntegrationConfig[]
   notifications                       Notification[]
   objectives                          Objective[]
+  allocationsAsCluster                TraineeAllocation[]       @relation("AllocationCluster")
+  allocationsAsHospital               TraineeAllocation[]       @relation("AllocationHospital")
+  sponsoredIntakes                    AcademicIntake[]          @relation("IntakeUniversity")
   affiliationsAsSource                OrganizationAffiliation[] @relation("AffiliationSource")
   affiliationsAsTarget                OrganizationAffiliation[] @relation("AffiliationTarget")
   orgAssignments                      OrganizationAssignment[]
@@ -282,6 +289,8 @@ model UserAccount {
   trainingPlansCreated   TrainingPlan[]
   createdBy              UserAccount?             @relation("AccountCreator", fields: [createdById], references: [id])
   createdAccounts        UserAccount[]            @relation("AccountCreator")
+  approvedIntakes        AcademicIntake[]         @relation("IntakeApprover")
+  performedAllocations   TraineeAllocation[]      @relation("AllocationPerformer")
   person                 Person                   @relation(fields: [personId], references: [id])
   organizations          UserOrganization[]
   userPermissions        UserPermission[]
@@ -562,6 +571,7 @@ model Department {
   trainerProfiles         TrainerProfile[]
   trainerReassignments    TrainerReassignment[]
   trainingRequestTrainees TrainingRequestTrainee[]
+  traineeAllocations      TraineeAllocation[]
 
   @@index([organizationId])
   @@map("departments")
@@ -730,13 +740,28 @@ model AcademicIntake {
   updatedById      String?           @map("updated_by") @db.Uuid
   createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  /// الطلب المعتمد الذي وُلدت منه هذه الدفعة. الدفعة الأكاديمية ليست كياناً
+  /// مستقلاً — لا تُنشأ إلا من TrainingRequest بحالة approved، وهذا الحقل هو
+  /// إثبات المصدر. يبقى nullable للدفعات التاريخية التي سبقت هذا القيد.
+  trainingRequestId   String?        @unique @map("training_request_id") @db.Uuid
+  /// الجامعة الموفدة — منسوخة من الطلب وقت الاعتماد لتظل الدفعة قابلة للقراءة
+  /// دون الحاجة لتتبع الطلب في كل استعلام.
+  universityOrgId     String?        @map("university_org_id") @db.Uuid
+  approvedById        String?        @map("approved_by") @db.Uuid
+  approvedAt          DateTime?      @map("approved_at") @db.Timestamptz(6)
   coordinator      UserAccount?      @relation("IntakeCoordinator", fields: [coordinatorId], references: [id])
+  approvedBy       UserAccount?      @relation("IntakeApprover", fields: [approvedById], references: [id])
   organization     Organization      @relation(fields: [organizationId], references: [id])
+  university       Organization?     @relation("IntakeUniversity", fields: [universityOrgId], references: [id])
   program          Program           @relation(fields: [programId], references: [id])
+  sourceRequest    TrainingRequest?  @relation("BatchSourceRequest", fields: [trainingRequestId], references: [id])
   traineeProfiles  TraineeProfile[]
   trainingRequests TrainingRequest[]
+  traineeRows      TrainingRequestTrainee[]
+  allocations      TraineeAllocation[]
 
   @@index([organizationId, academicYear])
+  @@index([trainingRequestId])
   @@map("academic_intakes")
 }
 
@@ -767,6 +792,11 @@ model TrainingRequest {
   /// يبقى التخصص على مستوى الصف هو المرجع لكل متدرب على حدة.
   specialty              String?                  @db.VarChar(100)
   trainees               TrainingRequestTrainee[]
+  /// الدفعة الأكاديمية الناتجة عن اعتماد هذا الطلب (1:1). تختلف عن
+  /// academicIntake أدناه، وهي العلاقة القديمة التي تربط الطلب بدفعة/فترة
+  /// قائمة مسبقاً — تلك تبقى للبيانات التاريخية.
+  producedBatch          AcademicIntake?          @relation("BatchSourceRequest")
+  traineeAllocations     TraineeAllocation[]
   academicIntake         AcademicIntake?          @relation(fields: [academicIntakeId], references: [id])
   program                Program?                 @relation(fields: [programId], references: [id])
   sourceOrg              Organization             @relation("TrainingReqSourceOrg", fields: [sourceOrgId], references: [id])
@@ -820,7 +850,12 @@ model TrainingRequestTrainee {
   updatedById                 String?                  @map("updated_by") @db.Uuid
   createdAt                   DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                   DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  /// الدفعة الأكاديمية التي ينتمي إليها هذا المتدرب. تُملأ عند اعتماد الطلب
+  /// وإنشاء الدفعة، فيصبح لكل متدرب مصدر واضح: دفعة ← طلب معتمد ← جامعة.
+  academicIntakeId            String?                  @map("academic_intake_id") @db.Uuid
   documents                   Document[]
+  academicIntake              AcademicIntake?          @relation(fields: [academicIntakeId], references: [id])
+  allocations                 TraineeAllocation[]
   assignedDepartment          Department?              @relation(fields: [assignedDepartmentId], references: [id])
   assignedHospital            Organization?            @relation("TRTHospital", fields: [assignedHospitalId], references: [id])
   assignedTrainer             TrainerProfile?          @relation(fields: [assignedTrainerProfileId], references: [id])
@@ -945,6 +980,7 @@ model TrainerProfile {
   reassignmentsTo         TrainerReassignment[]    @relation("ReassignmentTo")
   reassignmentsFrom       TrainerReassignment[]    @relation("ReassignmentFrom")
   trainingRequestTrainees TrainingRequestTrainee[]
+  traineeAllocations      TraineeAllocation[]
 
   @@map("trainer_profiles")
 }
@@ -1406,6 +1442,65 @@ model CapacityAllocation {
   @@index([organizationId, programId])
   @@index([trainingStartDate, trainingEndDate])
   @@map("capacity_allocations")
+}
+
+/// سجل تخصيص المتدرب — المصدر الرسمي الوحيد لتاريخ التوزيع.
+///
+/// قبل هذا الجدول كان التخصيص أعمدة مسطّحة على training_request_trainees
+/// (assigned_hospital_id / assigned_department_id / assigned_trainer_profile_id)
+/// تُكتب فوق بعضها. إعادة التوزيع كانت تمحو ما قبلها، فلا يمكن إثبات أن تخصيصاً
+/// قديماً أُغلق وآخر جديداً فُتح — وهي بالضبط الحقيقة التي يحتاجها الـTimeline
+/// والتدقيق. هنا كل تغيير صف جديد، والقديم يُعلَّم superseded ولا يُحذف أبداً.
+///
+/// ثابت أساسي: لكل متدرب صف واحد فقط بحالة open في أي لحظة.
+model TraineeAllocation {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  traineeRowId          String                  @map("trainee_row_id") @db.Uuid
+  traineeProfileId      String?                 @map("trainee_profile_id") @db.Uuid
+  academicIntakeId      String?                 @map("academic_intake_id") @db.Uuid
+  trainingRequestId     String?                 @map("training_request_id") @db.Uuid
+  /// التجمع صاحب قرار التوزيع — يُستخدم لفلترة النطاق دون تتبع الطلب.
+  clusterOrgId          String                  @map("cluster_org_id") @db.Uuid
+  hospitalId            String                  @map("hospital_id") @db.Uuid
+  departmentId          String?                 @map("department_id") @db.Uuid
+  trainerProfileId      String?                 @map("trainer_profile_id") @db.Uuid
+  supervisorAccountId   String?                 @map("supervisor_account_id") @db.Uuid
+  /// الحالة السابقة الكاملة — تُنسخ عند الإغلاق ليقرأ الـTimeline الانتقال
+  /// (من أين ← إلى أين) من صف واحد دون ضم.
+  previousAllocationId  String?                 @unique @map("previous_allocation_id") @db.Uuid
+  previousHospitalId    String?                 @map("previous_hospital_id") @db.Uuid
+  previousDepartmentId  String?                 @map("previous_department_id") @db.Uuid
+  previousTrainerId     String?                 @map("previous_trainer_id") @db.Uuid
+  /// open | superseded | closed | cancelled
+  status                String                  @default("open") @db.VarChar(20)
+  /// auto | manual | cluster_reassign | hospital_reassign | hospital_assign
+  action                String                  @db.VarChar(30)
+  reason                String?
+  startDate             DateTime?               @map("start_date") @db.Date
+  endDate               DateTime?               @map("end_date") @db.Date
+  performedById         String?                 @map("performed_by") @db.Uuid
+  performedAt           DateTime                @default(now()) @map("performed_at") @db.Timestamptz(6)
+  closedById            String?                 @map("closed_by") @db.Uuid
+  closedAt              DateTime?               @map("closed_at") @db.Timestamptz(6)
+  createdAt             DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  traineeRow            TrainingRequestTrainee  @relation(fields: [traineeRowId], references: [id])
+  academicIntake        AcademicIntake?         @relation(fields: [academicIntakeId], references: [id])
+  trainingRequest       TrainingRequest?        @relation(fields: [trainingRequestId], references: [id])
+  cluster               Organization            @relation("AllocationCluster", fields: [clusterOrgId], references: [id])
+  hospital              Organization            @relation("AllocationHospital", fields: [hospitalId], references: [id])
+  department            Department?             @relation(fields: [departmentId], references: [id])
+  trainerProfile        TrainerProfile?         @relation(fields: [trainerProfileId], references: [id])
+  performedBy           UserAccount?            @relation("AllocationPerformer", fields: [performedById], references: [id])
+  previousAllocation    TraineeAllocation?      @relation("AllocationChain", fields: [previousAllocationId], references: [id])
+  nextAllocation        TraineeAllocation?      @relation("AllocationChain")
+
+  @@index([traineeRowId, status])
+  @@index([hospitalId, status])
+  @@index([clusterOrgId, status])
+  @@index([academicIntakeId])
+  @@map("trainee_allocations")
 }
 
 /// تأهيل المدرب للبرامج التدريبية — علاقة متعدد إلى متعدد

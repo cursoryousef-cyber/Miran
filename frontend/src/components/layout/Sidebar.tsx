@@ -12,9 +12,21 @@ import { roleIdentity } from '../ui/roles';
  * destinations into two or three readable areas of responsibility.
  */
 export const SidebarContent: React.FC<{ onItemClick?: () => void }> = ({ onItemClick }) => {
-  const { user, primaryRole } = useAuth();
+  const { user, primaryRole, hasAnyCapability } = useAuth();
   const identity = roleIdentity(primaryRole);
   const RoleIcon = identity.icon;
+
+  // Items are filtered by capability, and a section whose items all filtered out
+  // is dropped rather than left as an empty heading. An item with no declared
+  // requirement is always shown.
+  const sections = identity.nav
+    .map((section) => ({
+      ...section,
+      items: section.items.filter(
+        (item) => !item.requires || item.requires.length === 0 || hasAnyCapability(item.requires),
+      ),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <div style={{
@@ -74,7 +86,7 @@ export const SidebarContent: React.FC<{ onItemClick?: () => void }> = ({ onItemC
 
       {/* Grouped navigation */}
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 6, flex: 1 }}>
-        {identity.nav.map((section) => (
+        {sections.map((section) => (
           <div key={section.title} style={{ marginBottom: 14 }}>
             <div style={{
               fontSize: 10, fontWeight: 800, color: '#94A3B8',

@@ -12,15 +12,19 @@ import { CreateWorkflowDefDto, StartWorkflowDto, ExecuteWorkflowActionDto } from
 import { CurrentUser, OrgContext, RequirePermissions } from '../../common/decorators';
 import { JwtAuthGuard, PermissionsGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
+import {
+  CAPABILITIES, CapabilityGuard, RequireCapability,
+} from '../../common/authz';
 
 @ApiTags('Workflows (محرك سير العمل القابل للتعديل - Workflow Engine)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CapabilityGuard)
 @Controller('workflows')
 export class WorkflowsController {
   constructor(private workflowsService: WorkflowsService) {}
 
   @Get('definitions')
+  @RequireCapability(CAPABILITIES.ORG_VIEW)
   @ApiOperation({ summary: 'قائمة تعريفات سير العمل المتاحة' })
   async findAllDefinitions(@OrgContext() orgId: string) {
     return this.workflowsService.findAllDefinitions(orgId);
@@ -37,6 +41,7 @@ export class WorkflowsController {
   }
 
   @Post('instances/start')
+  @RequireCapability(CAPABILITIES.ORG_VIEW)
   @ApiOperation({ summary: 'بدء نسخة سير عمل جديدة لكيان محدد (طلب متدرب، بطاقة، روتيشن)' })
   async startWorkflow(
     @Body() dto: StartWorkflowDto,
@@ -46,6 +51,7 @@ export class WorkflowsController {
   }
 
   @Post('instances/:id/action')
+  @RequireCapability(CAPABILITIES.ORG_VIEW)
   @ApiOperation({ summary: 'تنفيذ إجراء على سير العمل (موافقة، رفض، إعادة، تصعيد)' })
   async executeAction(
     @Param('id') id: string,
@@ -56,6 +62,7 @@ export class WorkflowsController {
   }
 
   @Get('instances/:id/history')
+  @RequireCapability(CAPABILITIES.ORG_VIEW, CAPABILITIES.TIMELINE_VIEW)
   @ApiOperation({ summary: 'سجل الإجراءات والتنقلات لنسخة سير عمل محدده' })
   async getInstanceHistory(@Param('id') id: string) {
     return this.workflowsService.getInstanceHistory(id);

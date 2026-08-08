@@ -7,6 +7,9 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { EvaluationService } from './evaluation.service';
+import {
+  CAPABILITIES, CapabilityGuard, RequireCapability,
+} from '../../common/authz';
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
@@ -20,7 +23,7 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
 @ApiTags('Production Operations')
 @ApiBearerAuth('JWT-auth')
 @Controller('operations')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CapabilityGuard)
 export class OperationsController {
   constructor(
     private prisma: PrismaService,
@@ -101,6 +104,11 @@ export class OperationsController {
   }
 
   @Get('attendance')
+  @RequireCapability(
+    CAPABILITIES.TRAINEE_VIEW_SCOPE, CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+    CAPABILITIES.TRAINEE_VIEW_DEPARTMENT, CAPABILITIES.TRAINEE_VIEW_ASSIGNED,
+    CAPABILITIES.SELF_VIEW,
+  )
   async attendance(@CurrentUser() user: IAuthenticatedUser, @Query('traineeId') traineeId?: string) {
     const profile = traineeId ? null : await this.myTrainee(user);
     const data = await this.prisma.attendance.findMany({
@@ -183,6 +191,10 @@ export class OperationsController {
   }
 
   @Get('evaluations')
+  @RequireCapability(
+    CAPABILITIES.EVALUATION_SUBMIT, CAPABILITIES.TRAINEE_VIEW_SCOPE,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL, CAPABILITIES.SELF_VIEW,
+  )
   async evaluations(@CurrentUser() user: IAuthenticatedUser) {
     const data = await this.prisma.evaluation.findMany({
       where: { organizationId: user.organizationId },
@@ -299,6 +311,7 @@ export class OperationsController {
   }
 
   @Get('analytics')
+  @RequireCapability(CAPABILITIES.REPORT_VIEW, CAPABILITIES.TRAINEE_VIEW_HOSPITAL)
   async analytics(@CurrentUser() user: IAuthenticatedUser, @Query('scope') scope = 'hospital') {
     const organizationId = user.organizationId;
     const [trainees, trainers, rotations, attendance, cases, evaluations, calls] = await Promise.all([
@@ -314,6 +327,10 @@ export class OperationsController {
   }
 
   @Get('calendar')
+  @RequireCapability(
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL, CAPABILITIES.TRAINEE_VIEW_ASSIGNED,
+    CAPABILITIES.SELF_VIEW,
+  )
   async calendar(@CurrentUser() user: IAuthenticatedUser) {
     const [rotations, shifts, tasks] = await Promise.all([
       this.prisma.rotation.findMany({ where: { organizationId: user.organizationId }, include: { department: true, traineeProfile: { include: { person: true } } }, take: 100 }),

@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
 
 export class CreateAcademicIntakeDto {
   @ApiProperty({ description: 'معرف البرنامج التدريبي' })
@@ -12,7 +20,9 @@ export class CreateAcademicIntakeDto {
   @IsNotEmpty()
   code!: string;
 
-  @ApiProperty({ description: 'اسم الدفعة بالعربية (مثال: دفعة أطباء الامتياز 2027)' })
+  @ApiProperty({
+    description: 'اسم الدفعة بالعربية (مثال: دفعة أطباء الامتياز 2027)',
+  })
   @IsString()
   @IsNotEmpty()
   nameAr!: string;
@@ -37,7 +47,10 @@ export class CreateAcademicIntakeDto {
   @IsNotEmpty()
   endDate!: string;
 
-  @ApiPropertyOptional({ description: 'الطاقة الاستيعابية للدفعة', default: 50 })
+  @ApiPropertyOptional({
+    description: 'الطاقة الاستيعابية للدفعة',
+    default: 50,
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -57,6 +70,8 @@ export class CreateAcademicIntakeDto {
 export class UpdateAcademicIntakeDto extends CreateAcademicIntakeDto {}
 
 export class AssignTraineesToIntakeDto {
-  @ApiProperty({ description: 'قائمة معرفات ملفات المتدربين (Trainee Profile IDs)' })
+  @ApiProperty({
+    description: 'قائمة معرفات ملفات المتدربين (Trainee Profile IDs)',
+  })
   traineeProfileIds!: string[];
 }

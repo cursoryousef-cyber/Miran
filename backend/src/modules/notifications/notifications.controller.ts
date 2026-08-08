@@ -1,41 +1,50 @@
-import { Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards';
 import { CurrentUser } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
+import { CapabilityGuard, Scope, ScopeContext } from '../../common/authz';
 import { NotificationService } from './notification.service';
 
 @ApiTags('Notifications (الإشعارات)')
 @Controller('notifications')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CapabilityGuard)
 @ApiBearerAuth('JWT-auth')
 export class NotificationsController {
   constructor(private notificationService: NotificationService) {}
 
   @Get()
-  @ApiOperation({ summary: 'قائمة الإشعارات الخاصة بالمستخدم' })
+  @ApiOperation({ summary: 'قائمة الإشعارات الخاصة بالمستخدم في السياق النشط' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'type', required: false, type: String })
   async findAll(
     @CurrentUser() user: IAuthenticatedUser,
+    @Scope() scope: ScopeContext,
     @Query('page') page = 1,
     @Query('limit') limit = 20,
     @Query('type') type?: string,
   ) {
-    return this.notificationService.findAll(user.accountId, +page, +limit, type);
+    return this.notificationService.findAll(user.accountId, scope, +page, +limit, type);
   }
 
   @Get('unread-count')
-  @ApiOperation({ summary: 'عدد الإشعارات غير المقروءة' })
-  async getUnreadCount(@CurrentUser() user: IAuthenticatedUser) {
-    const count = await this.notificationService.getUnreadCount(user.accountId);
+  @ApiOperation({ summary: 'عدد الإشعارات غير المقروءة في السياق النشط' })
+  async getUnreadCount(
+    @CurrentUser() user: IAuthenticatedUser,
+    @Scope() scope: ScopeContext,
+  ) {
+    const count = await this.notificationService.getUnreadCount(user.accountId, scope);
     return { data: { count } };
   }
 
   @Patch(':id/read')
   @ApiOperation({ summary: 'تحديد إشعار كمقروء' })
-  async markAsRead(@Param('id') id: string) {
+  async markAsRead(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
+    // Ownership was previously unchecked: any authenticated caller could mark any
+    // notification read by id, including someone else's.
+    const owned = await this.notificationService.isOwnedBy(id, user.accountId);
+    if (!owned) throw new ForbiddenException('هذا الإشعار لا يخصك');
     return this.notificationService.markAsRead(id);
   }
 

@@ -11,6 +11,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto, SwitchOrgDto, RefreshTokenDto, ActivateAccountDto } from './dto/auth.dto';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { OrganizationAssignmentService } from '../organization-assignments/organization-assignment.service';
+import { capabilitiesForRoles } from '../../common/authz/capabilities';
 
 @Injectable()
 export class AuthService {
@@ -21,26 +22,36 @@ export class AuthService {
     private orgAssignments: OrganizationAssignmentService,
   ) {}
 
-  // ── Helper: جلب أدوار وصلاحيات المستخدم لجهة محددة ──────────────────────
+  /**
+   * Resolves the roles, legacy permissions and capabilities a user holds *in one
+   * organisation*. Called on login, on every context switch and on refresh, so a
+   * session's powers are always those of the organisation currently active and
+   * never a union across organisations.
+   *
+   * Roles come from two tables on purpose. UserRole is the original model;
+   * OrganizationAssignment is the newer one and already carries 41 roled rows in
+   * production. Reading only the first meant anyone assigned through the newer
+   * model authenticated with an empty role set.
+   */
   private async getRolesAndPermissions(accountId: string, orgId: string) {
-    const userRoles = await this.prisma.userRole.findMany({
-      where: { userAccountId: accountId, organizationId: orgId },
-      include: {
-        role: {
-          include: {
-            rolePermissions: { include: { permission: true } },
-          },
-        },
-      },
-    });
+    const [userRoles, assignments] = await Promise.all([
+      this.prisma.userRole.findMany({
+        where: { userAccountId: accountId, organizationId: orgId },
+        include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
+      }),
+      this.prisma.organizationAssignment.findMany({
+        where: { userAccountId: accountId, organizationId: orgId, isActive: true, roleId: { not: null } },
+        include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
+      }),
+    ]);
 
-    const roles = userRoles.map((ur) => ur.role.code);
-
+    const roleSet = new Set<string>();
     const permissionsSet = new Set<string>();
-    for (const ur of userRoles) {
-      for (const rp of ur.role.rolePermissions) {
-        permissionsSet.add(rp.permission.code);
-      }
+
+    for (const source of [...userRoles, ...assignments]) {
+      if (!source.role) continue;
+      roleSet.add(source.role.code);
+      for (const rp of source.role.rolePermissions) permissionsSet.add(rp.permission.code);
     }
 
     // إضافة الصلاحيات المباشرة للمستخدم
@@ -52,7 +63,26 @@ export class AuthService {
       permissionsSet.add(dp.permission.code);
     }
 
-    return { roles, permissions: Array.from(permissionsSet) };
+    const roles = Array.from(roleSet);
+    return {
+      roles,
+      permissions: Array.from(permissionsSet),
+      capabilities: capabilitiesForRoles(roles) as string[],
+    };
+  }
+
+  /**
+   * An organisation context is only issuable when the user actually holds a role
+   * in it. Without this, a membership row with no role produced a signed token
+   * scoped to an organisation with an empty role set — a session that looked
+   * authenticated to every unannotated endpoint.
+   */
+  private assertContextHasRoles(roles: string[], orgNameAr: string): void {
+    if (roles.length === 0) {
+      throw new ForbiddenException(
+        `لا تملك دوراً في «${orgNameAr}» — لا يمكن العمل في هذا السياق. راجع مسؤول النظام.`,
+      );
+    }
   }
 
   async login(dto: LoginDto) {
@@ -101,10 +131,13 @@ export class AuthService {
     }
 
     // جلب الأدوار والصلاحيات للجهة الأساسية
-    const { roles, permissions } = await this.getRolesAndPermissions(account.id, primaryOrg.organization.id);
+    const { roles, permissions, capabilities } = await this.getRolesAndPermissions(
+      account.id, primaryOrg.organization.id,
+    );
+    this.assertContextHasRoles(roles, primaryOrg.organization.nameAr);
 
     const tokens = await this.generateTokens(
-      account.id, account.personId, primaryOrg.organization.id, account.email, roles, permissions,
+      account.id, account.personId, primaryOrg.organization.id, account.email, roles, permissions, capabilities,
     );
 
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
@@ -120,10 +153,11 @@ export class AuthService {
         nameAr: account.person.nameAr,
         nameEn: account.person.nameEn,
         email: account.email,
-        // ─── RBAC: الأدوار والصلاحيات في الجهة النشطة ───
+        // ─── RBAC: الأدوار والصلاحيات والقدرات في الجهة النشطة ───
         roles,
         permissions,
-        // ─────────────────────────────────────────────────
+        capabilities,
+        // ────────────────────────────────────────────────────────
         activeOrganization: {
           id: primaryOrg.organization.id,
           code: primaryOrg.organization.code,
@@ -153,11 +187,16 @@ export class AuthService {
       throw new ForbiddenException('ليس لديك صلاحية الوصول لهذه الجهة');
     }
 
-    // إعادة حساب الأدوار للجهة الجديدة
-    const { roles, permissions } = await this.getRolesAndPermissions(user.accountId, organization.id);
+    // إعادة حساب الأدوار والقدرات للجهة الجديدة — لا تراكم بين السياقات:
+    // القدرات تُبنى من الصفر لكل سياق، فلا يحمل المستخدم قدرات مستشفاه إلى
+    // سياق التجمع ولا العكس.
+    const { roles, permissions, capabilities } = await this.getRolesAndPermissions(
+      user.accountId, organization.id,
+    );
+    this.assertContextHasRoles(roles, organization.nameAr);
 
     const tokens = await this.generateTokens(
-      user.accountId, user.personId, organization.id, user.email, roles, permissions,
+      user.accountId, user.personId, organization.id, user.email, roles, permissions, capabilities,
     );
 
     return {
@@ -169,6 +208,7 @@ export class AuthService {
       },
       roles,
       permissions,
+      capabilities,
       tokens,
     };
   }
@@ -192,9 +232,14 @@ export class AuthService {
         throw new UnauthorizedException('رمز التحديث انتهت صلاحيته');
       }
 
-      // إعادة حساب الأدوار عند التحديث
-      const { roles, permissions } = await this.getRolesAndPermissions(account.id, payload.orgId);
-      const tokens = await this.generateTokens(account.id, account.personId, payload.orgId, account.email, roles, permissions);
+      // إعادة حساب الأدوار عند التحديث — دور سُحب من المستخدم يسقط عند أول تحديث
+      // بدلاً من أن يبقى نافذاً حتى انتهاء صلاحية الرمز.
+      const { roles, permissions, capabilities } = await this.getRolesAndPermissions(account.id, payload.orgId);
+      const org = await this.prisma.organization.findUnique({
+        where: { id: payload.orgId }, select: { nameAr: true },
+      });
+      this.assertContextHasRoles(roles, org?.nameAr ?? 'الجهة');
+      const tokens = await this.generateTokens(account.id, account.personId, payload.orgId, account.email, roles, permissions, capabilities);
       const newRefreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
 
       await this.prisma.userAccount.update({
@@ -219,7 +264,7 @@ export class AuthService {
     }
 
     const activeOrgId = user.organizationId;
-    const { roles, permissions } = await this.getRolesAndPermissions(account.id, activeOrgId);
+    const { roles, permissions, capabilities } = await this.getRolesAndPermissions(account.id, activeOrgId);
 
     // Historical memberships included, matching the legacy unfiltered join.
     const orgContext = await this.orgAssignments.resolveOrgContext(account.id, { activeOnly: false });
@@ -246,6 +291,8 @@ export class AuthService {
         primaryRole: roles[0] || 'trainee',
         roles,
         permissions,
+        // القدرات هي ما تبني عليه الواجهة قوائمها — لا مصفوفات أدوار مشفّرة.
+        capabilities,
         activeOrganization: activeEntry ? {
           id: activeEntry.organization.id,
           code: activeEntry.organization.code,
@@ -291,9 +338,10 @@ export class AuthService {
     email: string,
     roles: string[],
     permissions: string[],
+    capabilities: string[] = [],
   ) {
-    // ─── roles + permissions مدمجة في JWT لتجنب DB query في كل request ───
-    const payload = { sub: accountId, personId, orgId, email, roles, permissions };
+    // ─── roles + permissions + capabilities مدمجة في JWT لتجنب DB query في كل request ───
+    const payload = { sub: accountId, personId, orgId, email, roles, permissions, capabilities };
 
     const accessToken = this.jwtService.sign(payload, {
       secret: this.configService.get<string>('JWT_ACCESS_SECRET') || 'miran-access-secret-change-in-production-2024',

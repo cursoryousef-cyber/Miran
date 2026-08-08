@@ -18,6 +18,13 @@ export interface NavItem {
   name: string;
   path: string;
   icon: any;
+  /**
+   * Capabilities that make this destination usable. The item renders only when
+   * the session holds at least one of them, so the menu reflects what the API
+   * will actually allow rather than a role name that may or may not still map to
+   * that authority. Omitted means "available to anyone who reached this nav".
+   */
+  requires?: string[];
 }
 
 export interface NavSection {
@@ -69,44 +76,120 @@ const PLATFORM_NAV: NavSection[] = [
   },
 ];
 
+/**
+ * Cluster training management.
+ *
+ * The three stages are now three destinations, in workflow order. Previously
+ * "توزيع المتدربين" pointed at /intakes — the academic-batches screen, which also
+ * carried a "send a new training request" button — so the distribution stage, the
+ * batch stage and request creation were one page wearing three names.
+ */
 const CLUSTER_NAV: NavSection[] = [
   {
-    title: 'التوزيع والتشغيل',
+    title: 'دورة التدريب',
     items: [
       { name: 'لوحة التجمع', path: '/', icon: Network },
-      { name: 'الطلبات الواردة', path: '/affiliations', icon: FolderGit2 },
-      { name: 'توزيع المتدربين', path: '/intakes', icon: GraduationCap },
+      {
+        name: 'الطلبات الواردة', path: '/affiliations', icon: FolderGit2,
+        requires: ['training_request.review'],
+      },
+      {
+        name: 'الدفعات الأكاديمية', path: '/intakes', icon: ClipboardList,
+        requires: ['academic_batch.manage'],
+      },
+      {
+        name: 'توزيع المتدربين', path: '/cluster-trainees', icon: GraduationCap,
+        requires: ['allocation.cluster.auto', 'allocation.cluster.manual'],
+      },
     ],
   },
   {
     title: 'الشبكة والسعة',
     items: [
-      { name: 'المستشفيات والسعة', path: '/organizations', icon: Building2 },
-      { name: 'استيراد المتدربين', path: '/cluster-trainees', icon: FileSpreadsheet },
+      { name: 'المستشفيات والسعة', path: '/organizations', icon: Building2, requires: ['capacity.view'] },
     ],
   },
   {
     title: 'المتابعة',
     items: [
-      { name: 'البلاغات والحوادث', path: '/incidents', icon: AlertTriangle },
-      { name: 'التقارير', path: '/reports', icon: FileSpreadsheet },
+      { name: 'البلاغات والحوادث', path: '/incidents', icon: AlertTriangle, requires: ['incident.view'] },
+      { name: 'التقارير', path: '/reports', icon: FileSpreadsheet, requires: ['report.view'] },
     ],
   },
 ];
 
-const HOSPITAL_NAV: NavSection[] = [
+/**
+ * Hospital TRAINING management — the operational owner of training inside the
+ * hospital: departments, capacity, trainers, and the trainees allocated to it.
+ */
+const HOSPITAL_TRAINING_NAV: NavSection[] = [
   {
-    title: 'العمليات اليومية',
+    title: 'العمليات التدريبية',
     items: [
-      { name: 'لوحة المستشفى', path: '/', icon: Stethoscope },
-      { name: 'مساحة عمل المستشفى', path: '/hospital', icon: BedDouble },
+      { name: 'لوحة التدريب بالمستشفى', path: '/', icon: Stethoscope },
+      { name: 'مساحة عمل المستشفى', path: '/hospital', icon: BedDouble, requires: ['training.operate'] },
     ],
   },
   {
-    title: 'الأشخاص',
+    title: 'الأقسام والطاقة الاستيعابية',
     items: [
-      { name: 'المتدربون والمدربون', path: '/org-members', icon: UsersRound },
-      { name: 'الروتيشنات والأقسام', path: '/intakes', icon: ClipboardList },
+      {
+        name: 'الأقسام والسعة', path: '/hospital?tab=capacity', icon: ClipboardList,
+        requires: ['capacity.manage'],
+      },
+      {
+        name: 'المدربون والأطباء', path: '/org-members', icon: UsersRound,
+        requires: ['trainer.manage'],
+      },
+    ],
+  },
+  {
+    title: 'المتدربون',
+    items: [
+      {
+        name: 'المتدربون المسندون', path: '/hospital?tab=requests', icon: Users,
+        requires: ['trainee.view.hospital'],
+      },
+      { name: 'السجل السريري', path: '/logbook', icon: BookOpen, requires: ['logbook.view'] },
+      { name: 'البلاغات', path: '/incidents', icon: AlertTriangle, requires: ['incident.view'] },
+    ],
+  },
+];
+
+/**
+ * Hospital GENERAL administration — deliberately carries no training destination.
+ * The hospital director administers the hospital; training is run by the hospital
+ * training administration and appears in its console, not this one.
+ */
+const HOSPITAL_ADMIN_NAV: NavSection[] = [
+  {
+    title: 'إدارة المستشفى',
+    items: [
+      { name: 'لوحة المستشفى', path: '/', icon: Stethoscope },
+      { name: 'أعضاء الجهة', path: '/org-members', icon: UsersRound, requires: ['org_member.view'] },
+    ],
+  },
+  {
+    title: 'المتابعة',
+    items: [
+      { name: 'البلاغات والحوادث', path: '/incidents', icon: AlertTriangle, requires: ['incident.view'] },
+      { name: 'التقارير', path: '/reports', icon: FileSpreadsheet, requires: ['report.view'] },
+    ],
+  },
+];
+
+/** Department head — their own department, nothing wider. */
+const DEPARTMENT_NAV: NavSection[] = [
+  {
+    title: 'نطاق القسم',
+    items: [
+      { name: 'لوحة القسم', path: '/', icon: Stethoscope },
+      {
+        name: 'متدربو القسم', path: '/org-members', icon: UsersRound,
+        requires: ['trainee.view.department'],
+      },
+      { name: 'السجل السريري', path: '/logbook', icon: BookOpen, requires: ['logbook.view'] },
+      { name: 'البلاغات', path: '/incidents', icon: AlertTriangle, requires: ['incident.view'] },
     ],
   },
 ];
@@ -135,7 +218,10 @@ const UNIVERSITY_NAV: NavSection[] = [
     title: 'الإيفاد',
     items: [
       { name: 'لوحة الجامعة', path: '/', icon: GraduationCap },
-      { name: 'طلبات التدريب', path: '/affiliations', icon: FolderGit2 },
+      {
+        name: 'طلبات التدريب', path: '/affiliations', icon: FolderGit2,
+        requires: ['training_request.create', 'training_request.view'],
+      },
       { name: 'الدفعات الأكاديمية', path: '/intakes', icon: ClipboardList },
     ],
   },
@@ -214,11 +300,26 @@ const IDENTITIES: Record<string, RoleIdentity> = {
     icon: Network, accent: '#0284C7', accentSoft: '#F0F9FF',
     landing: '/', nav: CLUSTER_NAV,
   },
-  hospital: {
-    key: 'hospital', label: 'إدارة المستشفى', eyebrow: 'HOSPITAL OPERATIONS',
-    tagline: 'العمليات اليومية للتدريب داخل المستشفى',
+  // Two distinct consoles, not one console with a different label. The training
+  // administration runs training; the hospital director administers the hospital.
+  hospitalTraining: {
+    key: 'hospitalTraining', label: 'إدارة التدريب بالمستشفى',
+    eyebrow: 'HOSPITAL TRAINING MANAGEMENT',
+    tagline: 'الأقسام والسعة والمدربون والمتدربون المسندون للمستشفى',
     icon: Stethoscope, accent: '#7C3AED', accentSoft: '#F5F3FF',
-    landing: '/', nav: HOSPITAL_NAV,
+    landing: '/', nav: HOSPITAL_TRAINING_NAV,
+  },
+  hospitalAdmin: {
+    key: 'hospitalAdmin', label: 'إدارة المستشفى', eyebrow: 'HOSPITAL ADMINISTRATION',
+    tagline: 'الإدارة العامة للمستشفى — خارج دورة التدريب',
+    icon: Building2, accent: '#475569', accentSoft: '#F8FAFC',
+    landing: '/', nav: HOSPITAL_ADMIN_NAV,
+  },
+  department: {
+    key: 'department', label: 'رئيس القسم', eyebrow: 'DEPARTMENT SCOPE',
+    tagline: 'متدربو ومدربو القسم ضمن نطاقه',
+    icon: ClipboardList, accent: '#7C3AED', accentSoft: '#F5F3FF',
+    landing: '/', nav: DEPARTMENT_NAV,
   },
   supervisor: {
     key: 'supervisor', label: 'مشرف التدريب', eyebrow: 'TRAINING SUPERVISION',
@@ -264,10 +365,12 @@ export function roleIdentity(role?: string | null): RoleIdentity {
     case 'cluster_manager':
     case 'training_director':
       return IDENTITIES.cluster;
-    case 'hospital_administrator':
     case 'hospital_training_admin':
+      return IDENTITIES.hospitalTraining;
+    case 'hospital_administrator':
+      return IDENTITIES.hospitalAdmin;
     case 'department_head':
-      return IDENTITIES.hospital;
+      return IDENTITIES.department;
     case 'training_supervisor':
       return IDENTITIES.supervisor;
     case 'university_administrator':

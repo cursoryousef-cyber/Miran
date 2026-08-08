@@ -56,6 +56,9 @@ export const ClusterTrainees: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [openImportModal, setOpenImportModal] = useState(false);
+  // The request a roster import belongs to. Import is no longer an organisation-
+  // level act; it is always into a specific training request.
+  const [selectedRequestId, setSelectedRequestId] = useState<string>('');
   const [openReallocModal, setOpenReallocModal] = useState(false);
   const [openAutoModal, setOpenAutoModal] = useState(false);
   const [selectedTraineeForRealloc, setSelectedTraineeForRealloc] = useState<any>(null);
@@ -206,10 +209,26 @@ export const ClusterTrainees: React.FC = () => {
     reader.readAsBinaryString(file);
   };
 
-  // 6. Confirm Bulk Import Mutation
+  /**
+   * Roster import.
+   *
+   * Routed through the training request the trainees belong to, so every imported
+   * trainee arrives with a request, a batch and an approval behind them. The old
+   * call — POST /trainees/bulk-import — created accounts straight into a hospital
+   * with no request and no batch, which is why production holds trainee profiles
+   * whose origin cannot be established. That endpoint is now retired.
+   */
   const importMutation = useMutation({
     mutationFn: async () => {
-      return apiClient.post('/trainees/bulk-import', { trainees: parsedRows });
+      const targetRequestId = selectedRequestId || requestsList[0]?.id;
+      if (!targetRequestId) {
+        throw new Error(
+          'اختر طلب تدريب أولاً — الاستيراد يتم داخل طلب تدريب حتى يكون لكل متدرب مصدر معتمد.',
+        );
+      }
+      return apiClient.post(`/training-requests/${targetRequestId}/trainees/import`, {
+        rows: parsedRows,
+      });
     },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['incoming-trainees'] });
@@ -240,17 +259,27 @@ export const ClusterTrainees: React.FC = () => {
     },
   });
 
-  // 8. Reallocation Mutation — uses the new intelligent placement engine endpoint
+  /**
+   * Cross-hospital allocation and reassignment.
+   *
+   * Both branches now reach TraineeAllocationService — the row-based one directly,
+   * and the profile-based one through /trainees/reallocate, which was rewritten to
+   * delegate rather than mutate placement itself. Previously the second branch was
+   * a genuinely different mechanism: it rewrote the trainee's organisation and
+   * rotations without recording an allocation, so a move made from this screen
+   * could leave no trace in the history the timeline reads.
+   */
   const reallocateMutation = useMutation({
     mutationFn: async () => {
-      // For TrainingRequestTrainee rows use the engine endpoint; fall back to legacy for TraineeProfile
       const rowId = selectedTraineeForRealloc?.rowId || selectedTraineeForRealloc?.id;
       if (selectedTraineeForRealloc?.rowId) {
-        return apiClient.patch(`/training-requests/trainees/${rowId}/allocation`, {
-          hospitalId: targetHospitalId || undefined,
+        return apiClient.post(`/training-requests/trainees/${rowId}/allocations/hospital`, {
+          hospitalId: targetHospitalId,
+          reason: reallocReason || reallocNotes,
         });
       }
-      // Legacy TraineeProfile reallocation (still works for already-active trainees)
+      // Trainees already active from before the allocation model existed are still
+      // addressed by profile id; the endpoint resolves them to their request row.
       return apiClient.post('/trainees/reallocate', {
         traineeProfileId: rowId,
         targetHospitalId,
@@ -708,6 +737,26 @@ export const ClusterTrainees: React.FC = () => {
       <Dialog open={openImportModal} onClose={() => setOpenImportModal(false)} maxWidth="md" fullWidth>
         <DialogTitle style={{ fontWeight: 800 }}>معاينة ونتائج تدقيق ملف Excel (Excel Import Preview)</DialogTitle>
         <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '16px' }}>
+          {/*
+            Choosing the request is not optional metadata — it is what gives every
+            imported trainee a source. Without it there is no batch to belong to
+            and no approval behind the placement.
+          */}
+          <TextField
+            select
+            label="طلب التدريب الذي يُستورد إليه"
+            value={selectedRequestId}
+            onChange={(e) => setSelectedRequestId(e.target.value)}
+            helperText="الاستيراد يتم داخل طلب تدريب معتمد — لكل متدرب مصدر واضح"
+            fullWidth
+          >
+            {requestsList.map((r: any) => (
+              <MenuItem key={r.id} value={r.id}>
+                {r.requestNumber} — {r.sourceOrg?.nameAr ?? ''} ({r.status})
+              </MenuItem>
+            ))}
+          </TextField>
+
           <div style={{ display: 'flex', gap: '16px' }}>
             <Alert severity="success" style={{ flex: 1 }}>
               عدد السجلات الصحيحة: <strong>{validCount} متدرب</strong>

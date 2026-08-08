@@ -62,6 +62,12 @@ export class OrgMembersController {
   @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'university_administrator')
   @ApiOperation({ summary: 'إضافة عضو جديد للجهة' })
   async create(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
+    if (dto.roleCode === 'trainee' || (Array.isArray(dto.roleCodes) && dto.roleCodes.includes('trainee'))) {
+      throw new BadRequestException(
+        'لا يمكن إنشاء حساب متدرب مباشرة عبر أعضاء الجهة — ينشأ المتدربون حصراً عبر مسار طلب التدريب والدفعة الأكاديمية (جامعة ← طلب تدريب ← اعتماد التجمع ← دفعة أكاديمية).',
+      );
+    }
+
     // Hospital-scoped roles must resolve to an actual hospital before anything
     // is written. Previously the member was attached to whatever organisation
     // the creator happened to be in, so a cluster administrator adding a trainer
@@ -147,26 +153,6 @@ export class OrgMembersController {
           where: { userAccountId_roleId_organizationId: { userAccountId: account.id, roleId: role.id, organizationId: memberOrgId } },
           create: { userAccountId: account.id, roleId: role.id, organizationId: memberOrgId, assignedById: user.accountId },
           update: {},
-        });
-      }
-    }
-
-    // إنشاء TraineeProfile إذا كان المتدرب
-    if (dto.roleCode === 'trainee' && dto.traineeNumber) {
-      const existing = await this.prisma.traineeProfile.findFirst({ where: { personId: person.id } });
-      if (!existing) {
-        await this.prisma.traineeProfile.create({
-          data: {
-            personId: person.id,
-            organizationId: memberOrgId,
-            traineeNumber: dto.traineeNumber,
-            level: dto.level || 'intern',
-            specialtyAr: dto.specialtyAr || 'طب بشري',
-            applicationStatus: 'approved',
-            cardStatus: 'active',
-            cardUuid: `CARD-${dto.traineeNumber}`,
-            photoApproved: true,
-          },
         });
       }
     }

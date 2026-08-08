@@ -2,15 +2,26 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  CAPABILITIES, CapabilityGuard, RequireCapability,
+} from '../../common/authz';
 
 @ApiTags('Global Search (البحث الموحد على المستوى الوطني)')
 @Controller('global-search')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CapabilityGuard)
 @ApiBearerAuth('JWT-auth')
 export class GlobalSearchController {
   constructor(private prisma: PrismaService) {}
 
+  // Searches across organisations, trainees and requests at once, so it needs a
+  // read capability rather than bare authentication — otherwise it is a way to
+  // enumerate records the caller could not open directly.
   @Get()
+  @RequireCapability(
+    CAPABILITIES.ORG_VIEW,
+    CAPABILITIES.TRAINEE_VIEW_SCOPE,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+  )
   @ApiOperation({ summary: 'البحث الفوري الموحد في الأشخاص، المتدربين، المستشفيات، والأقسام' })
   async search(@Query('q') query: string) {
     if (!query || query.trim().length < 2) {

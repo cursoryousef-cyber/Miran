@@ -6,10 +6,13 @@ import { CreatePolicyDto, EvaluatePolicyDto } from './dto/policy.dto';
 import { CurrentUser, OrgContext, RequirePermissions } from '../../common/decorators';
 import { JwtAuthGuard, PermissionsGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
+import {
+  CAPABILITIES, CapabilityGuard, RequireCapability,
+} from '../../common/authz';
 
 @ApiTags('Policies (محرك سياسات الوصول - Policy Engine ABAC)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CapabilityGuard)
 @Controller('policies')
 export class PoliciesController {
   constructor(
@@ -35,6 +38,7 @@ export class PoliciesController {
   }
 
   @Post('evaluate')
+  @RequireCapability(CAPABILITIES.ORG_VIEW)
   @ApiOperation({ summary: 'اختبار وتقييم سياسات الوصول ديناميكياً (Policy Evaluation Debugger)' })
   async evaluate(
     @CurrentUser() user: IAuthenticatedUser,

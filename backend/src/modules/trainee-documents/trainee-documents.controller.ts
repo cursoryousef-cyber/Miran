@@ -16,10 +16,13 @@ import { ReviewDocumentDto, UploadTraineeDocumentDto } from './dto/trainee-docum
 import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
+import {
+  CAPABILITIES, CapabilityGuard, RequireCapability,
+} from '../../common/authz';
 
 @ApiTags('Trainee Documents (مرفقات المتدربين)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CapabilityGuard)
 @Controller('trainee-documents')
 export class TraineeDocumentsController {
   constructor(private traineeDocumentsService: TraineeDocumentsService) {}
@@ -52,6 +55,10 @@ export class TraineeDocumentsController {
   }
 
   @Get()
+  @RequireCapability(
+    CAPABILITIES.TRAINEE_VIEW_SCOPE, CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+    CAPABILITIES.TRAINEE_VIEW_SPONSORED, CAPABILITIES.SELF_VIEW,
+  )
   @ApiOperation({ summary: 'مستندات متدرب محدد' })
   @ApiQuery({ name: 'traineeProfileId', required: false })
   @ApiQuery({ name: 'trainingRequestTraineeId', required: false })

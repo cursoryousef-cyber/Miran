@@ -737,19 +737,64 @@ export class AllocationEngineService {
         assignedDepartmentId: true,
         assignedTrainerProfileId: true,
         trainingRequestId: true,
+        traineeProfileId: true,
+        academicIntakeId: true,
         trainingRequest: { select: { targetOrgId: true } },
       },
     });
 
-    await this.prisma.trainingRequestTrainee.update({
-      where: { id: row.id },
-      data: {
-        status: 'allocated',
-        assignedHospitalId: result.hospitalId,
-        assignedDepartmentId: result.departmentId,
-        assignedTrainerProfileId: result.trainerId,
-        updatedById: actorId,
-      },
+    // The engine decides *where*; the allocation table records *that it happened*.
+    // Writing only the denormalised columns — as this did — meant an automatic
+    // allocation left no allocation row, so the trainee's history began at their
+    // first manual move and the auto-placement was invisible to the timeline.
+    // Both writes now happen in one transaction, and re-running the engine
+    // supersedes the previous allocation rather than silently overwriting it.
+    await this.prisma.$transaction(async (tx) => {
+      const openAllocation = await tx.traineeAllocation.findFirst({
+        where: { traineeRowId: row.id, status: 'open' },
+        select: {
+          id: true, hospitalId: true, departmentId: true, trainerProfileId: true,
+        },
+      });
+
+      if (openAllocation) {
+        await tx.traineeAllocation.update({
+          where: { id: openAllocation.id },
+          data: { status: 'superseded', closedAt: new Date(), closedById: actorId },
+        });
+      }
+
+      await tx.traineeAllocation.create({
+        data: {
+          traineeRowId: row.id,
+          traineeProfileId: prevRow?.traineeProfileId ?? null,
+          academicIntakeId: prevRow?.academicIntakeId ?? null,
+          trainingRequestId: prevRow?.trainingRequestId,
+          clusterOrgId: prevRow!.trainingRequest.targetOrgId,
+          hospitalId: result.hospitalId!,
+          departmentId: result.departmentId ?? null,
+          trainerProfileId: result.trainerId ?? null,
+          previousAllocationId: openAllocation?.id ?? null,
+          previousHospitalId: openAllocation?.hospitalId ?? null,
+          previousDepartmentId: openAllocation?.departmentId ?? null,
+          previousTrainerId: openAllocation?.trainerProfileId ?? null,
+          status: 'open',
+          action: 'auto',
+          reason: isReallocation ? 'إعادة توزيع آلية' : 'توزيع آلي',
+          performedById: actorId,
+        },
+      });
+
+      await tx.trainingRequestTrainee.update({
+        where: { id: row.id },
+        data: {
+          status: 'allocated',
+          assignedHospitalId: result.hospitalId,
+          assignedDepartmentId: result.departmentId,
+          assignedTrainerProfileId: result.trainerId,
+          updatedById: actorId,
+        },
+      });
     });
 
     await this.prisma.auditLog.create({

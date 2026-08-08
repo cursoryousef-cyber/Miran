@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TrainingRequestsController } from './training-requests.controller';
 import { TrainingRequestsService } from './training-requests.service';
+import { TraineeAllocationService } from './trainee-allocation.service';
 import { TrainingRequestTraineesService } from './training-request-trainees.service';
 import { ValidationEngineService } from './validation-engine.service';
 import { AllocationEngineService } from './allocation-engine.service';
@@ -17,6 +18,7 @@ import { TimelineModule } from '../timeline/timeline.module';
   imports: [PrismaModule, NotificationsModule, OrganizationsModule, TrainingPlansModule, TimelineModule],
   controllers: [TrainingRequestsController],
   providers: [
+    TraineeAllocationService,
     TrainingRequestsService,
     TrainingRequestTraineesService,
     ValidationEngineService,
@@ -26,6 +28,7 @@ import { TimelineModule } from '../timeline/timeline.module';
     RequestCompositionService,
   ],
   exports: [
+    TraineeAllocationService,
     TrainingRequestsService,
     TrainingRequestTraineesService,
     ValidationEngineService,

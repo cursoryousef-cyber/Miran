@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, UseGuards, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  UseGuards,
+  Query,
+  ConflictException,
+  GoneException,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import * as bcrypt from 'bcrypt';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
@@ -7,16 +16,25 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationService } from '../notifications/notification.service';
 import { CapacityService } from '../organizations/capacity.service';
+import { TraineeAllocationService } from '../training-requests/trainee-allocation.service';
+import {
+  CAPABILITIES,
+  CapabilityGuard,
+  RequireCapability,
+  Scope,
+  ScopeContext,
+} from '../../common/authz';
 
 @ApiTags('Trainees (المتدربون)')
 @Controller('trainees')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CapabilityGuard)
 @ApiBearerAuth('JWT-auth')
 export class TraineesController {
   constructor(
     private prisma: PrismaService,
     private notificationService: NotificationService,
     private capacityService: CapacityService,
+    private allocationService: TraineeAllocationService,
   ) {}
 
   // ─── بيانات المتدرب الخاصة ────────────────────────────────────────────────
@@ -29,7 +47,11 @@ export class TraineesController {
       include: { person: true, organization: true, program: true },
     });
 
-    if (!profile && (user.roles.includes('platform_owner') || user.roles.includes('org_manager'))) {
+    if (
+      !profile &&
+      (user.roles.includes('platform_owner') ||
+        user.roles.includes('org_manager'))
+    ) {
       profile = await this.prisma.traineeProfile.findFirst({
         include: { person: true, organization: true, program: true },
       });
@@ -37,9 +59,16 @@ export class TraineesController {
 
     if (!profile) return { message: 'لا يوجد ملف متدرب لهذا الحساب' };
 
-    const totalObjectives = await this.prisma.objectiveProgress.count({ where: { traineeProfileId: profile.id } });
-    const completedObjectives = await this.prisma.objectiveProgress.count({ where: { traineeProfileId: profile.id, status: 'completed' } });
-    const completionPercentage = totalObjectives > 0 ? Math.round((completedObjectives / totalObjectives) * 100) : 0;
+    const totalObjectives = await this.prisma.objectiveProgress.count({
+      where: { traineeProfileId: profile.id },
+    });
+    const completedObjectives = await this.prisma.objectiveProgress.count({
+      where: { traineeProfileId: profile.id, status: 'completed' },
+    });
+    const completionPercentage =
+      totalObjectives > 0
+        ? Math.round((completedObjectives / totalObjectives) * 100)
+        : 0;
     const competencies = await this.prisma.competencyProgress.findMany({
       where: { traineeProfileId: profile.id },
       include: { procedure: true },
@@ -50,7 +79,13 @@ export class TraineesController {
       certifications: [],
       skills: competencies.map((c) => ({
         nameAr: c.procedure.titleAr,
-        level: c.requiredCount > 0 ? Math.min(100, Math.round((c.completedCount / c.requiredCount) * 100)) : 0,
+        level:
+          c.requiredCount > 0
+            ? Math.min(
+                100,
+                Math.round((c.completedCount / c.requiredCount) * 100),
+              )
+            : 0,
         category: c.procedure.category,
       })),
       completionPercentage,
@@ -63,7 +98,7 @@ export class TraineesController {
   @RequireRoles('trainee', 'platform_owner', 'org_manager')
   @ApiOperation({ summary: 'بيانات ملخص الدشبورد التفاعلي للمتدرب' })
   async getDashboardSummary(@CurrentUser() user: IAuthenticatedUser) {
-    let profile = await this.prisma.traineeProfile.findFirst({
+    const profile = await this.prisma.traineeProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
     });
     if (!profile) return { message: 'لا يوجد ملف متدرب' };
@@ -71,7 +106,10 @@ export class TraineesController {
     // الروتيشن الحالي و الأيام المتبقية
     const activeRotation = await this.prisma.rotation.findFirst({
       where: { traineeProfileId: profile.id, status: 'active' },
-      include: { department: true, trainerProfile: { include: { person: true } } },
+      include: {
+        department: true,
+        trainerProfile: { include: { person: true } },
+      },
     });
 
     let remainingDays = 0;
@@ -89,9 +127,14 @@ export class TraineesController {
     });
 
     // نسبة إنجاز الأهداف
-    const totalObjs = await this.prisma.objectiveProgress.count({ where: { traineeProfileId: profile.id } });
-    const completedObjs = await this.prisma.objectiveProgress.count({ where: { traineeProfileId: profile.id, status: 'completed' } });
-    const objectivePercentage = totalObjs > 0 ? Math.round((completedObjs / totalObjs) * 100) : 0;
+    const totalObjs = await this.prisma.objectiveProgress.count({
+      where: { traineeProfileId: profile.id },
+    });
+    const completedObjs = await this.prisma.objectiveProgress.count({
+      where: { traineeProfileId: profile.id, status: 'completed' },
+    });
+    const objectivePercentage =
+      totalObjs > 0 ? Math.round((completedObjs / totalObjs) * 100) : 0;
 
     // حضور الأسبوع
     const attendanceRecords = await this.prisma.attendance.findMany({
@@ -99,8 +142,13 @@ export class TraineesController {
       take: 7,
       orderBy: { date: 'desc' },
     });
-    const presentCount = attendanceRecords.filter(a => a.status === 'present').length;
-    const weeklyAttendanceRate = attendanceRecords.length > 0 ? Math.round((presentCount / attendanceRecords.length) * 100) : 0;
+    const presentCount = attendanceRecords.filter(
+      (a) => a.status === 'present',
+    ).length;
+    const weeklyAttendanceRate =
+      attendanceRecords.length > 0
+        ? Math.round((presentCount / attendanceRecords.length) * 100)
+        : 0;
 
     // آخر تقييم
     const lastEvaluation = await this.prisma.evaluation.findFirst({
@@ -116,42 +164,61 @@ export class TraineesController {
 
     return {
       remainingDays,
-      activeRotation: activeRotation ? {
-        id: activeRotation.id,
-        departmentName: activeRotation.department.nameAr,
-        trainerName: activeRotation.trainerProfile.person.nameAr,
-        startDate: activeRotation.startDate,
-        endDate: activeRotation.endDate,
-        progressPercentage: Math.min(100, Math.max(10, 100 - Math.round((remainingDays / 30) * 100))),
-      } : null,
-      currentShift: todayShift ? {
-        shiftType: todayShift.shiftType,
-        departmentName: todayShift.department.nameAr,
-        startTime: todayShift.startTime,
-        endTime: todayShift.endTime,
-      } : null,
+      activeRotation: activeRotation
+        ? {
+            id: activeRotation.id,
+            departmentName: activeRotation.department.nameAr,
+            trainerName: activeRotation.trainerProfile.person.nameAr,
+            startDate: activeRotation.startDate,
+            endDate: activeRotation.endDate,
+            progressPercentage: Math.min(
+              100,
+              Math.max(10, 100 - Math.round((remainingDays / 30) * 100)),
+            ),
+          }
+        : null,
+      currentShift: todayShift
+        ? {
+            shiftType: todayShift.shiftType,
+            departmentName: todayShift.department.nameAr,
+            startTime: todayShift.startTime,
+            endTime: todayShift.endTime,
+          }
+        : null,
       upcomingEvent: null,
       objectivePercentage,
       weeklyAttendanceRate,
-      lastEvaluation: lastEvaluation ? {
-        score: lastEvaluation.totalScore,
-        comments: lastEvaluation.comments,
-        submittedAt: lastEvaluation.submittedAt,
-      } : null,
-      lastNotification: lastNotification ? {
-        titleAr: lastNotification.titleAr,
-        bodyAr: lastNotification.bodyAr,
-        createdAt: lastNotification.createdAt,
-      } : null,
+      lastEvaluation: lastEvaluation
+        ? {
+            score: lastEvaluation.totalScore,
+            comments: lastEvaluation.comments,
+            submittedAt: lastEvaluation.submittedAt,
+          }
+        : null,
+      lastNotification: lastNotification
+        ? {
+            titleAr: lastNotification.titleAr,
+            bodyAr: lastNotification.bodyAr,
+            createdAt: lastNotification.createdAt,
+          }
+        : null,
     };
   }
 
   // ─── مؤشرات الأداء الشخصي (Personal Performance) ─────────────────────────
   @Get('performance')
-  @RequireRoles('trainee', 'platform_owner', 'org_manager', 'academic_supervisor', 'trainer')
-  @ApiOperation({ summary: 'حساب مؤشرات الأداء الشخصي للمتدرب من داتابيز Neon' })
+  @RequireRoles(
+    'trainee',
+    'platform_owner',
+    'org_manager',
+    'academic_supervisor',
+    'trainer',
+  )
+  @ApiOperation({
+    summary: 'حساب مؤشرات الأداء الشخصي للمتدرب من داتابيز Neon',
+  })
   async getPerformanceMetrics(@CurrentUser() user: IAuthenticatedUser) {
-    let profile = await this.prisma.traineeProfile.findFirst({
+    const profile = await this.prisma.traineeProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
     });
     if (!profile) {
@@ -168,11 +235,17 @@ export class TraineesController {
       where: { traineeProfileId: profile.id },
     });
     const totalCount = attendances.length;
-    const presentCount = attendances.filter(a => a.status === 'present').length;
-    const onTimeCount = attendances.filter(a => a.status === 'present' && !a.isLate).length;
+    const presentCount = attendances.filter(
+      (a) => a.status === 'present',
+    ).length;
+    const onTimeCount = attendances.filter(
+      (a) => a.status === 'present' && !a.isLate,
+    ).length;
 
-    const attendanceRate = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
-    const commitmentRate = totalCount > 0 ? Math.round((onTimeCount / totalCount) * 100) : 0;
+    const attendanceRate =
+      totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
+    const commitmentRate =
+      totalCount > 0 ? Math.round((onTimeCount / totalCount) * 100) : 0;
 
     // 2. سرعة الاستجابة للنداءات
     const callParticipations = await this.prisma.callParticipant.findMany({
@@ -183,20 +256,31 @@ export class TraineesController {
     let countResponded = 0;
     for (const p of callParticipations) {
       if (p.ackAt && p.notifiedAt) {
-        const diffMs = new Date(p.ackAt).getTime() - new Date(p.notifiedAt).getTime();
+        const diffMs =
+          new Date(p.ackAt).getTime() - new Date(p.notifiedAt).getTime();
         totalDiffMinutes += diffMs / (1000 * 60);
         countResponded++;
       }
     }
-    const callResponseSpeedMinutes = countResponded > 0 ? parseFloat((totalDiffMinutes / countResponded).toFixed(1)) : 0;
+    const callResponseSpeedMinutes =
+      countResponded > 0
+        ? parseFloat((totalDiffMinutes / countResponded).toFixed(1))
+        : 0;
 
     // 3. متوسط التقييمات
-    const userAcc = await this.prisma.userAccount.findFirst({ where: { personId: profile.personId } });
+    const userAcc = await this.prisma.userAccount.findFirst({
+      where: { personId: profile.personId },
+    });
     let averageEvaluation = 0;
     if (userAcc) {
-      const evals = await this.prisma.evaluation.findMany({ where: { evaluateeId: userAcc.id } });
+      const evals = await this.prisma.evaluation.findMany({
+        where: { evaluateeId: userAcc.id },
+      });
       if (evals.length > 0) {
-        const sum = evals.reduce((acc, curr) => acc + Number(curr.totalScore || 0), 0);
+        const sum = evals.reduce(
+          (acc, curr) => acc + Number(curr.totalScore || 0),
+          0,
+        );
         averageEvaluation = parseFloat((sum / evals.length).toFixed(2));
       }
     }
@@ -211,10 +295,18 @@ export class TraineesController {
 
   // ─── التسلسل الزمني الموحد (Timeline) ────────────────────────────────────
   @Get('timeline')
-  @RequireRoles('trainee', 'platform_owner', 'org_manager', 'academic_supervisor', 'trainer')
-  @ApiOperation({ summary: 'عرض التايم لاين الموحد (حضور، نداءات، تقييمات، أهداف، شهادات)' })
+  @RequireRoles(
+    'trainee',
+    'platform_owner',
+    'org_manager',
+    'academic_supervisor',
+    'trainer',
+  )
+  @ApiOperation({
+    summary: 'عرض التايم لاين الموحد (حضور، نداءات، تقييمات، أهداف، شهادات)',
+  })
   async getTimeline(@CurrentUser() user: IAuthenticatedUser) {
-    let profile = await this.prisma.traineeProfile.findFirst({
+    const profile = await this.prisma.traineeProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
     });
     const events: any[] = [];
@@ -258,7 +350,9 @@ export class TraineesController {
       }
 
       // 3. التقييمات
-      const userAcc = await this.prisma.userAccount.findFirst({ where: { personId: profile.personId } });
+      const userAcc = await this.prisma.userAccount.findFirst({
+        where: { personId: profile.personId },
+      });
       if (userAcc) {
         const evals = await this.prisma.evaluation.findMany({
           where: { evaluateeId: userAcc.id },
@@ -279,13 +373,22 @@ export class TraineesController {
       }
     }
 
-    events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    events.sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    );
     return { data: events };
   }
 
   // ─── قائمة المتدربين الواردين للتجمع الصحي ────────────────────────────────
   @Get('incoming')
-  @RequireRoles('cluster_administrator', 'training_director', 'platform_owner', 'hospital_administrator', 'training_supervisor')
+  @RequireRoles(
+    'cluster_administrator',
+    'training_director',
+    'platform_owner',
+    'hospital_administrator',
+    'training_supervisor',
+  )
   @ApiOperation({ summary: 'قائمة متدربي الامتياز الواردين للتجمع الصحي' })
   async getIncomingTrainees(@CurrentUser() user: IAuthenticatedUser) {
     const trainees = await this.prisma.traineeProfile.findMany({
@@ -311,11 +414,33 @@ export class TraineesController {
   }
 
   // ─── تعديل توجيه وتوزيع المتدرب (Reallocate Trainee) ─────────────────────
+  /**
+   * Cross-hospital reassignment.
+   *
+   * This route used to move a trainee itself: it rewrote
+   * `traineeProfile.organizationId`, closed and reopened rotations, and shifted
+   * attendance, shifts, case logs and evaluations — all without writing a single
+   * allocation row. That made it a second, parallel placement mechanism whose
+   * effects the canonical history could not see, and it was reachable by
+   * `hospital_administrator`, which contradicted the separation the rest of the
+   * system enforces.
+   *
+   * It is now a thin delegate to TraineeAllocationService, which performs the
+   * same record transfer as part of a proper allocation. The behaviour a caller
+   * sees is unchanged; what changed is that the move is now recorded.
+   *
+   * Two guardrails the old implementation lacked: the acting session must hold
+   * cluster reassignment authority, and both hospitals must belong to its cluster.
+   */
   @Post('reallocate')
-  @RequireRoles('cluster_administrator', 'training_director', 'platform_owner', 'hospital_administrator')
-  @ApiOperation({ summary: 'إعادة توزيع وتوجيه طبيب الامتياز لمستشفى/قسم/مدرب جديد لنقل الأعمال المستمرة' })
+  @RequireCapability(CAPABILITIES.ALLOCATION_CLUSTER_REASSIGN)
+  @ApiOperation({
+    summary:
+      'إعادة توزيع المتدرب بين المستشفيات — عبر سجل التخصيص الرسمي (إدارة التدريب بالتجمع)',
+  })
   async reallocateTrainee(
-    @Body() body: {
+    @Body()
+    body: {
       traineeProfileId: string;
       targetHospitalId: string;
       departmentId?: string;
@@ -326,311 +451,89 @@ export class TraineesController {
       notes?: string;
     },
     @CurrentUser() user: IAuthenticatedUser,
+    @Scope() scope: ScopeContext,
   ) {
-    const { traineeProfileId, targetHospitalId, departmentId, trainerProfileId, startDate, endDate, reason, notes } = body;
+    // The allocation model is keyed on the training-request row, since that is
+    // what carries the request, batch and cluster the placement derives from.
+    const row = await this.prisma.trainingRequestTrainee.findFirst({
+      where: { traineeProfileId: body.traineeProfileId },
+      select: { id: true },
+    });
 
-    const trainee = await this.prisma.traineeProfile.findUnique({
-      where: { id: traineeProfileId },
-      include: {
-        person: { include: { userAccounts: true } },
-        organization: true,
-        rotations: { where: { status: 'active' }, include: { department: true, trainerProfile: { include: { person: true } } } },
+    if (!row) {
+      throw new ConflictException(
+        'هذا المتدرب غير مرتبط بطلب تدريب — لا يمكن إعادة توزيعه عبر سجل التخصيص. ' +
+          'المتدربون الذين أُنشئوا خارج دورة العمل (طلب تدريب ← دفعة أكاديمية) لا مصدر لهم، ' +
+          'ويحتاجون ربطاً بدفعة قبل إعادة التوزيع.',
+      );
+    }
+
+    return this.allocationService.allocateToHospital(
+      row.id,
+      {
+        hospitalId: body.targetHospitalId,
+        departmentId: body.departmentId ?? null,
+        trainerProfileId: body.trainerProfileId ?? null,
+        startDate: body.startDate ? new Date(body.startDate) : null,
+        endDate: body.endDate ? new Date(body.endDate) : null,
       },
-    });
-
-    if (!trainee) throw new Error('ملف المتدرب غير موجود');
-
-    const targetHospital = await this.prisma.organization.findUnique({
-      where: { id: targetHospitalId },
-      include: { departments: true },
-    });
-
-    if (!targetHospital) throw new Error('المستشفى الجديد غير موجود');
-
-    const oldHospital = trainee.organization;
-    const oldRotation = trainee.rotations[0];
-    const oldTrainerName = oldRotation?.trainerProfile?.person?.nameAr || 'غير محدد';
-    const selectedDeptId = departmentId || targetHospital.departments[0]?.id || oldRotation?.departmentId;
-
-    let targetTrainerId = trainerProfileId;
-    if (!targetTrainerId) {
-      const defaultTrainer = await this.prisma.trainerProfile.findFirst({
-        where: { organizationId: targetHospitalId, isActive: true },
-      });
-      targetTrainerId = defaultTrainer?.id || oldRotation?.trainerProfileId;
-    }
-
-    // Execute transactional transfer — wrapped so a DB-level capacity trigger
-    // failure (target hospital/department/trainer at capacity) surfaces as a
-    // clean 400 instead of a raw Postgres error.
-    const result = await this.capacityService.runGuarded(() => this.prisma.$transaction(async (tx) => {
-      // 1. Update Trainee Profile Organization
-      const updatedProfile = await tx.traineeProfile.update({
-        where: { id: traineeProfileId },
-        data: { organizationId: targetHospitalId },
-        include: { person: true, organization: true },
-      });
-
-      // 2. Mark previous rotation as transferred
-      if (oldRotation) {
-        await tx.rotation.update({
-          where: { id: oldRotation.id },
-          data: { status: 'transferred', completionNotes: `تم نقل المتدرب إلى ${targetHospital.nameAr}. السبب: ${reason || 'إعادة توزيع'}` },
-        });
-      }
-
-      // 3. Create new active rotation under target hospital
-      let newRotation: any = null;
-      if (selectedDeptId && targetTrainerId) {
-        newRotation = await tx.rotation.create({
-          data: {
-            organizationId: targetHospitalId,
-            traineeProfileId,
-            departmentId: selectedDeptId,
-            trainerProfileId: targetTrainerId,
-            startDate: startDate ? new Date(startDate) : new Date(),
-            endDate: endDate ? new Date(endDate) : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
-            status: 'active',
-          },
-          include: { department: true, trainerProfile: { include: { person: true } } },
-        });
-      }
-
-      // 4. Transfer pending work to target hospital
-      await tx.attendance.updateMany({
-        where: { traineeProfileId },
-        data: { organizationId: targetHospitalId },
-      });
-
-      await tx.shift.updateMany({
-        where: { traineeProfileId },
-        data: { organizationId: targetHospitalId },
-      });
-
-      await tx.clinicalCaseLog.updateMany({
-        where: { traineeProfileId, status: { not: 'completed' } },
-        data: { organizationId: targetHospitalId },
-      });
-
-      const userAccountId = trainee.person.userAccounts[0]?.id;
-      if (userAccountId) {
-        await tx.evaluation.updateMany({
-          where: { evaluateeId: userAccountId },
-          data: { organizationId: targetHospitalId },
-        });
-        await tx.notification.updateMany({
-          where: { userId: userAccountId },
-          data: { organizationId: targetHospitalId },
-        });
-      }
-
-      // 5. Create Audit Trail Entry
-      await tx.auditLog.create({
-        data: {
-          organizationId: targetHospitalId,
-          actorId: user?.accountId,
-          action: 'reallocate_trainee',
-          entityType: 'TraineeProfile',
-          entityId: traineeProfileId,
-          oldValues: {
-            hospitalId: oldHospital.id,
-            hospitalName: oldHospital.nameAr,
-            departmentId: oldRotation?.departmentId,
-            departmentName: oldRotation?.department?.nameAr,
-            trainerId: oldRotation?.trainerProfileId,
-            trainerName: oldTrainerName,
-          },
-          newValues: {
-            hospitalId: targetHospital.id,
-            hospitalName: targetHospital.nameAr,
-            departmentId: selectedDeptId,
-            trainerProfileId: targetTrainerId,
-            reason: reason || 'تعديل النقل والتوزيع',
-            notes: notes || '',
-            transferDate: new Date().toISOString(),
-          },
-        },
-      });
-
-      return { updatedProfile, newRotation };
-    }));
-
-    // Send notifications to stakeholders
-    try {
-      // Notify receiving hospital director
-      await this.notificationService.notifyOrgUsers(
-        targetHospitalId,
-        'hospital_administrator',
-        {
-          titleAr: 'تم استقبال طبيب امتياز محوّل جديد',
-          titleEn: 'New Transferred Trainee Received',
-          bodyAr: `تم إعادة توزيع المتدرب ${trainee.person.nameAr} من (${oldHospital.nameAr}) إلى مستشفاكم.`,
-          type: 'trainee_reallocated',
-          referenceType: 'TraineeProfile',
-          referenceId: traineeProfileId,
-        },
-      );
-
-      // Notify previous hospital director
-      await this.notificationService.notifyOrgUsers(
-        oldHospital.id,
-        'hospital_administrator',
-        {
-          titleAr: 'تحديث نقل طبيب امتياز',
-          titleEn: 'Trainee Transfer Complete',
-          bodyAr: `تم نقل المتدرب ${trainee.person.nameAr} إلى (${targetHospital.nameAr}). أصبح مستشفى الجهة المحولة هو المالك للحساب.`,
-          type: 'trainee_reallocated',
-          referenceType: 'TraineeProfile',
-          referenceId: traineeProfileId,
-        },
-      );
-
-      // Notify trainee
-      const traineeUserId = trainee.person.userAccounts[0]?.id;
-      if (traineeUserId) {
-        await this.notificationService.create({
-          organizationId: targetHospitalId,
-          userId: traineeUserId,
-          titleAr: 'تم تحديث المستشفى وقسم التدريب الموجه إليه',
-          titleEn: 'Hospital Assignment Updated',
-          bodyAr: `أهلاً بك، تم إعادة توجيهك إلى (${targetHospital.nameAr}) - القسم: ${result.newRotation?.department?.nameAr || 'العموم'}.`,
-          type: 'reallocation_notice',
-          referenceType: 'TraineeProfile',
-          referenceId: traineeProfileId,
-        });
-      }
-    } catch (err) {
-      console.warn('Failed to dispatch reallocation notifications:', err);
-    }
-
-    return {
-      success: true,
-      message: `تم إعادة توجيه المتدرب (${trainee.person.nameAr}) بنجاح إلى ${targetHospital.nameAr} ونقل كافة المهام والأعمال المعلقة.`,
-      data: result,
-    };
+      'cluster_reassign',
+      user,
+      scope,
+      body.reason ?? body.notes,
+    );
   }
 
-  // ─── استيراد جماعي لمتدربي الامتياز من ملف Excel ────────────────────────
+  /**
+   * Bulk import — RETIRED.
+   *
+   * What it did: created a Person, a UserAccount with a hard-coded shared
+   * password, a trainee role and a TraineeProfile placed straight into a hospital
+   * — defaulting to whichever organisation had the code 'HOSP-NORTH-TOWER' when
+   * the caller named none. No training request, no academic batch, no allocation,
+   * no capacity check, no audit trail.
+   *
+   * It is the origin of the fifteen trainee profiles in production that have no
+   * batch and no request behind them: nothing in the data can say which university
+   * sent them or who approved their placement.
+   *
+   * There is no functionality here that the canonical path does not already
+   * provide, and provide with provenance:
+   *
+   *   POST /training-requests/:id/trainees/import   — the university's roster,
+   *        validated by the validation engine, held as candidate rows
+   *   → cluster review and approval
+   *   → POST /academic-intakes/from-request         — the batch, linked to the request
+   *   → POST /training-requests/trainees/:rowId/allocations/hospital
+   *
+   * Kept as an explicit refusal rather than deleted, so an existing caller gets an
+   * answer that tells it where to go instead of a 404.
+   */
   @Post('bulk-import')
-  @RequireRoles('cluster_administrator', 'training_director', 'platform_owner', 'university_administrator')
-  @ApiOperation({ summary: 'استيراد جماعي لمتدربي الامتياز وإنشاء حساباتهم وملفاتهم تلقائياً' })
-  async bulkImportTrainees(@Body() body: { trainees: any[] }, @CurrentUser() user: IAuthenticatedUser) {
-    const results: any[] = [];
-    const errors: any[] = [];
-    let importedCount = 0;
-
-    const defaultHospital = await this.prisma.organization.findFirst({
-      where: { code: 'HOSP-NORTH-TOWER' },
-    });
-
-    const defaultHospitalId = defaultHospital?.id || user.organizationId;
-
-    for (let i = 0; i < (body.trainees || []).length; i++) {
-      const t = body.trainees[i];
-      try {
-        if (!t.academicId || !t.nationalId || !t.email) {
-          throw new Error('الرقم الأكاديمي، الهوية، والبريد الإلكتروني حقول إجبارية');
-        }
-
-        // 1. Find or create Person
-        let person = await this.prisma.person.findFirst({
-          where: { nationalId: String(t.nationalId) },
-        });
-
-        if (!person) {
-          person = await this.prisma.person.create({
-            data: {
-              nationalId: String(t.nationalId),
-              nameAr: t.nameAr || 'طبيب امتياز',
-              nameEn: t.nameEn || t.nameAr || 'Medical Intern',
-              email: t.email,
-              phone: t.phone ? String(t.phone) : null,
-            },
-          });
-        }
-
-        // 2. Find or create UserAccount
-        let userAccount = await this.prisma.userAccount.findUnique({
-          where: { email: t.email },
-        });
-
-        if (!userAccount) {
-          const hashedPassword = await bcrypt.hash('Miran@Admin2024!', 10);
-          userAccount = await this.prisma.userAccount.create({
-            data: {
-              personId: person.id,
-              email: t.email,
-              passwordHash: hashedPassword,
-              isActive: true,
-            },
-          });
-        }
-
-        // 3. Assign Trainee Role to UserAccount
-        const targetHospitalId = t.hospitalId || defaultHospitalId;
-        const traineeRole = await this.prisma.role.findFirst({ where: { code: 'trainee' } });
-
-        if (traineeRole) {
-          await this.prisma.userRole.upsert({
-            where: {
-              userAccountId_roleId_organizationId: {
-                userAccountId: userAccount.id,
-                roleId: traineeRole.id,
-                organizationId: targetHospitalId,
-              },
-            },
-            create: {
-              userAccountId: userAccount.id,
-              roleId: traineeRole.id,
-              organizationId: targetHospitalId,
-            },
-            update: {},
-          });
-        }
-
-        // 4. Create or Update TraineeProfile
-        await this.prisma.traineeProfile.upsert({
-          where: { personId: person.id },
-          create: {
-            personId: person.id,
-            organizationId: targetHospitalId,
-            traineeNumber: String(t.academicId),
-            level: 'intern',
-            specialtyAr: t.specialty || 'طب وجراحة عامة',
-            specialtyEn: 'MBBS Medical Intern',
-            applicationStatus: 'approved',
-            cardStatus: 'active',
-            cardUuid: `CARD-${t.academicId}`,
-            photoApproved: true,
-          },
-          update: {
-            organizationId: targetHospitalId,
-          },
-        });
-
-        importedCount++;
-        results.push({ row: i + 1, academicId: t.academicId, nameAr: t.nameAr, status: 'success' });
-      } catch (err: any) {
-        errors.push({ row: i + 1, academicId: t.academicId || 'N/A', nameAr: t.nameAr || 'غير محدد', error: err.message });
-      }
-    }
-
-    return {
-      success: true,
-      data: {
-        importedCount,
-        rejectedCount: errors.length,
-        results,
-        errors,
-      },
-    };
+  @ApiOperation({
+    summary: '⛔ متوقف — الاستيراد يتم عبر طلب التدريب والدفعة الأكاديمية',
+  })
+  bulkImportTrainees() {
+    throw new GoneException(
+      'الاستيراد الجماعي المباشر متوقف — كان ينشئ متدربين داخل مستشفى دون طلب تدريب أو دفعة ' +
+        'أكاديمية أو سجل تخصيص، فلا يمكن معرفة مصدرهم لاحقاً. ' +
+        'المسار الصحيح: POST /training-requests/:id/trainees/import ثم اعتماد الطلب ' +
+        'ثم POST /academic-intakes/from-request ثم التوزيع على المستشفيات.',
+    );
   }
 
-  // ─── قائمة المتدربين — حسب الدور ─────────────────────────────────────────
   @Get()
-  @RequireRoles('platform_owner', 'org_manager', 'academic_supervisor', 'trainer')
+  @RequireRoles(
+    'platform_owner',
+    'org_manager',
+    'academic_supervisor',
+    'trainer',
+  )
   @ApiOperation({ summary: 'قائمة المتدربين — حسب صلاحيات الدور' })
-  async findAll(@CurrentUser() user: IAuthenticatedUser, @Query('trainerId') trainerId?: string) {
+  async findAll(
+    @CurrentUser() user: IAuthenticatedUser,
+    @Query('trainerId') trainerId?: string,
+  ) {
     // مدير المنصة يرى جميع المتدربين في المنصة
     if (user.roles.includes('platform_owner')) {
       const trainees = await this.prisma.traineeProfile.findMany({
@@ -640,7 +543,8 @@ export class TraineesController {
     }
 
     // المدرب يرى متدربيه فقط عبر الروتيشنات
-    const isTrainerOnly = user.roles.includes('trainer') &&
+    const isTrainerOnly =
+      user.roles.includes('trainer') &&
       !user.roles.includes('org_manager') &&
       !user.roles.includes('academic_supervisor');
 
@@ -651,8 +555,13 @@ export class TraineesController {
       if (!trainerProfile) return { data: [] };
 
       const rotations = await this.prisma.rotation.findMany({
-        where: { trainerProfileId: trainerProfile.id, organizationId: user.organizationId },
-        include: { traineeProfile: { include: { person: true, organization: true } } },
+        where: {
+          trainerProfileId: trainerProfile.id,
+          organizationId: user.organizationId,
+        },
+        include: {
+          traineeProfile: { include: { person: true, organization: true } },
+        },
         distinct: ['traineeProfileId'],
       });
       return { data: rotations.map((r) => r.traineeProfile) };
