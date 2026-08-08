@@ -1,8 +1,8 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { GitMerge, Plus, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import { GitMerge, Plus, CheckCircle2, Clock, AlertTriangle, Layers, Boxes } from 'lucide-react';
 import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, LinearProgress, Alert } from '@mui/material';
 
 export const Workflows: React.FC = () => {
@@ -14,9 +14,13 @@ export const Workflows: React.FC = () => {
     },
   });
 
+  const flows: any[] = data ?? [];
+  const activeFlows = flows.filter((w: any) => w.isActive !== false).length;
+  const totalSteps = flows.reduce((s: number, w: any) => s + (w.steps?.length ?? 0), 0);
+  const entities = new Set(flows.map((w: any) => w.entityType).filter(Boolean)).size;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <PageHeader
+    <DataPageShell
         title="محرك سير العمل (Workflow Engine)"
         subtitle="تخصيص وإدارة مسارات اعتماد طلبات التدريب والبطاقات والروتيشنات دون تعديل الكود البرمجي"
         actions={<>
@@ -29,7 +33,14 @@ export const Workflows: React.FC = () => {
           إنشاء سير عمل جديد
         </Button>
         </>}
-      />
+        loading={isLoading}
+        stats={[
+          { label: 'تعريفات سير العمل', value: flows.length, icon: GitMerge, tone: 'primary' },
+          { label: 'مفعّلة', value: activeFlows, icon: CheckCircle2, tone: 'success' },
+          { label: 'إجمالي الخطوات', value: totalSteps, icon: Layers, tone: 'info' },
+          { label: 'كيانات مرتبطة', value: entities, icon: Boxes, tone: 'violet' },
+        ]}
+    >
 
       {isLoading && <LinearProgress sx={{ borderRadius: 1 }} />}
       {isError && <Alert severity="error">تعذر تحميل سير العمل من الخادم</Alert>}
@@ -60,6 +71,6 @@ export const Workflows: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
-    </div>
+    </DataPageShell>
   );
 };

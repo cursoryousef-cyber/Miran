@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { GraduationCap, Plus, Send, CheckCircle2, Building2, Layers, Calendar, Users, Activity } from 'lucide-react';
+import { GraduationCap, Plus, Send, CheckCircle2, Building2, Layers, Calendar, Users, Activity, ClipboardList, CalendarClock, FolderGit2 } from 'lucide-react';
 import {
   Button,
   Table,
@@ -109,10 +109,13 @@ export const AcademicIntakes: React.FC = () => {
   const intakesList = intakesData?.data || [];
   const requestsList = requestsData?.data || [];
 
+  const activeIntakes = intakesList.filter((i: any) => ['active', 'ongoing'].includes(i.status)).length;
+  const plannedIntakes = intakesList.filter((i: any) => i.status === 'planned').length;
+  const intakeCapacity = intakesList.reduce((s: number, i: any) => s + (i.capacity ?? 0), 0);
+  const linkedRequests = requestsList.length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Top Header */}
-      <PageHeader
+    <DataPageShell
         title="الدفعات الأكاديمية وطلبات التدريب (Academic Intakes & Training Requests)"
         actions={<>
           <Button
@@ -133,7 +136,15 @@ export const AcademicIntakes: React.FC = () => {
             إنشاء دفعة أكاديمية
           </Button>
         </>}
-      />
+        loading={isLoadingIntakes}
+        stats={[
+          { label: 'الدفعات الأكاديمية', value: intakesList.length, icon: ClipboardList, tone: 'primary' },
+          { label: 'دفعات نشطة', value: activeIntakes, icon: CheckCircle2, tone: 'success' },
+          { label: 'دفعات مخططة', value: plannedIntakes, icon: CalendarClock, tone: 'info' },
+          { label: 'السعة المخططة', value: intakeCapacity, icon: Users, tone: 'neutral' },
+          { label: 'طلبات مرتبطة', value: linkedRequests, icon: FolderGit2, tone: 'violet' },
+        ]}
+    >
 
       {successMsg && (
         <Alert severity="success" onClose={() => setSuccessMsg(null)} style={{ borderRadius: '10px' }}>
@@ -321,7 +332,7 @@ export const AcademicIntakes: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };
 

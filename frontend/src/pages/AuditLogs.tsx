@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
-import { Shield, Search, Download, Filter, Eye, RefreshCw } from 'lucide-react';
+import { PageHeader, DataPageShell } from '../components/ui';
+import { Shield, Search, Download, Filter, Eye, RefreshCw, CalendarClock, UserCheck, Layers, FilePenLine } from 'lucide-react';
 import {
   Button,
   TextField,
@@ -35,10 +35,15 @@ export const AuditLogs: React.FC = () => {
     },
   });
 
+  const logs: any[] = data?.data ?? [];
+  const uniqueActors = new Set(logs.map((l: any) => l.actorId).filter(Boolean)).size;
+  const uniqueEntities = new Set(logs.map((l: any) => l.entityType).filter(Boolean)).size;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayCount = logs.filter((l: any) => String(l.createdAt).slice(0, 10) === todayKey).length;
+  const writes = logs.filter((l: any) => /create|update|delete|allocate|approve|reject/i.test(l.action || '')).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Header */}
-      <PageHeader
+    <DataPageShell
         title="🛡️ سجلات التدقيق والمراقبة الأمنية (Audit Logs & Compliance)"
         subtitle={`تتبع غير قابل للتغيير لكل عملية تمت في النظام (المستخدم، الوقت، IP، الجهاز، البيانات السابقة والحالية)`}
         actions={<>
@@ -58,7 +63,15 @@ export const AuditLogs: React.FC = () => {
             تحديث السجلات
           </Button>
         </>}
-      />
+        loading={isLoading}
+        stats={[
+          { label: 'السجلات المعروضة', value: data?.meta?.total ?? logs.length, icon: Shield, tone: 'primary' },
+          { label: 'عمليات اليوم', value: todayCount, icon: CalendarClock, tone: 'info' },
+          { label: 'مستخدمون فاعلون', value: uniqueActors, icon: UserCheck, tone: 'violet' },
+          { label: 'أنواع الكيانات', value: uniqueEntities, icon: Layers, tone: 'neutral' },
+          { label: 'عمليات تعديل', value: writes, icon: FilePenLine, tone: writes ? 'warning' : 'success' },
+        ]}
+    >
 
       {/* Filters & Search */}
       <div className="glass-card" style={{ padding: '20px', display: 'flex', gap: '16px', alignItems: 'center' }}>
@@ -131,7 +144,7 @@ export const AuditLogs: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
-    </div>
+    </DataPageShell>
   );
 };
 

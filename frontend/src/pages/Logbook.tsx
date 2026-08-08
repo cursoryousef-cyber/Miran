@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import {
   FileText,
   Plus,
@@ -15,8 +15,7 @@ import {
   Filter,
   Check,
   AlertCircle,
-  FileSpreadsheet,
-} from 'lucide-react';
+  FileSpreadsheet, BookOpen, Clock3, Target, ClipboardCheck } from 'lucide-react';
 import {
   Button,
   Table,
@@ -169,10 +168,10 @@ export const LogbookPage: React.FC = () => {
     completed: { label: 'معتمد نهائياً', color: 'success' },
   };
 
+  const skillPct = competenciesData?.overallPercentage ?? statsData?.completionRate ?? 0;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Top Banner & Header */}
-      <PageHeader
+    <DataPageShell
         title="🩺 السجل السريري الإلكتروني وحقيبة الكفاءات (Clinical Logbook & Competencies)"
         subtitle={`توثيق حقيقي للحالات والإجراءات الطبية مع الاعتماد الرقمي الحي ومتابعة التقدم بالمهارات`}
         actions={<>
@@ -192,30 +191,15 @@ export const LogbookPage: React.FC = () => {
             تسجيل إجراء / حالة جديدة
           </Button>
         </>}
-      />
-
-      {/* Analytics KPI Dashboard Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-        <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>إجمالي الحالات السريرية</div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A' }}>{statsData?.totalCases ?? 0} حالة</div>
-        </div>
-
-        <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>الحالات المعتمدة</div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#059669' }}>{statsData?.approvedCases ?? 0} معتمدة</div>
-        </div>
-
-        <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>بانتظار اعتماد المشرف</div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#D97706' }}>{statsData?.pendingApproval ?? 0} بانتظار</div>
-        </div>
-
-        <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>نسبة إنجاز المهارات الكلية</div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#0891B2' }}>{competenciesData?.overallPercentage ?? statsData?.completionRate ?? 0}%</div>
-        </div>
-      </div>
+        stats={[
+          { label: 'إجمالي الحالات السريرية', value: statsData?.totalCases ?? 0, icon: BookOpen, tone: 'primary' },
+          { label: 'الحالات المعتمدة', value: statsData?.approvedCases ?? 0, icon: CheckCircle2, tone: 'success' },
+          { label: 'بانتظار اعتماد المشرف', value: statsData?.pendingApproval ?? 0, icon: Clock3,
+            tone: (statsData?.pendingApproval ?? 0) ? 'warning' : 'success' },
+          { label: 'نسبة إنجاز المهارات', value: `${skillPct}%`, icon: Target, tone: 'info' },
+          { label: 'تقييمات معلّقة', value: pendingEvalsData?.length ?? pendingEvalsData?.count ?? 0, icon: ClipboardCheck, tone: 'violet' },
+        ]}
+    >
 
       {/* Tabs Menu */}
       <Box style={{ borderBottom: 1, borderColor: '#E2E8F0' }}>
@@ -669,7 +653,7 @@ export const LogbookPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };
 

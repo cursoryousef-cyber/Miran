@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
-  XCircle, ArrowRightLeft, FileText, Edit3, PauseCircle, PlayCircle, AlertTriangle,
-} from 'lucide-react';
+  XCircle, ArrowRightLeft, FileText, Edit3, PauseCircle, PlayCircle, AlertTriangle, Inbox, Clock3, CheckCircle2, FileWarning } from 'lucide-react';
 import {
   Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
   Chip, Dialog, DialogTitle, DialogContent, DialogActions, Alert, CircularProgress,
@@ -159,12 +158,26 @@ export const HospitalReview: React.FC = () => {
     setDialog(type);
   };
 
+  const pendingRows = rows.filter((r: any) => ['allocated', 'hospital_review'].includes(r.status)).length;
+  const onHold = rows.filter((r: any) => r.status === 'on_hold').length;
+  const acceptedRows = rows.filter((r: any) => ['accepted', 'active', 'cluster_approved'].includes(r.status)).length;
+  const rejectedRows = rows.filter((r: any) => ['rejected', 'returned'].includes(r.status)).length;
+  const missingDocs = rows.filter((r: any) => (r.requiredDocuments?.length ?? 0) > 0).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <PageHeader
+    <DataPageShell
         title="مراجعة المستشفى للمتدربين الموزَّعين (Stage 6 — Hospital Review)"
         subtitle={<>{user?.activeOrganization?.nameAr} — مراجعة المتدربين المُحالين وإتخاذ القرارات</>}
-      />
+        loading={isLoading}
+        stats={[
+          { label: 'إجمالي الصفوف', value: rows.length, icon: Inbox, tone: 'primary' },
+          { label: 'بانتظار المراجعة', value: pendingRows, icon: Clock3, tone: pendingRows ? 'warning' : 'success' },
+          { label: 'مقبولون', value: acceptedRows, icon: CheckCircle2, tone: 'success' },
+          { label: 'معلّقون', value: onHold, icon: PauseCircle, tone: onHold ? 'warning' : 'neutral' },
+          { label: 'مرفوضون/مُعادون', value: rejectedRows, icon: XCircle, tone: rejectedRows ? 'danger' : 'neutral' },
+          { label: 'تنتظر مستندات', value: missingDocs, icon: FileWarning, tone: missingDocs ? 'warning' : 'neutral' },
+        ]}
+    >
 
       {successMsg && <Alert severity="success" onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
@@ -414,7 +427,7 @@ export const HospitalReview: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };
 

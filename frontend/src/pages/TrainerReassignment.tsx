@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
 import {
   ArrowRightLeft,
@@ -13,8 +13,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   History,
-  Zap,
-} from 'lucide-react';
+  Zap, UserCog, Layers } from 'lucide-react';
 import {
   Button,
   Chip,
@@ -202,9 +201,13 @@ export const TrainerReassignment: React.FC = () => {
 
   const steps = ['نوع الإسناد', 'اختيار المتدربين', 'السبب', 'المدرب البديل', 'المراجعة'];
 
+  const totalCapacity = trainers.reduce((s: number, t: any) => s + (t.maxTrainees ?? 0), 0);
+  const totalLoad = trainers.reduce((s: number, t: any) => s + (t.rotations?.length ?? t._count?.rotations ?? 0), 0);
+  const overloaded = trainers.filter((t: any) => (t.rotations?.length ?? 0) >= (t.maxTrainees ?? 0) && (t.maxTrainees ?? 0) > 0).length;
+  const freeTrainers = trainers.filter((t: any) => (t.rotations?.length ?? 0) < (t.maxTrainees ?? 0)).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, direction: 'rtl' }}>
-      <PageHeader
+    <DataPageShell
         icon={ArrowRightLeft}
         title="إعادة إسناد المدربين"
         subtitle="نقل المتدربين بين المدربين مع الحفاظ على التقييمات والسجل السريري"
@@ -219,7 +222,15 @@ export const TrainerReassignment: React.FC = () => {
             إعادة إسناد جديد
           </Button>
         </>}
-      />
+        loading={loadingTrainers}
+        stats={[
+          { label: 'المدربون', value: trainers.length, icon: UserCog, tone: 'primary' },
+          { label: 'السعة الإجمالية', value: totalCapacity, icon: Layers, tone: 'info' },
+          { label: 'الحمل الحالي', value: totalLoad, icon: Users, tone: 'violet' },
+          { label: 'مدربون مكتملون', value: overloaded, icon: AlertTriangle, tone: overloaded ? 'danger' : 'success' },
+          { label: 'لديهم مقاعد', value: freeTrainers, icon: CheckCircle2, tone: 'success' },
+        ]}
+    >
 
       {successMsg && <Alert severity="success" sx={{ mb: 2, fontFamily: 'Tajawal' }} onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" sx={{ mb: 2, fontFamily: 'Tajawal' }} onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
@@ -607,6 +618,6 @@ export const TrainerReassignment: React.FC = () => {
           )}
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };

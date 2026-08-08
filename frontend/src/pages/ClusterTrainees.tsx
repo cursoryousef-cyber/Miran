@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
 import * as XLSX from 'xlsx';
 import {
@@ -21,8 +21,7 @@ import {
   Award,
   Calendar,
   Layers,
-  ShieldCheck,
-} from 'lucide-react';
+  ShieldCheck, UserPlus, BedDouble, Gauge, FolderGit2 } from 'lucide-react';
 import {
   Button,
   Table,
@@ -296,10 +295,14 @@ export const ClusterTrainees: React.FC = () => {
 
   const selectedHospitalObj = hospitalsList.find((h: any) => h.id === targetHospitalId);
 
+  const cards: any[] = hospitalCards ?? [];
+  const clusterCapacity = cards.reduce((s: number, h: any) => s + (h.capacity ?? h.totalCapacity ?? 0), 0);
+  const clusterOccupied = cards.reduce((s: number, h: any) => s + (h.occupied ?? h.accepted ?? 0), 0);
+  const clusterPct = clusterCapacity > 0 ? Math.round((clusterOccupied / clusterCapacity) * 100) : 0;
+  const unassigned = traineesList.filter((t: any) => !t.assignedHospitalId).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Header Bar */}
-      <PageHeader
+    <DataPageShell
         title="توزيع متدربي الامتياز وطاقتي التجمع (Cluster Training Distribution)"
         actions={<>
           <Button
@@ -330,7 +333,17 @@ export const ClusterTrainees: React.FC = () => {
             <input type="file" hidden accept=".xlsx, .xls" onChange={handleFileUpload} />
           </Button>
         </>}
-      />
+        loading={isLoadingTrainees}
+        stats={[
+          { label: 'المتدربون الواردون', value: traineesList.length, icon: Users, tone: 'primary' },
+          { label: 'بلا إسناد', value: unassigned, icon: UserPlus, tone: unassigned ? 'warning' : 'success' },
+          { label: 'المستشفيات', value: cards.length, icon: Building2, tone: 'info' },
+          { label: 'السعة الإجمالية', value: clusterCapacity, icon: BedDouble, tone: 'neutral' },
+          { label: 'نسبة الإشغال', value: `${clusterPct}%`, icon: Gauge,
+            tone: clusterPct >= 90 ? 'danger' : clusterPct >= 70 ? 'warning' : 'success' },
+          { label: 'الطلبات', value: requestsList.length, icon: FolderGit2, tone: 'violet' },
+        ]}
+    >
 
       {successMsg && (
         <Alert severity="success" onClose={() => setSuccessMsg(null)} style={{ borderRadius: '10px' }}>
@@ -743,7 +756,7 @@ export const ClusterTrainees: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };
 

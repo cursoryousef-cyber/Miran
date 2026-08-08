@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
-  CheckCircle2, XCircle, ArrowRightLeft, RefreshCw,
-} from 'lucide-react';
+  CheckCircle2, XCircle, ArrowRightLeft, RefreshCw, CheckSquare, Clock3, Loader } from 'lucide-react';
 import {
   Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
   Chip, Dialog, DialogTitle, DialogContent, DialogActions, Alert, CircularProgress,
@@ -125,9 +124,12 @@ export const AcceptanceChain: React.FC = () => {
     );
   }
 
+  const awaitingMe = requests.filter((r: any) => r.pendingForMe || r.canAct).length;
+  const inProgress = requests.filter((r: any) => ['hospital_review', 'allocated', 'in_progress'].includes(r.status)).length;
+  const completedChain = requests.filter((r: any) => ['accepted', 'active', 'completed'].includes(r.status)).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <PageHeader
+    <DataPageShell
         title="سلسلة القبول — طلبات بانتظار موافقتك"
         subtitle={<>{user?.activeOrganization?.nameAr} — دورك: {roleLabel[primaryRole] ?? primaryRole}</>}
         actions={<>
@@ -137,7 +139,14 @@ export const AcceptanceChain: React.FC = () => {
           </IconButton>
         </Tooltip>
         </>}
-      />
+        loading={isLoading}
+        stats={[
+          { label: 'الطلبات في السلسلة', value: requests.length, icon: CheckSquare, tone: 'primary' },
+          { label: 'بانتظار إجرائي', value: awaitingMe, icon: Clock3, tone: awaitingMe ? 'warning' : 'success' },
+          { label: 'قيد المعالجة', value: inProgress, icon: Loader, tone: 'info' },
+          { label: 'مكتملة', value: completedChain, icon: CheckCircle2, tone: 'success' },
+        ]}
+    >
 
       {successMsg && <Alert severity="success" onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
@@ -323,7 +332,7 @@ export const AcceptanceChain: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };
 

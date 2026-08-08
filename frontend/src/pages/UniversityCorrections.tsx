@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { AlertTriangle, CalendarClock, FileWarning, RotateCcw } from 'lucide-react';
+import { AlertTriangle, CalendarClock, FileWarning, RotateCcw, AlarmClock } from 'lucide-react';
 import {
   Alert,
   Box,
@@ -114,13 +114,27 @@ export const UniversityCorrections: React.FC = () => {
   const isOverdue = (deadline?: string) =>
     Boolean(deadline && new Date(deadline) < new Date());
 
+  const withDocs = rows.filter((r: any) => (r.requiredDocuments?.length ?? 0) > 0).length;
+  const overdue = rows.filter((r: any) => r.correctionDeadline && new Date(r.correctionDeadline) < new Date()).length;
+  const dueSoon = rows.filter((r: any) => {
+    if (!r.correctionDeadline) return false;
+    const days = (new Date(r.correctionDeadline).getTime() - Date.now()) / 86400000;
+    return days >= 0 && days <= 3;
+  }).length;
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <PageHeader
+    <DataPageShell
         icon={RotateCcw}
         title="تصحيحات الجامعة"
         subtitle="المتدربون الذين أعادهم التجمع الصحي للتصحيح — عدّل البيانات ثم أعد الإرسال"
-      />
+        loading={isLoading}
+        stats={[
+          { label: 'صفوف بحاجة تصحيح', value: rows.length, icon: RotateCcw, tone: rows.length ? 'warning' : 'success' },
+          { label: 'تنتظر مستندات', value: withDocs, icon: FileWarning, tone: withDocs ? 'warning' : 'neutral' },
+          { label: 'تجاوزت المهلة', value: overdue, icon: AlarmClock, tone: overdue ? 'danger' : 'success' },
+          { label: 'مهلتها خلال 3 أيام', value: dueSoon, icon: CalendarClock, tone: dueSoon ? 'warning' : 'neutral' },
+        ]}
+    >
 
       {successMsg && (
         <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMsg(null)}>
@@ -277,7 +291,7 @@ export const UniversityCorrections: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </DataPageShell>
   );
 };
 

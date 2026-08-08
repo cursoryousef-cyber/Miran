@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { FileText, CheckCircle2, Clock, Building2, Send, AlertCircle, RefreshCw } from 'lucide-react';
+import { FileText, CheckCircle2, Clock, Building2, Send, AlertCircle, RefreshCw, FolderGit2, Clock3, Sparkles, Users, XCircle } from 'lucide-react';
 import {
   Button,
   Table,
@@ -129,9 +129,15 @@ export const Affiliations: React.FC = () => {
 
   const totalAllocated = Object.values(allocations).reduce((s, v) => s + v, 0);
 
+  const reqRows: any[] = data?.data ?? [];
+  const submitted = reqRows.filter((r: any) => ['submitted', 'under_review'].includes(r.status)).length;
+  const allocatedReq = reqRows.filter((r: any) => ['allocated', 'auto_allocated'].includes(r.status)).length;
+  const activeReq = reqRows.filter((r: any) => r.status === 'active').length;
+  const totalStudents = reqRows.reduce((s: number, r: any) => s + (r.studentCount ?? 0), 0);
+  const rejectedReq = reqRows.filter((r: any) => ['rejected', 'returned'].includes(r.status)).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <PageHeader
+    <DataPageShell
         title="طلبات التدريب الواردة للتجمع الصحي (Incoming Training Requests Queue)"
         subtitle={<>{user?.activeOrganization?.nameAr} — مراجعة الطلبات التشغيلية الواردة من الجامعات وتوزيع المتدربين على المستشفيات</>}
         actions={<>
@@ -141,7 +147,16 @@ export const Affiliations: React.FC = () => {
           </IconButton>
         </Tooltip>
         </>}
-      />
+        loading={isLoading}
+        stats={[
+          { label: 'إجمالي الطلبات', value: reqRows.length, icon: FolderGit2, tone: 'primary' },
+          { label: 'بانتظار المراجعة', value: submitted, icon: Clock3, tone: submitted ? 'warning' : 'success' },
+          { label: 'تم توزيعها', value: allocatedReq, icon: Sparkles, tone: 'violet' },
+          { label: 'نشطة', value: activeReq, icon: CheckCircle2, tone: 'success' },
+          { label: 'إجمالي المتدربين', value: totalStudents, icon: Users, tone: 'info' },
+          { label: 'مرفوضة/مُعادة', value: rejectedReq, icon: XCircle, tone: rejectedReq ? 'danger' : 'neutral' },
+        ]}
+    >
 
       {successMsg && (
         <Alert severity="success" onClose={() => setSuccessMsg(null)} style={{ borderRadius: '10px' }}>
@@ -285,6 +300,6 @@ export const Affiliations: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };

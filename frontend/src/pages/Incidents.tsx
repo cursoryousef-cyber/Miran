@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
-  AlertTriangle, Plus, RefreshCw, CheckCircle2,
-} from 'lucide-react';
+  AlertTriangle, Plus, RefreshCw, CheckCircle2, AlertCircle, Search, ShieldAlert, Flame } from 'lucide-react';
 import {
   Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
   Chip, Dialog, DialogTitle, DialogContent, DialogActions, Alert, CircularProgress,
@@ -109,9 +108,14 @@ export const Incidents: React.FC = () => {
 
   const isManager = MANAGER_ROLES.includes(primaryRole);
 
+  const openCount = incidents.filter((i: any) => i.status === 'open').length;
+  const investigating = incidents.filter((i: any) => i.status === 'investigating').length;
+  const resolved = incidents.filter((i: any) => i.status === 'resolved').length;
+  const critical = incidents.filter((i: any) => ['critical', 'high'].includes(i.severity)).length;
+  const unresolvedCritical = incidents.filter((i: any) => ['critical', 'high'].includes(i.severity) && i.status !== 'resolved').length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <PageHeader
+    <DataPageShell
         title="البلاغات والحوادث"
         actions={<>
           <Tooltip title="تحديث">
@@ -128,7 +132,16 @@ export const Incidents: React.FC = () => {
             تسجيل بلاغ جديد
           </Button>
         </>}
-      />
+        loading={isLoading}
+        stats={[
+          { label: 'إجمالي البلاغات', value: incidents.length, icon: AlertTriangle, tone: 'primary' },
+          { label: 'مفتوحة', value: openCount, icon: AlertCircle, tone: openCount ? 'danger' : 'success' },
+          { label: 'قيد التحقيق', value: investigating, icon: Search, tone: 'warning' },
+          { label: 'حرجة/عالية', value: critical, icon: ShieldAlert, tone: critical ? 'danger' : 'neutral' },
+          { label: 'حرجة غير محلولة', value: unresolvedCritical, icon: Flame, tone: unresolvedCritical ? 'danger' : 'success' },
+          { label: 'تم حلها', value: resolved, icon: CheckCircle2, tone: 'success' },
+        ]}
+    >
 
       {successMsg && <Alert severity="success" onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
@@ -318,7 +331,7 @@ export const Incidents: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };
 

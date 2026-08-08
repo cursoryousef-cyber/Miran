@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { FileSpreadsheet, Download, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { FileSpreadsheet, Download, RefreshCw, CheckCircle2, FileText, Clock3, XCircle } from 'lucide-react';
 import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Alert, LinearProgress } from '@mui/material';
 
 export const Reports: React.FC = () => {
@@ -37,12 +37,25 @@ export const Reports: React.FC = () => {
     }
   };
 
+  const defs: any[] = definitions ?? [];
+  const reports: any[] = myReports ?? [];
+  const ready = reports.filter((r: any) => ['completed', 'ready'].includes(r.status)).length;
+  const running = reports.filter((r: any) => ['pending', 'processing', 'running'].includes(r.status)).length;
+  const failed = reports.filter((r: any) => r.status === 'failed').length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-      <PageHeader
+    <DataPageShell
         title="خدمة التقارير والتحليلات المستقلة (Decoupled Reporting Service)"
         subtitle="توليد التقرير الأكاديمية ومؤشرات الانضباط اللا تزامنية وتصديرها بصيغ PDF و Excel"
-      />
+        loading={isLoadingDefs}
+        stats={[
+          { label: 'قوالب التقارير', value: defs.length, icon: FileSpreadsheet, tone: 'primary' },
+          { label: 'تقاريري', value: reports.length, icon: FileText, tone: 'info' },
+          { label: 'جاهزة للتحميل', value: ready, icon: CheckCircle2, tone: 'success' },
+          { label: 'قيد التوليد', value: running, icon: Clock3, tone: running ? 'warning' : 'neutral' },
+          { label: 'فشلت', value: failed, icon: XCircle, tone: failed ? 'danger' : 'success' },
+        ]}
+    >
 
       {(isLoadingDefs || isLoadingReports) && <LinearProgress sx={{ borderRadius: 1 }} />}
       {isErrorDefs && <Alert severity="error">تعذر تحميل قوالب التقارير من الخادم</Alert>}
@@ -118,6 +131,6 @@ export const Reports: React.FC = () => {
           </Table>
         </TableContainer>
       </div>
-    </div>
+    </DataPageShell>
   );
 };

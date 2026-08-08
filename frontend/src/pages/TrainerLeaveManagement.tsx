@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
 import {
   Calendar,
@@ -10,8 +10,7 @@ import {
   XCircle,
   AlertTriangle,
   Users,
-  RefreshCw,
-} from 'lucide-react';
+  RefreshCw, CalendarOff, Clock3, FileSignature, CalendarClock } from 'lucide-react';
 import {
   Button,
   Chip,
@@ -159,9 +158,14 @@ export const TrainerLeaveManagement: React.FC = () => {
     setReplacementTrainerId('');
   };
 
+  const activeLeaves = leaves.filter((l: any) => ['approved', 'active'].includes(l.status)).length;
+  const pendingLeaves = leaves.filter((l: any) => l.status === 'pending').length;
+  const withReplacement = leaves.filter((l: any) => l.replacementTrainerId).length;
+  const autoReassigned = leaves.filter((l: any) => l.autoReassigned).length;
+  const noCover = leaves.filter((l: any) => ['approved', 'active'].includes(l.status) && !l.replacementTrainerId).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, direction: 'rtl' }}>
-      <PageHeader
+    <DataPageShell
         icon={Calendar}
         title="إجازات المدربين"
         subtitle="إدارة إجازات المدربين وضمان استمرار تدريب المتدربين"
@@ -172,7 +176,16 @@ export const TrainerLeaveManagement: React.FC = () => {
           تسجيل إجازة جديدة
         </Button>
         </>}
-      />
+        loading={isLoading}
+        stats={[
+          { label: 'إجمالي الإجازات', value: leaves.length, icon: CalendarOff, tone: 'primary' },
+          { label: 'سارية الآن', value: activeLeaves, icon: Clock3, tone: activeLeaves ? 'warning' : 'success' },
+          { label: 'بانتظار الموافقة', value: pendingLeaves, icon: FileSignature, tone: pendingLeaves ? 'warning' : 'neutral' },
+          { label: 'إجازات قادمة', value: upcoming.length, icon: CalendarClock, tone: 'info' },
+          { label: 'لها بديل', value: withReplacement, icon: CheckCircle2, tone: 'success' },
+          { label: 'بلا تغطية', value: noCover, icon: AlertTriangle, tone: noCover ? 'danger' : 'success' },
+        ]}
+    >
 
       {successMsg && <Alert severity="success" sx={{ mb: 2, fontFamily: 'Tajawal' }} onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" sx={{ mb: 2, fontFamily: 'Tajawal' }} onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
@@ -381,6 +394,6 @@ export const TrainerLeaveManagement: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };

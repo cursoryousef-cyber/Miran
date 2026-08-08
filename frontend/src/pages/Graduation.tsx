@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
-  GraduationCap, CheckCircle2, AlertCircle, RefreshCw, ChevronDown, ChevronUp,
-} from 'lucide-react';
+  GraduationCap, CheckCircle2, AlertCircle, RefreshCw, ChevronDown, ChevronUp, Users, FileSignature, Lock } from 'lucide-react';
 import {
   Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
   Chip, Dialog, DialogTitle, DialogContent, DialogActions, Alert, CircularProgress,
@@ -90,9 +89,13 @@ export const Graduation: React.FC = () => {
     return <Chip label={s.label} color={s.color} size="small" style={{ fontWeight: 700 }} />;
   };
 
+  const eligibleCount = trainees.filter((t: any) => (t.rotations || []).some((r: any) => r.status === 'completed')).length;
+  const lockedCount = trainees.filter((t: any) => t.isLocked).length;
+  const graduatedCount = trainees.filter((t: any) => t.applicationStatus === 'graduated' || t.graduatedAt).length;
+  const withApprovals = trainees.filter((t: any) => (t.graduationApprovals?.length ?? 0) > 0).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <PageHeader
+    <DataPageShell
         title="إدارة التخرج — Stage 12"
         subtitle={<>{user?.activeOrganization?.nameAr} — متابعة أهلية التخرج واعتماد نهاية التدريب</>}
         actions={<>
@@ -102,7 +105,15 @@ export const Graduation: React.FC = () => {
           </IconButton>
         </Tooltip>
         </>}
-      />
+        loading={isLoading}
+        stats={[
+          { label: 'متدربون نشطون', value: trainees.length, icon: Users, tone: 'primary' },
+          { label: 'لديهم روتيشن مكتمل', value: eligibleCount, icon: CheckCircle2, tone: 'success' },
+          { label: 'بدأت موافقاتهم', value: withApprovals, icon: FileSignature, tone: 'info' },
+          { label: 'متخرجون', value: graduatedCount, icon: GraduationCap, tone: 'success' },
+          { label: 'ملفات مغلقة', value: lockedCount, icon: Lock, tone: 'neutral' },
+        ]}
+    >
 
       {successMsg && <Alert severity="success" onClose={() => setSuccessMsg(null)} style={{ fontSize: '14px' }}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
@@ -355,7 +366,7 @@ export const Graduation: React.FC = () => {
           )}
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };
 

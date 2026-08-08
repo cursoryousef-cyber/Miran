@@ -1,8 +1,8 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { Zap, Plus, Globe, CheckCircle2 } from 'lucide-react';
+import { Zap, Plus, Globe, CheckCircle2, GitMerge, Webhook, Radio, XCircle } from 'lucide-react';
 import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, LinearProgress, Alert } from '@mui/material';
 
 export const Integrations: React.FC = () => {
@@ -22,9 +22,14 @@ export const Integrations: React.FC = () => {
     },
   });
 
+  const cfgs: any[] = configs ?? [];
+  const hooks: any[] = webhooks ?? [];
+  const activeCfgs = cfgs.filter((c: any) => c.isActive !== false).length;
+  const activeHooks = hooks.filter((h: any) => h.isActive !== false).length;
+  const failingHooks = hooks.filter((h: any) => (h.failureCount ?? 0) > 0).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-      <PageHeader
+    <DataPageShell
         title="مركز الربط والتكامل (Integration Hub & Webhooks)"
         subtitle="الربط عبر REST/Webhooks مع الهيئة السعودية للتخصصات الصحية، نافس، والأنظمة الحكومية والجامعية"
         actions={<>
@@ -37,7 +42,15 @@ export const Integrations: React.FC = () => {
           إضافة ربط تكاملي جديد
         </Button>
         </>}
-      />
+        loading={isLoadingConfigs}
+        stats={[
+          { label: 'التكاملات', value: cfgs.length, icon: GitMerge, tone: 'primary' },
+          { label: 'تكاملات مفعّلة', value: activeCfgs, icon: CheckCircle2, tone: 'success' },
+          { label: 'Webhooks', value: hooks.length, icon: Webhook, tone: 'info' },
+          { label: 'Webhooks مفعّلة', value: activeHooks, icon: Radio, tone: 'violet' },
+          { label: 'بها إخفاقات', value: failingHooks, icon: XCircle, tone: failingHooks ? 'danger' : 'success' },
+        ]}
+    >
 
       {(isLoadingConfigs || isLoadingWebhooks) && <LinearProgress sx={{ borderRadius: 1 }} />}
       {isErrorConfigs && <Alert severity="error">تعذر تحميل إعدادات التكامل من الخادم</Alert>}
@@ -95,6 +108,6 @@ export const Integrations: React.FC = () => {
           </Table>
         </TableContainer>
       </div>
-    </div>
+    </DataPageShell>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { Activity, Database, Server, HardDrive, Mail, Bell, Shield, Cloud, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Button, Chip, LinearProgress } from '@mui/material';
 import { apiClient } from '../api/client';
@@ -24,10 +24,16 @@ export const HealthMonitor: React.FC = () => {
     fetchHealth();
   }, []);
 
+  const services: any[] = data?.services ?? [];
+  const healthy = services.filter((s: any) => ['ok', 'healthy', 'up'].includes(String(s.status).toLowerCase())).length;
+  const degraded = services.filter((s: any) => String(s.status).toLowerCase() === 'degraded').length;
+  const down = services.filter((s: any) => ['down', 'error', 'fail'].includes(String(s.status).toLowerCase())).length;
+  const avgLatency = services.length
+    ? Math.round(services.reduce((sum: number, s: any) => sum + (s.responseTime ?? s.latency ?? 0), 0) / services.length)
+    : 0;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Header */}
-      <PageHeader
+    <DataPageShell
         title="🖥️ مراقبة سلامة وجاهزية الخدمات (System Health & Infrastructure Monitor)"
         subtitle="فحص لحظي مستمر لكل المكونات: API, Neon PostgreSQL, Storage, FCM, SMTP, Hosting & CDN"
         actions={<>
@@ -41,7 +47,15 @@ export const HealthMonitor: React.FC = () => {
           تحديث الفحص اللحظي
         </Button>
         </>}
-      />
+        loading={loading}
+        stats={[
+          { label: 'الخدمات المفحوصة', value: data?.servicesCount ?? services.length, icon: Server, tone: 'primary' },
+          { label: 'سليمة', value: healthy, icon: CheckCircle2, tone: 'success' },
+          { label: 'متدهورة', value: degraded, icon: AlertTriangle, tone: degraded ? 'warning' : 'success' },
+          { label: 'متوقفة', value: down, icon: Activity, tone: down ? 'danger' : 'success' },
+          { label: 'متوسط الاستجابة', value: `${avgLatency}ms`, icon: Cloud, tone: avgLatency > 800 ? 'warning' : 'info' },
+        ]}
+    >
 
       {/* Status Card Banner */}
       <div
@@ -114,7 +128,7 @@ export const HealthMonitor: React.FC = () => {
           </div>
         ))}
       </div>
-    </div>
+    </DataPageShell>
   );
 };
 

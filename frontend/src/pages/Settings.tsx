@@ -1,10 +1,11 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { Button, TextField, Switch, FormControlLabel, LinearProgress, Alert } from '@mui/material';
-import { Save } from 'lucide-react';
+import { Save, FilePenLine, Users, HardDrive, ShieldCheck } from 'lucide-react';
+import { Settings as SettingsIcon } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
   const { user } = useAuth();
@@ -26,12 +27,26 @@ export const SettingsPage: React.FC = () => {
     },
   });
 
+  const settingsList: any[] = Array.isArray(systemSettings) ? systemSettings : (systemSettings?.data ?? []);
+  const editableSettings = settingsList.filter((s: any) => s.isEditable !== false).length;
+  const seatsUsed = license?.usedSeats ?? license?.seatsUsed ?? 0;
+  const seatsTotal = license?.maxSeats ?? license?.totalSeats ?? 0;
+  const storageUsed = license?.usedStorageGb ?? license?.storageUsed ?? 0;
+  const storageTotal = license?.maxStorageGb ?? license?.storageTotal ?? 0;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <PageHeader
+    <DataPageShell
         title="مركز إعدادات المنصة والتراخيص (Settings & Subscription Quotas)"
         subtitle="الإعدادات الديناميكية المحفوظة بقاعدة البيانات وتراخيص السعات التخزينية والأدوار"
-      />
+        loading={isLoadingSettings}
+        stats={[
+          { label: 'إعدادات النظام', value: settingsList.length, icon: SettingsIcon, tone: 'primary' },
+          { label: 'قابلة للتعديل', value: editableSettings, icon: FilePenLine, tone: 'info' },
+          { label: 'المقاعد المستخدمة', value: seatsTotal ? `${seatsUsed}/${seatsTotal}` : seatsUsed, icon: Users, tone: 'violet' },
+          { label: 'التخزين المستخدم', value: storageTotal ? `${storageUsed}/${storageTotal} GB` : `${storageUsed} GB`, icon: HardDrive, tone: 'neutral' },
+          { label: 'حالة الترخيص', value: license?.status ?? 'نشط', icon: ShieldCheck, tone: 'success' },
+        ]}
+    >
 
       {(isLoadingSettings || isLoadingLicense) && <LinearProgress sx={{ borderRadius: 1, backgroundColor: '#E2E8F0', '& .MuiLinearProgress-bar': { backgroundColor: '#0F766E' } }} />}
       {isErrorSettings && <Alert severity="error">تعذر تحميل الإعدادات من الخادم</Alert>}
@@ -116,7 +131,7 @@ export const SettingsPage: React.FC = () => {
           </Button>
         </div>
       </div>
-    </div>
+    </DataPageShell>
   );
 };
 

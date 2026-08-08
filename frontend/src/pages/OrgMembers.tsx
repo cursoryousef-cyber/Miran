@@ -1,6 +1,6 @@
-import { UsersRound } from 'lucide-react';
+import { UsersRound, CheckCircle2, UserCog, GraduationCap, AlertTriangle } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../api/client';
@@ -116,13 +116,24 @@ export const OrgMembersPage: React.FC = () => {
     { label: 'متدرب', value: 'trainee' },
   ];
 
+  const activeMembers = members.filter((m: any) => m.isActive !== false).length;
+  const trainerMembers = members.filter((m: any) => (m.roles ?? []).some((r: any) => (r.code ?? r) === 'trainer')).length;
+  const traineeMembers = members.filter((m: any) => (m.roles ?? []).some((r: any) => (r.code ?? r) === 'trainee')).length;
+  const withoutDept = members.filter((m: any) => !m.departmentId && !m.department).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <PageHeader
+    <DataPageShell
         icon={UsersRound}
         title="أعضاء الجهة"
         subtitle="إضافة وتعديل وتعطيل الأعضاء وتعيين أدوارهم وفق ضوابط الصلاحيات"
-      />
+        stats={[
+          { label: 'إجمالي الأعضاء', value: members.length, icon: UsersRound, tone: 'primary' },
+          { label: 'أعضاء نشطون', value: activeMembers, icon: CheckCircle2, tone: 'success' },
+          { label: 'المدربون', value: trainerMembers, icon: UserCog, tone: 'violet' },
+          { label: 'المتدربون', value: traineeMembers, icon: GraduationCap, tone: 'info' },
+          { label: 'بلا قسم', value: withoutDept, icon: AlertTriangle, tone: withoutDept ? 'warning' : 'success' },
+        ]}
+    >
         {error && (
           <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.15)', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', marginTop: '12px' }}>
             {error}
@@ -335,7 +346,7 @@ export const OrgMembersPage: React.FC = () => {
           onSuccess={() => { setEditMember(null); setSuccessMsg('تم تعديل بيانات العضو بنجاح'); loadData(); }}
         />
       )}
-    </div>
+    </DataPageShell>
   );
 };
 

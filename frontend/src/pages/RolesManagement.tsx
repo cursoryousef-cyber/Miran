@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
-import { Shield, Plus, Lock, Key, CheckCircle, Edit, Trash2 } from 'lucide-react';
+import { PageHeader, DataPageShell } from '../components/ui';
+import { Shield, Plus, Lock, Key, CheckCircle, Edit, Trash2, UserCog, Layers } from 'lucide-react';
 import {
   Button,
   Table,
@@ -72,10 +72,14 @@ export const RolesManagement: React.FC = () => {
     }
   };
 
+  const roles: any[] = rolesData?.data ?? [];
+  const perms: any[] = permsData?.data ?? [];
+  const systemRoles = roles.filter((r: any) => r.isSystem).length;
+  const customRoles = roles.length - systemRoles;
+  const permGroups = new Set(perms.map((p: any) => p.resource ?? p.category).filter(Boolean)).size;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Header */}
-      <PageHeader
+    <DataPageShell
         title="🔑 إدارة الأدوار والصلاحيات الديناميكية (Dynamic RBAC Engine)"
         subtitle="تخصيص الأدوار، ربط الصلاحيات، وإدارة مستويات الوصول التشغيلية والسحابية بكل مرونة"
         actions={<>
@@ -89,7 +93,15 @@ export const RolesManagement: React.FC = () => {
           إنشاء دور جديد (Custom Role)
         </Button>
         </>}
-      />
+        loading={isLoadingRoles}
+        stats={[
+          { label: 'الأدوار', value: roles.length, icon: Key, tone: 'primary' },
+          { label: 'أدوار النظام', value: systemRoles, icon: Shield, tone: 'info' },
+          { label: 'أدوار مخصصة', value: customRoles, icon: UserCog, tone: 'violet' },
+          { label: 'الصلاحيات', value: perms.length, icon: Lock, tone: 'neutral' },
+          { label: 'مجموعات الصلاحيات', value: permGroups, icon: Layers, tone: 'success' },
+        ]}
+    >
 
       {(isLoadingRoles || isLoadingPerms) && <LinearProgress sx={{ borderRadius: 1 }} />}
       {isErrorRoles && <Alert severity="error">تعذر تحميل الأدوار من الخادم</Alert>}
@@ -175,7 +187,7 @@ export const RolesManagement: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };
 

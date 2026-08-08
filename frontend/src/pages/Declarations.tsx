@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { FileSignature, Plus, CheckCircle2, ShieldCheck, FileText } from 'lucide-react';
+import { FileSignature, Plus, CheckCircle2, ShieldCheck, FileText, Clock3, Layers } from 'lucide-react';
 import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Alert, LinearProgress } from '@mui/material';
 
 export const Declarations: React.FC = () => {
@@ -46,9 +46,13 @@ export const Declarations: React.FC = () => {
     },
   });
 
+  const decls: any[] = declarations ?? [];
+  const signed = decls.filter((d: any) => d.isSigned || d.signedAt).length;
+  const pendingDecl = decls.length - signed;
+  const types = new Set(decls.map((d: any) => d.type).filter(Boolean)).size;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-      <PageHeader
+    <DataPageShell
         title="إدارة الإقرارات والتعهدات الوطنية (Declarations & Compliance)"
         subtitle="إدارة إقرارات الانضمام وتعهدات الشؤون الأكاديمية والتوقيعات الرقمية للمتدربين"
         actions={<>
@@ -62,7 +66,14 @@ export const Declarations: React.FC = () => {
           إنشاء إقرار وتعهد جديد
         </Button>
         </>}
-      />
+        loading={isLoadingDecls}
+        stats={[
+          { label: 'إجمالي الإقرارات', value: decls.length, icon: FileSignature, tone: 'primary' },
+          { label: 'موقّعة', value: signed, icon: CheckCircle2, tone: 'success' },
+          { label: 'بانتظار التوقيع', value: pendingDecl, icon: Clock3, tone: pendingDecl ? 'warning' : 'success' },
+          { label: 'أنواع الإقرارات', value: types, icon: Layers, tone: 'neutral' },
+        ]}
+    >
 
       {(isLoadingDecls || isLoadingStats) && <LinearProgress sx={{ borderRadius: 1 }} />}
       {isErrorDecls && <Alert severity="error">تعذر تحميل الإقرارات من الخادم</Alert>}
@@ -158,6 +169,6 @@ export const Declarations: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </DataPageShell>
   );
 };

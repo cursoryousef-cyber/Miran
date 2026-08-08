@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { ShieldCheck, Plus, Play, CheckCircle2, XCircle } from 'lucide-react';
+import { ShieldCheck, Plus, Play, CheckCircle2, XCircle, FileSignature, ShieldAlert, Layers, GitBranch } from 'lucide-react';
 import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, TextField, Alert, LinearProgress } from '@mui/material';
 
 export const Policies: React.FC = () => {
@@ -30,9 +30,14 @@ export const Policies: React.FC = () => {
     }
   };
 
+  const policies: any[] = data ?? [];
+  const activePolicies = policies.filter((p: any) => p.isActive !== false).length;
+  const effects = new Set(policies.map((p: any) => p.effect).filter(Boolean));
+  const denyRules = policies.filter((p: any) => p.effect === 'deny').length;
+  const resources = new Set(policies.map((p: any) => p.resource).filter(Boolean)).size;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <PageHeader
+    <DataPageShell
         title="سياسات التحكم بالوصول (Policy Engine ABAC)"
         subtitle="سياسات مرنة مبنية على الخصائص (Attribute-Based Access Control) بدلاً من الشروط الثابتة في الكود"
         actions={<>
@@ -45,7 +50,15 @@ export const Policies: React.FC = () => {
           إضافة سياسة وصول جديدة
         </Button>
         </>}
-      />
+        loading={isLoading}
+        stats={[
+          { label: 'إجمالي السياسات', value: policies.length, icon: FileSignature, tone: 'primary' },
+          { label: 'سياسات مفعّلة', value: activePolicies, icon: CheckCircle2, tone: 'success' },
+          { label: 'قواعد منع', value: denyRules, icon: ShieldAlert, tone: denyRules ? 'danger' : 'neutral' },
+          { label: 'موارد مغطّاة', value: resources, icon: Layers, tone: 'info' },
+          { label: 'أنواع التأثير', value: effects.size, icon: GitBranch, tone: 'violet' },
+        ]}
+    >
 
       {isLoading && <LinearProgress sx={{ borderRadius: 1 }} />}
       {isError && <Alert severity="error">تعذر تحميل السياسات من الخادم</Alert>}
@@ -119,6 +132,6 @@ export const Policies: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
-    </div>
+    </DataPageShell>
   );
 };

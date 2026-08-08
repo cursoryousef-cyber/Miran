@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '../components/ui';
+import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { BedDouble, Building2, GraduationCap, Plus, Trash2, UserCog, Users } from 'lucide-react';
+import { BedDouble, Building2, GraduationCap, Plus, Trash2, UserCog, Users, CheckCircle2, Gauge, Layers, AlertTriangle } from 'lucide-react';
 import {
   Alert,
   Box,
@@ -151,13 +151,30 @@ export const HospitalCapacity: React.FC = () => {
     return <Alert severity="warning" sx={{ m: 3 }}>لا توجد جهة مرتبطة بحسابك.</Alert>;
   }
 
+  const depts = data?.departments ?? [];
+  const hospOcc = data?.hospital;
+  const programsList = (data as any)?.programs ?? [];
+  const fullDepts = depts.filter((d: any) => (d.occupancy?.available ?? 1) <= 0).length;
+  const deptCapacity = depts.reduce((s: number, d: any) => s + (d.occupancy?.capacity ?? 0), 0);
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <PageHeader
+    <DataPageShell
         icon={BedDouble}
         title="الطاقة الاستيعابية للمستشفى"
         subtitle="المستشفى هو المسؤول الوحيد عن تحديد طاقته — أي تعديل ينعكس فوراً على لوحة التجمع"
-      />
+        loading={isLoading}
+        stats={[
+          { label: 'السعة الكلية', value: hospOcc?.capacity ?? 0, icon: BedDouble, tone: 'primary' },
+          { label: 'المشغولة', value: hospOcc?.occupied ?? 0, icon: Users, tone: 'info' },
+          { label: 'المتاحة', value: hospOcc?.available ?? 0, icon: CheckCircle2,
+            tone: (hospOcc?.available ?? 0) === 0 ? 'danger' : 'success' },
+          { label: 'نسبة الإشغال', value: `${hospOcc?.occupancyPercentage ?? 0}%`, icon: Gauge,
+            tone: (hospOcc?.occupancyPercentage ?? 0) >= 90 ? 'danger' : (hospOcc?.occupancyPercentage ?? 0) >= 70 ? 'warning' : 'success' },
+          { label: 'الأقسام', value: depts.length, icon: Layers, tone: 'neutral',
+            hint: deptCapacity ? `سعة ${deptCapacity}` : undefined },
+          { label: 'أقسام ممتلئة', value: fullDepts, icon: AlertTriangle, tone: fullDepts ? 'warning' : 'success' },
+        ]}
+    >
 
       {successMsg && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
@@ -381,7 +398,7 @@ export const HospitalCapacity: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </DataPageShell>
   );
 };
 

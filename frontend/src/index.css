@@ -115,3 +115,25 @@ img, svg, table { max-width: 100%; }
   .kpi-grid.cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .kpi-grid.cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
+
+/* ── Filter toolbars ───────────────────────────────────────────────────────
+   Pages set fixed pixel widths on their search fields, which overflow the card
+   they sit in once the viewport is narrower than that width. Cap every control
+   to its container and let it grow instead. */
+.glass-card .MuiFormControl-root,
+.glass-card .MuiTextField-root {
+  max-width: 100%;
+  min-width: 0;
+}
+@media (max-width: 700px) {
+  .glass-card .MuiFormControl-root,
+  .glass-card .MuiTextField-root {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+  /* Tabs inside a filter bar scroll rather than squeeze. */
+  .glass-card .MuiTabs-root { max-width: 100%; }
+}
+
+/* Long page titles wrap instead of forcing the header wider. */
+main h1 { overflow-wrap: anywhere; }
