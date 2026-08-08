@@ -41,6 +41,7 @@ workflows:
         - project_path: "$BITRISE_PROJECT_PATH"
         - scheme: "$BITRISE_SCHEME"
         - configuration: Release
+        - platform: iOS
         - distribution_method: app-store
         - export_method: app-store
         - automatic_code_signing: api-key
