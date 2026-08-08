@@ -39,5 +39,6 @@ RUN mkdir -p uploads
 
 EXPOSE 3000
 
-# Start command
-CMD ["node", "dist/main.js"]
+# Start command — nest build (no explicit tsconfig rootDir) preserves the
+# src/ layout under dist/, so the real entry file is dist/src/main.js.
+CMD ["node", "dist/src/main.js"]

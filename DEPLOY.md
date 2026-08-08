@@ -13,7 +13,7 @@ cd backend && npm install && npx prisma generate && npm run build
 
 ### 2. Start Command
 ```bash
-cd backend && npx prisma migrate deploy && node dist/main.js
+cd backend && npx prisma migrate deploy && node dist/src/main.js
 ```
 Applies committed migrations only. The legacy demo seed (`src/seed/seed.ts`) is
 **not** run automatically — see below.

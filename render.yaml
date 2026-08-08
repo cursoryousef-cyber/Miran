@@ -9,7 +9,9 @@ services:
     # fixed codes (HEALTH-HOLDING, NB-CLUSTER, etc.); running it on every boot
     # would silently repopulate that demo data into production. The script is
     # kept for deliberate, manual use — it is never invoked by a normal boot.
-    startCommand: npx prisma migrate deploy && node dist/main.js
+    # dist/src/main.js, not dist/main.js — nest build preserves the src/ layout
+    # under dist/ since tsconfig has no explicit rootDir.
+    startCommand: npx prisma migrate deploy && node dist/src/main.js
     # `health` is deliberately excluded from the api/v1 prefix in main.ts
     # (setGlobalPrefix's `exclude`), so the real route is /health, not
     # /api/v1/health. Pointing Render's health check at the prefixed path made
