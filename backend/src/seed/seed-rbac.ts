@@ -40,6 +40,15 @@ async function main() {
     // البيانات الشخصية
     { code: 'view_own_data',         nameAr: 'عرض بياناتي الشخصية',     nameEn: 'View Own Data',            module: 'profile' },
     { code: 'view_own_trainees',     nameAr: 'عرض متدربيّ فقط',         nameEn: 'View Own Trainees',        module: 'trainees' },
+    // Codes the PermissionsGuard actually checks via @RequirePermissions.
+    // They were being enforced without ever existing in the catalogue, so every
+    // role except platform_owner/system_admin (which bypass) was denied.
+    { code: 'view_users',            nameAr: 'عرض المستخدمين',          nameEn: 'View Users',               module: 'users' },
+    { code: 'manage_users',          nameAr: 'إدارة المستخدمين',        nameEn: 'Manage Users',             module: 'users' },
+    { code: 'view_organizations',    nameAr: 'عرض الجهات',              nameEn: 'View Organizations',       module: 'organizations' },
+    { code: 'manage_organizations',  nameAr: 'إدارة الجهات',            nameEn: 'Manage Organizations',     module: 'organizations' },
+    { code: 'manage_roles',          nameAr: 'إدارة الأدوار',           nameEn: 'Manage Roles',             module: 'rbac' },
+    { code: 'view_trainees',         nameAr: 'عرض المتدربين',           nameEn: 'View Trainees',            module: 'trainees' },
   ];
 
   console.log('📋 Seeding Permissions...');
@@ -116,6 +125,156 @@ async function main() {
         'submit_evaluations', 'view_evaluations',
         'view_active_calls', 'track_call_responses',
       ],
+    },
+    {
+      code: 'system_admin',
+      nameAr: 'مدير النظام',
+      nameEn: 'System Administrator',
+      descriptionAr: 'إدارة تشغيلية كاملة للمنصة',
+      hierarchyLevel: 95,
+      permissions: allPermissions.map((p) => p.code),
+    },
+    {
+      code: 'holding_administrator',
+      nameAr: 'مدير الصحة القابضة',
+      nameEn: 'Holding Administrator',
+      descriptionAr: 'إشراف وطني على الجهات والتقارير',
+      hierarchyLevel: 90,
+      permissions: [
+        'view_users', 'view_organizations', 'view_trainees', 'view_rotations',
+        'view_reports', 'view_evaluations', 'receive_notifications',
+      ],
+    },
+    {
+      code: 'cluster_administrator',
+      nameAr: 'مدير التجمع الصحي',
+      nameEn: 'Cluster Administrator',
+      descriptionAr: 'يدير مستشفيات التجمع وتوزيع المتدربين عليها',
+      hierarchyLevel: 30,
+      permissions: [
+        'view_users', 'manage_users', 'view_organizations', 'manage_organizations',
+        'view_trainees', 'manage_trainees', 'manage_trainers', 'manage_supervisors',
+        'approve_rotations', 'assign_rotations', 'view_rotations',
+        'view_reports', 'track_attendance', 'send_notifications', 'receive_notifications',
+        'view_evaluations', 'view_active_calls',
+      ],
+    },
+    {
+      code: 'cluster_manager',
+      nameAr: 'مدير التجمع',
+      nameEn: 'Cluster Manager',
+      descriptionAr: 'متابعة تشغيلية لمستشفيات التجمع',
+      hierarchyLevel: 28,
+      permissions: [
+        'view_users', 'view_organizations', 'view_trainees', 'manage_trainees',
+        'assign_rotations', 'view_rotations', 'view_reports',
+        'track_attendance', 'send_notifications', 'receive_notifications', 'view_evaluations',
+      ],
+    },
+    {
+      code: 'training_director',
+      nameAr: 'مدير التدريب بالتجمع',
+      nameEn: 'Training Director',
+      descriptionAr: 'يقود التخطيط التدريبي على مستوى التجمع',
+      hierarchyLevel: 26,
+      permissions: [
+        'view_users', 'view_organizations', 'view_trainees', 'manage_trainees',
+        'approve_rotations', 'assign_rotations', 'view_rotations',
+        'view_reports', 'view_evaluations', 'send_notifications', 'receive_notifications',
+      ],
+    },
+    {
+      code: 'university_administrator',
+      nameAr: 'مدير الجامعة',
+      nameEn: 'University Administrator',
+      descriptionAr: 'يوفد الطلاب ويتابع مسارهم التدريبي',
+      hierarchyLevel: 25,
+      permissions: [
+        'view_users', 'manage_users', 'view_organizations',
+        'view_trainees', 'manage_trainees', 'view_rotations',
+        'view_reports', 'approve_declarations', 'send_notifications', 'receive_notifications',
+      ],
+    },
+    {
+      code: 'academic_affairs',
+      nameAr: 'الشؤون الأكاديمية',
+      nameEn: 'Academic Affairs',
+      descriptionAr: 'متابعة الشؤون الأكاديمية للطلاب الموفدين',
+      hierarchyLevel: 22,
+      permissions: [
+        'view_users', 'view_trainees', 'view_rotations', 'view_reports',
+        'view_evaluations', 'approve_declarations', 'receive_notifications',
+      ],
+    },
+    {
+      code: 'hospital_administrator',
+      nameAr: 'مدير المستشفى',
+      nameEn: 'Hospital Administrator',
+      descriptionAr: 'يدير عمليات التدريب والسعة داخل مستشفاه',
+      hierarchyLevel: 20,
+      permissions: [
+        'view_users', 'manage_users', 'view_organizations',
+        'manage_trainers', 'manage_supervisors', 'view_trainees', 'manage_trainees',
+        'approve_rotations', 'assign_rotations', 'view_rotations',
+        'view_reports', 'track_attendance', 'send_notifications', 'receive_notifications',
+        'submit_evaluations', 'view_evaluations',
+        'launch_calls', 'view_active_calls', 'track_call_responses',
+      ],
+    },
+    {
+      code: 'department_head',
+      nameAr: 'رئيس القسم',
+      nameEn: 'Department Head',
+      descriptionAr: 'يشرف على مدربي ومتدربي قسمه',
+      hierarchyLevel: 12,
+      permissions: [
+        'view_users', 'manage_trainers', 'view_trainees', 'manage_trainees',
+        'assign_rotations', 'view_rotations', 'track_attendance',
+        'submit_evaluations', 'view_evaluations', 'view_reports',
+        'view_active_calls', 'receive_notifications',
+      ],
+    },
+    {
+      code: 'training_supervisor',
+      nameAr: 'مشرف التدريب الميداني',
+      nameEn: 'Training Supervisor',
+      descriptionAr: 'يتابع تقدم المتدربين والاعتمادات داخل المستشفى',
+      hierarchyLevel: 11,
+      permissions: [
+        'view_users', 'view_trainees', 'manage_trainees',
+        'assign_rotations', 'view_rotations', 'track_attendance',
+        'submit_evaluations', 'view_evaluations', 'view_reports',
+        'view_active_calls', 'track_call_responses', 'receive_notifications',
+      ],
+    },
+    {
+      code: 'auditor',
+      nameAr: 'مدقق',
+      nameEn: 'Auditor',
+      descriptionAr: 'اطلاع للقراءة فقط لأغراض التدقيق',
+      hierarchyLevel: 5,
+      permissions: [
+        'view_users', 'view_organizations', 'view_trainees',
+        'view_rotations', 'view_reports', 'view_evaluations',
+      ],
+    },
+    {
+      code: 'reviewer',
+      nameAr: 'مراجع',
+      nameEn: 'Reviewer',
+      descriptionAr: 'مراجعة الملفات والتقييمات دون تعديل',
+      hierarchyLevel: 5,
+      permissions: [
+        'view_trainees', 'view_rotations', 'view_evaluations', 'view_reports',
+      ],
+    },
+    {
+      code: 'external_system',
+      nameAr: 'نظام خارجي',
+      nameEn: 'External System',
+      descriptionAr: 'تكامل آلي محدود الصلاحية',
+      hierarchyLevel: 1,
+      permissions: ['view_rotations', 'receive_notifications'],
     },
     {
       code: 'trainee',
