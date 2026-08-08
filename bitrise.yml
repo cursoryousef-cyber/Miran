@@ -7,21 +7,29 @@ app:
   - BITRISE_PROJECT_PATH: Miran.xcodeproj
   - BITRISE_SCHEME: Miran
   - BITRISE_DISTRIBUTION_TYPE: app-store
+  - BITRISE_DEPLOY_DIR: $BITRISE_DEPLOY_DIR
 
 workflows:
   release:
-    summary: Builds Release Archive and deploys IPA to App Store Connect / TestFlight.
+    summary: Archive Release build, export Miran.ipa to Artifacts, and deploy to TestFlight.
     steps:
     - activate-ssh-key@4: {}
     - git-clone@8: {}
     - script@1:
-        title: Resolve Swift Package Dependencies
+        title: Ensure Built Web Frontend & Resolve Dependencies
         inputs:
         - content: |-
             #!/bin/bash
             set -ex
+            echo "================ Building Web Frontend Assets ================"
+            cd frontend
+            npm install
+            npx tsc -b
+            npm run build
+            cd ..
+            echo "================ Resolving Xcode Dependencies ================"
             xcodebuild -resolvePackageDependencies -project "$BITRISE_PROJECT_PATH"
-    - ios-auto-provision@1:
+    - manage-ios-code-signing@1:
         inputs:
         - distribution_type: app-store
     - xcode-archive@5:
@@ -29,12 +37,46 @@ workflows:
         - project_path: "$BITRISE_PROJECT_PATH"
         - scheme: "$BITRISE_SCHEME"
         - configuration: Release
+        - distribution_method: app-store
         - export_method: app-store
         - automatic_code_signing: api-key
+    - script@1:
+        title: Ensure Miran.ipa Artifact Export
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -e
+            echo "================ Verifying & Packaging IPA Artifact ================"
+            mkdir -p "$BITRISE_DEPLOY_DIR"
+            
+            IPA_FILE=$(find "$BITRISE_DEPLOY_DIR" -name "*.ipa" | head -n 1)
+            
+            if [ -n "$IPA_FILE" ]; then
+              echo "✅ Standard Bitrise Export IPA Found: $IPA_FILE"
+            else
+              echo "⚠️ Searching for Xcode Archive in $BITRISE_DEPLOY_DIR or system archives..."
+              ARCHIVE_PATH=$(find "$BITRISE_DEPLOY_DIR" ~/Library/Developer/Xcode/Archives -name "*.xcarchive" 2>/dev/null | head -n 1)
+              
+              if [ -n "$ARCHIVE_PATH" ]; then
+                echo "Found Archive at: $ARCHIVE_PATH. Generating Miran.ipa package..."
+                mkdir -p /tmp/ipa_pack/Payload
+                cp -R "$ARCHIVE_PATH/Products/Applications/"*.app /tmp/ipa_pack/Payload/
+                cd /tmp/ipa_pack
+                zip -r "$BITRISE_DEPLOY_DIR/Miran.ipa" Payload
+                echo "✅ Created Artifact: $BITRISE_DEPLOY_DIR/Miran.ipa"
+              else
+                echo "❌ Xcode Archive file not found! Check Xcode Archive log step."
+              fi
+            fi
+            
+            echo "=== Final $BITRISE_DEPLOY_DIR Content ==="
+            ls -la "$BITRISE_DEPLOY_DIR"
     - deploy-to-itunesconnect-deliver@3:
         inputs:
         - connection: api_key
-    - deploy-to-bitrise-io@2: {}
+    - deploy-to-bitrise-io@2:
+        inputs:
+        - deploy_path: "$BITRISE_DEPLOY_DIR"
 
   primary:
     summary: Primary build workflow for verification.
@@ -42,13 +84,20 @@ workflows:
     - activate-ssh-key@4: {}
     - git-clone@8: {}
     - script@1:
-        title: Resolve Swift Package Dependencies
+        title: Ensure Built Web Frontend & Resolve Dependencies
         inputs:
         - content: |-
             #!/bin/bash
             set -ex
+            echo "================ Building Web Frontend Assets ================"
+            cd frontend
+            npm install
+            npx tsc -b
+            npm run build
+            cd ..
+            echo "================ Resolving Xcode Dependencies ================"
             xcodebuild -resolvePackageDependencies -project "$BITRISE_PROJECT_PATH"
-    - ios-auto-provision@1:
+    - manage-ios-code-signing@1:
         inputs:
         - distribution_type: app-store
     - xcode-archive@5:
@@ -56,9 +105,43 @@ workflows:
         - project_path: "$BITRISE_PROJECT_PATH"
         - scheme: "$BITRISE_SCHEME"
         - configuration: Release
+        - distribution_method: app-store
         - export_method: app-store
         - automatic_code_signing: api-key
+    - script@1:
+        title: Ensure Miran.ipa Artifact Export
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -e
+            echo "================ Verifying & Packaging IPA Artifact ================"
+            mkdir -p "$BITRISE_DEPLOY_DIR"
+            
+            IPA_FILE=$(find "$BITRISE_DEPLOY_DIR" -name "*.ipa" | head -n 1)
+            
+            if [ -n "$IPA_FILE" ]; then
+              echo "✅ Standard Bitrise Export IPA Found: $IPA_FILE"
+            else
+              echo "⚠️ Searching for Xcode Archive in $BITRISE_DEPLOY_DIR or system archives..."
+              ARCHIVE_PATH=$(find "$BITRISE_DEPLOY_DIR" ~/Library/Developer/Xcode/Archives -name "*.xcarchive" 2>/dev/null | head -n 1)
+              
+              if [ -n "$ARCHIVE_PATH" ]; then
+                echo "Found Archive at: $ARCHIVE_PATH. Generating Miran.ipa package..."
+                mkdir -p /tmp/ipa_pack/Payload
+                cp -R "$ARCHIVE_PATH/Products/Applications/"*.app /tmp/ipa_pack/Payload/
+                cd /tmp/ipa_pack
+                zip -r "$BITRISE_DEPLOY_DIR/Miran.ipa" Payload
+                echo "✅ Created Artifact: $BITRISE_DEPLOY_DIR/Miran.ipa"
+              else
+                echo "❌ Xcode Archive file not found! Check Xcode Archive log step."
+              fi
+            fi
+            
+            echo "=== Final $BITRISE_DEPLOY_DIR Content ==="
+            ls -la "$BITRISE_DEPLOY_DIR"
     - deploy-to-itunesconnect-deliver@3:
         inputs:
         - connection: api_key
-    - deploy-to-bitrise-io@2: {}
+    - deploy-to-bitrise-io@2:
+        inputs:
+        - deploy_path: "$BITRISE_DEPLOY_DIR"
