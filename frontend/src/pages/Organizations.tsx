@@ -22,6 +22,7 @@ export const Organizations: React.FC = () => {
 
   const [search, setSearch] = useState('');
   const [tabValue, setTabValue] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(12);
   const [view, setView] = useState<'cards' | 'table'>('cards');
@@ -49,12 +50,13 @@ export const Organizations: React.FC = () => {
 
   // Query
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['organizations', search, tabValue, page, rowsPerPage],
+    queryKey: ['organizations', search, tabValue, typeFilter, page, rowsPerPage],
     queryFn: async () => {
       const res = await apiClient.get('/organizations', {
         params: {
           search: search || undefined,
           status: tabValue !== 'all' ? tabValue : undefined,
+          typeId: typeFilter || undefined,
           page: page + 1,
           limit: rowsPerPage,
         },
@@ -204,6 +206,18 @@ export const Organizations: React.FC = () => {
             sx={{ minWidth: 280, flex: '0 1 320px' }}
             InputProps={{ startAdornment: <Search size={17} color={colour.faint} style={{ marginLeft: 8 }} /> }}
           />
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel id="org-type-filter-label">نوع الجهة</InputLabel>
+            <Select
+              labelId="org-type-filter-label"
+              label="نوع الجهة"
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+            >
+              <MenuItem value="">الكل</MenuItem>
+              {orgTypes?.map((t: any) => <MenuItem key={t.id} value={t.id}>{t.nameAr}</MenuItem>)}
+            </Select>
+          </FormControl>
           <Tabs value={tabValue} onChange={(_, val) => setTabValue(val)} variant="scrollable" scrollButtons="auto"
             sx={{ minHeight: 40, '& .MuiTab-root': { minHeight: 40, fontSize: 12.5, fontWeight: 700 } }}>
             <Tab label="الكل" value="all" />

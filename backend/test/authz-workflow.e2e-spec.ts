@@ -146,8 +146,8 @@ describe('University → cluster → batch → distribution → hospital', () =>
     const directorNotifications = notifications.filter((n) => n.userId === director!.id);
     // Addressed by capability, so the training director — not just the legacy
     // cluster_administrator — is told.
-    expect(directorNotifications.length).toBeGreaterThan(0);
-    expect(directorNotifications[0].referenceId).toBe(requestId);
+    const targetNotif = directorNotifications.find((n) => n.referenceId === requestId);
+    expect(targetNotif).toBeDefined();
 
     // The bell count and the list agree, from the same context.
     const countRes = await http.get('/notifications/unread-count').set(auth(directorToken));

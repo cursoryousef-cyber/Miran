@@ -12,6 +12,43 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class LogbookController {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * A plain trainer may only act on trainees currently assigned to them —
+   * an open TraineeAllocation or an active/scheduled Rotation naming their
+   * own TrainerProfile. Supervisory/admin roles keep the broader org-scoped
+   * access they already had; this only tightens the trainer case, which had
+   * no check at all (any trainer could approve/reject/view any trainee's
+   * logbook or competencies by guessing/tampering with the id).
+   */
+  private async assertTrainerScope(user: IAuthenticatedUser, traineeProfileId: string): Promise<void> {
+    const isPlainTrainer =
+      user.roles.includes('trainer') &&
+      !user.roles.includes('platform_owner') &&
+      !user.roles.includes('org_manager') &&
+      !user.roles.includes('academic_supervisor') &&
+      !user.roles.includes('training_supervisor') &&
+      !user.roles.includes('hospital_training_admin') &&
+      !user.roles.includes('cluster_administrator') &&
+      !user.roles.includes('training_director');
+    if (!isPlainTrainer) return;
+
+    const trainer = await this.prisma.trainerProfile.findFirst({
+      where: { person: { userAccounts: { some: { id: user.accountId } } } },
+    });
+    if (!trainer) throw new ForbiddenException('لا يوجد ملف مدرب مرتبط بهذا الحساب');
+
+    const assigned =
+      (await this.prisma.traineeAllocation.findFirst({
+        where: { traineeProfileId, trainerProfileId: trainer.id, status: 'open' },
+      })) ||
+      (await this.prisma.rotation.findFirst({
+        where: { traineeProfileId, trainerProfileId: trainer.id, status: { in: ['scheduled', 'active'] } },
+      }));
+    if (!assigned) {
+      throw new ForbiddenException('غير مصرح لك بالوصول لبيانات متدرب غير مسند إليك');
+    }
+  }
+
   // ─── 1. مكتبة الإجراءات الطبية (Procedures Catalog) ──────────────────────
   @Get('procedures')
   @RequireRoles('trainee', 'trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
@@ -118,7 +155,8 @@ export class LogbookController {
   @Get('trainee-logs/:traineeId')
   @RequireRoles('trainer', 'academic_supervisor', 'training_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'org_manager', 'platform_owner')
   @ApiOperation({ summary: 'عرض سجل الحالات لمتدرب محدد — للمدرب والمشرف الأكاديمي' })
-  async getTraineeLogs(@Param('traineeId') traineeId: string) {
+  async getTraineeLogs(@Param('traineeId') traineeId: string, @CurrentUser() user: IAuthenticatedUser) {
+    await this.assertTrainerScope(user, traineeId);
     const logs = await this.prisma.clinicalCaseLog.findMany({
       where: { traineeProfileId: traineeId },
       include: {
@@ -308,6 +346,8 @@ export class LogbookController {
     const nextStatus = isAcademic ? 'completed' : 'trainer_approved';
 
     const previous = await this.prisma.clinicalCaseLog.findUnique({ where: { id: logId } });
+    if (!previous) throw new BadRequestException('السجل غير موجود');
+    await this.assertTrainerScope(user, previous.traineeProfileId);
     const updatedLog = await this.prisma.clinicalCaseLog.update({
       where: { id: logId },
       data: {
@@ -398,15 +438,25 @@ export class LogbookController {
 
   @Put('cases/:id/reject')
   @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
-  async rejectCaseAlias(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
-    return this.transitionLog(id, user, 'rejected', 'logbook.reject');
+  async rejectCaseAlias(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser, @Body() dto: { reason?: string; feedback?: string }) {
+    return this.rejectLogEntry(id, user, { feedback: dto.reason ?? dto.feedback });
   }
 
   @Patch('entries/:id/reject')
   @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
   async rejectLogEntry(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser, @Body() dto: { feedback?: string }) {
+    if (!dto.feedback?.trim()) {
+      throw new BadRequestException('سبب الرفض إلزامي');
+    }
+    const target = await this.prisma.clinicalCaseLog.findUnique({ where: { id } });
+    if (!target) throw new BadRequestException('السجل غير موجود');
+    await this.assertTrainerScope(user, target.traineeProfileId);
+    if (target.organizationId !== user.organizationId && !user.roles.includes('platform_owner')) {
+      throw new ForbiddenException('غير مصرح بالوصول لسجل خارج جهتك');
+    }
+
     const result = await this.transitionLog(id, user, 'rejected', 'logbook.reject');
-    if (result.success && dto.feedback) {
+    if (result.success) {
       await this.prisma.logbookSignoff.create({
         data: { caseLogId: id, signerId: user.accountId, signerRole: user.roles[0] || 'reviewer', feedback: dto.feedback },
       });
@@ -428,7 +478,7 @@ export class LogbookController {
 
   // ─── 4. حقيبة الكفاءات والتقدم (Competency Portfolio Progress) ───────────
   @Get('competencies')
-  @RequireRoles('trainee', 'trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_training_admin', 'academic_supervisor', 'org_manager', 'platform_owner')
   @ApiOperation({ summary: 'عرض كفاءات وتقدم المتدرب ونسبة الإنجاز المطلوبة' })
   async getCompetencies(@CurrentUser() user: IAuthenticatedUser, @Query('traineeId') traineeId?: string) {
     let targetTraineeId = traineeId;
@@ -440,9 +490,16 @@ export class LogbookController {
       targetTraineeId = profile?.id;
     }
 
-    if (!targetTraineeId) {
-    }
     if (!targetTraineeId) return { data: [], overallPercentage: 0 };
+    if (traineeId) {
+      if (user.roles.includes('trainee') && !user.roles.includes('platform_owner') && !user.roles.includes('org_manager')) {
+        const own = await this.prisma.traineeProfile.findFirst({
+          where: { person: { userAccounts: { some: { id: user.accountId } } } },
+        });
+        if (own?.id !== targetTraineeId) throw new ForbiddenException('غير مصرح بالوصول لبيانات متدرب آخر');
+      }
+      await this.assertTrainerScope(user, targetTraineeId);
+    }
 
     const competencies = await this.prisma.competencyProgress.findMany({
       where: { traineeProfileId: targetTraineeId },
@@ -463,7 +520,7 @@ export class LogbookController {
 
   // ─── 5. إحصائيات والتحليلات اللحظية للـ Logbook ──────────────────────────
   @Get('dashboard-stats')
-  @RequireRoles('trainee', 'trainer', 'academic_supervisor', 'org_manager', 'platform_owner', 'hospital_administrator')
+  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_training_admin', 'academic_supervisor', 'org_manager', 'platform_owner', 'hospital_administrator')
   @ApiOperation({ summary: 'إحصائيات Logbook اللحظية للدشبورد' })
   async getLogbookStats(@CurrentUser() user: IAuthenticatedUser) {
     let profile = await this.prisma.traineeProfile.findFirst({

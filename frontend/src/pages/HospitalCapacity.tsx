@@ -97,7 +97,7 @@ export const HospitalCapacity: React.FC = () => {
       return res.data;
     },
     enabled: Boolean(hospitalId),
-    refetchInterval: 20000,
+    refetchInterval: (query) => (query.state.status === 'error' ? false : 30000),
   });
 
   const invalidate = () => {

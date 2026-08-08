@@ -36,7 +36,7 @@ export class OperationsController {
   async trainerDashboard(@CurrentUser() user: IAuthenticatedUser) {
     const trainer = await this.myTrainer(user);
     const traineeWhere = trainer
-      ? { rotations: { some: { trainerProfileId: trainer.id, organizationId: user.organizationId } } }
+      ? { rotations: { some: { trainerProfileId: trainer.id, organizationId: user.organizationId, status: 'active' } } }
       : { organizationId: user.organizationId };
     const assignedTrainees = await this.prisma.traineeProfile.count({ where: traineeWhere });
     const pendingAttendance = await this.prisma.attendance.count({ where: { organizationId: user.organizationId, status: 'correction_requested' } });
@@ -49,7 +49,32 @@ export class OperationsController {
     const openCalls = await this.prisma.trainerCall.count({ where: { organizationId: user.organizationId, status: 'active' } });
     const dueTasks = await this.prisma.task.count({ where: { organizationId: user.organizationId, assignedToId: user.accountId, status: { not: 'completed' } } });
     const unreadNotifications = await this.prisma.notification.count({ where: { userId: user.accountId, isRead: false } });
-    return { data: { assignedTrainees, pendingAttendance, pendingLogbook, activeRotations, openCalls, dueTasks, unreadNotifications } };
+
+    const assignedTraineeIds = (
+      await this.prisma.traineeProfile.findMany({ where: traineeWhere, select: { id: true } })
+    ).map((t) => t.id);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todaysAttendance = assignedTraineeIds.length
+      ? await this.prisma.attendance.findMany({ where: { traineeProfileId: { in: assignedTraineeIds }, date: today } })
+      : [];
+    const presentToday = todaysAttendance.filter((a) => a.status === 'present').length;
+    const notCheckedIn = assignedTraineeIds.length - todaysAttendance.length;
+    // Evaluation rows only exist once submitted (submittedAt is non-nullable),
+    // so "pending" is derived the same way the existing my-pending endpoint
+    // derives it, not by querying Evaluation directly.
+    const pendingEvaluationsResult = await this.evaluationService.myPendingEvaluations(user).catch(() => ({ data: [] as unknown[] }));
+    const pendingEvaluations = (pendingEvaluationsResult as any)?.data?.length ?? 0;
+    const incompleteCompetencies = assignedTraineeIds.length
+      ? await this.prisma.competencyProgress.count({ where: { traineeProfileId: { in: assignedTraineeIds }, status: { not: 'completed' } } })
+      : 0;
+
+    return {
+      data: {
+        assignedTrainees, pendingAttendance, pendingLogbook, activeRotations, openCalls, dueTasks, unreadNotifications,
+        presentToday, absentOrNotCheckedIn: notCheckedIn, pendingEvaluations, incompleteCompetencies,
+      },
+    };
   }
 
   @Get('trainer/assigned-interns')
@@ -57,11 +82,218 @@ export class OperationsController {
   async assignedInterns(@CurrentUser() user: IAuthenticatedUser) {
     const trainer = await this.myTrainer(user);
     const data = await this.prisma.traineeProfile.findMany({
-      where: trainer ? { rotations: { some: { trainerProfileId: trainer.id, organizationId: user.organizationId } } } : { organizationId: user.organizationId },
-      include: { person: true, organization: true, rotations: { include: { department: true, trainerProfile: { include: { person: true } } } } },
+      where: trainer ? { rotations: { some: { trainerProfileId: trainer.id, organizationId: user.organizationId, status: 'active' } } } : { organizationId: user.organizationId },
+      include: { person: true, organization: true, rotations: { where: { status: 'active' }, include: { department: true, trainerProfile: { include: { person: true } } } } },
       orderBy: { createdAt: 'desc' },
     });
     return { data };
+  }
+
+  /**
+   * Assignment requests awaiting this trainer's accept/reject. Scope is
+   * derived from the trainer's own JWT → TrainerProfile, never from a client
+   * -supplied trainerProfileId, so a trainer only ever sees rotations where
+   * they themselves are trainerProfileId.
+   */
+  @Get('trainer/assignment-requests')
+  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  async assignmentRequests(@CurrentUser() user: IAuthenticatedUser) {
+    const trainer = await this.myTrainer(user);
+    if (!trainer) return { data: [] };
+    const data = await this.prisma.rotation.findMany({
+      where: { trainerProfileId: trainer.id, status: 'pending_acceptance' },
+      include: {
+        traineeProfile: { include: { person: true, program: true, sponsorOrganization: true } },
+        department: true,
+        organization: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return { data };
+  }
+
+  @Post('trainer/assignment-requests/:rotationId/accept')
+  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  async acceptAssignmentRequest(@Param('rotationId') rotationId: string, @CurrentUser() user: IAuthenticatedUser) {
+    const trainer = await this.myTrainer(user);
+    const rotation = await this.prisma.rotation.findFirst({
+      where: { id: rotationId, trainerProfileId: trainer?.id, status: 'pending_acceptance' },
+    });
+    if (!rotation) throw new BadRequestException('لا يوجد طلب إسناد بانتظار قبولك بهذا المعرف');
+
+    const data = await this.prisma.rotation.update({ where: { id: rotationId }, data: { status: 'active' } });
+    await this.audit(user, 'rotation.trainer_accept', 'Rotation', rotationId, data);
+    return { success: true, data };
+  }
+
+  @Post('trainer/assignment-requests/:rotationId/reject')
+  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  async rejectAssignmentRequest(
+    @Param('rotationId') rotationId: string,
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body() dto: { reason?: string },
+  ) {
+    if (!dto.reason?.trim()) throw new BadRequestException('سبب الرفض إلزامي');
+    const trainer = await this.myTrainer(user);
+    const rotation = await this.prisma.rotation.findFirst({
+      where: { id: rotationId, trainerProfileId: trainer?.id, status: 'pending_acceptance' },
+    });
+    if (!rotation) throw new BadRequestException('لا يوجد طلب إسناد بانتظار قبولك بهذا المعرف');
+
+    const data = await this.prisma.rotation.update({
+      where: { id: rotationId },
+      data: { status: 'rejected', completionNotes: dto.reason },
+    });
+    await this.audit(user, 'rotation.trainer_reject', 'Rotation', rotationId, data);
+
+    // Send the assignment back to the hospital's training administration by
+    // clearing the trainer/department on the still-open allocation — the same
+    // existing /allocations/department call reassigns it, no new workflow.
+    const allocation = await this.prisma.traineeAllocation.findFirst({
+      where: { traineeProfileId: rotation.traineeProfileId, hospitalId: rotation.organizationId, status: 'open' },
+    });
+    if (allocation) {
+      await this.prisma.traineeAllocation.update({
+        where: { id: allocation.id },
+        data: { trainerProfileId: null, departmentId: null },
+      });
+      if (allocation.performedById) {
+        await this.notify(
+          rotation.organizationId,
+          allocation.performedById,
+          'رفض المدرب طلب الإسناد',
+          `تم رفض إسناد متدرب — السبب: ${dto.reason}`,
+          'trainee_assignment_rejected',
+          'Rotation',
+          rotationId,
+        );
+      }
+    }
+    return { success: true, data };
+  }
+
+  /**
+   * Trainee groups — the trainer's own assigned trainees (same scope query as
+   * assigned-interns) bucketed by department + active rotation, so a trainer
+   * with several cohorts can see and message one at a time. Not a new entity:
+   * grouping is computed over Rotation/TraineeAllocation, which already carry
+   * department/dates, so there is nothing here to persist.
+   */
+  @Get('trainer/groups')
+  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  async trainerGroups(@CurrentUser() user: IAuthenticatedUser) {
+    const trainer = await this.myTrainer(user);
+    const trainees = await this.prisma.traineeProfile.findMany({
+      where: trainer
+        ? { rotations: { some: { trainerProfileId: trainer.id, organizationId: user.organizationId, status: 'active' } } }
+        : { organizationId: user.organizationId },
+      include: {
+        person: true,
+        rotations: { where: { status: 'active' }, include: { department: true } },
+      },
+    });
+
+    const groups = new Map<string, { departmentId: string; departmentNameAr: string; trainees: unknown[] }>();
+    for (const t of trainees) {
+      const rotation = t.rotations[0];
+      if (!rotation) continue;
+      const key = rotation.departmentId;
+      if (!groups.has(key)) {
+        groups.set(key, { departmentId: key, departmentNameAr: rotation.department.nameAr, trainees: [] });
+      }
+      groups.get(key)!.trainees.push({ id: t.id, nameAr: t.person.nameAr, traineeNumber: t.traineeNumber, startDate: rotation.startDate, endDate: rotation.endDate });
+    }
+
+    return { data: Array.from(groups.values()) };
+  }
+
+  /**
+   * Incoming requests requiring THIS trainer's action — not hospital-wide.
+   * Aggregates the same reads the dedicated endpoints already expose
+   * (evaluationService.myPendingEvaluations, submitted clinical logs scoped
+   * to the trainer) into one worklist; no new workflow or storage.
+   */
+  @Get('trainer/incoming-requests')
+  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  async trainerIncomingRequests(@CurrentUser() user: IAuthenticatedUser) {
+    const trainer = await this.myTrainer(user);
+    const [pendingEvaluations, pendingLogs] = await Promise.all([
+      this.evaluationService.myPendingEvaluations(user).catch(() => ({ data: [] as any[] })),
+      trainer
+        ? this.prisma.clinicalCaseLog.findMany({
+            where: { trainerProfileId: trainer.id, status: { in: ['submitted', 'modification_requested'] } },
+            include: { traineeProfile: { include: { person: true } } },
+            orderBy: { performedAt: 'desc' },
+            take: 20,
+          })
+        : [],
+    ]);
+
+    return {
+      data: {
+        evaluations: (pendingEvaluations as any)?.data ?? [],
+        clinicalLogs: pendingLogs,
+      },
+    };
+  }
+
+  /**
+   * Trainee detail drawer for a trainer — full picture of one trainee, scoped
+   * to only the trainees currently assigned to the calling trainer. Reuses the
+   * same reads as the trainee's own dashboard; the only new thing is the scope
+   * check, which is the actual security boundary here (traineeId is a URL
+   * param and must not by itself grant access).
+   */
+  @Get('trainer/trainee/:id')
+  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  async trainerTraineeDetail(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
+    const isPlainTrainer =
+      user.roles.includes('trainer') &&
+      !user.roles.includes('training_supervisor') &&
+      !user.roles.includes('org_manager') &&
+      !user.roles.includes('platform_owner');
+    if (isPlainTrainer) {
+      const trainer = await this.myTrainer(user);
+      const assigned =
+        trainer &&
+        ((await this.prisma.traineeAllocation.findFirst({
+          where: { traineeProfileId: id, trainerProfileId: trainer.id, status: 'open' },
+        })) ||
+          (await this.prisma.rotation.findFirst({
+            where: { traineeProfileId: id, trainerProfileId: trainer.id, status: { in: ['scheduled', 'active'] } },
+          })));
+      if (!assigned) throw new BadRequestException('هذا المتدرب غير مسند إليك');
+    }
+
+    const profile = await this.prisma.traineeProfile.findUnique({
+      where: { id },
+      include: { person: true, organization: true, program: true },
+    });
+    if (!profile) return { data: null };
+
+    const [attendance, rotation, tasks, clinicalLogs, competencies, evaluations] = await Promise.all([
+      this.prisma.attendance.findMany({ where: { traineeProfileId: id }, orderBy: { date: 'desc' }, take: 31 }),
+      this.prisma.rotation.findFirst({ where: { traineeProfileId: id, status: 'active' }, include: { department: true, trainerProfile: { include: { person: true } } } }),
+      this.prisma.task.findMany({ where: { assignedTo: { personId: profile.personId } }, orderBy: { dueDate: 'asc' }, take: 20 }),
+      this.prisma.clinicalCaseLog.findMany({ where: { traineeProfileId: id }, orderBy: { performedAt: 'desc' }, take: 20 }),
+      this.prisma.competencyProgress.findMany({ where: { traineeProfileId: id }, include: { procedure: true } }),
+      this.prisma.evaluation.findMany({ where: { evaluatee: { personId: profile.personId } }, orderBy: { submittedAt: 'desc' }, take: 10 }),
+    ]);
+
+    const present = attendance.filter((a) => a.status === 'present').length;
+    return {
+      data: {
+        profile,
+        rotation,
+        attendance,
+        attendanceToday: attendance.find((a) => new Date(a.date).toDateString() === new Date().toDateString()) ?? null,
+        attendanceRate: attendance.length ? Math.round((present / attendance.length) * 100) : 0,
+        tasks,
+        clinicalLogs,
+        competencies,
+        evaluations,
+      },
+    };
   }
 
   @Get('trainee/dashboard')
@@ -161,7 +393,12 @@ export class OperationsController {
 
   @Patch('attendance/:id/check-out')
   @RequireRoles('trainee')
-  async checkOut(@Param('id') id: string) {
+  async checkOut(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
+    const profile = await this.myTrainee(user);
+    const existing = await this.prisma.attendance.findFirst({ where: { id, traineeProfileId: profile?.id } });
+    if (!existing) throw new BadRequestException('سجل الحضور غير موجود');
+    if (!existing.checkIn) throw new BadRequestException('لا يمكن تسجيل الانصراف قبل تسجيل الحضور');
+    if (existing.checkOut) throw new BadRequestException('تم تسجيل الانصراف مسبقاً لهذا اليوم');
     const data = await this.prisma.attendance.update({ where: { id }, data: { checkOut: new Date() } });
     return { success: true, data };
   }
@@ -286,6 +523,33 @@ export class OperationsController {
   @Post('tasks')
   @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
   async createTask(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
+    // A plain trainer may only assign tasks to a trainee currently assigned to
+    // them — otherwise nothing stopped dto.assignedToId from naming any account
+    // on the platform.
+    const isPlainTrainer =
+      user.roles.includes('trainer') &&
+      !user.roles.includes('training_supervisor') &&
+      !user.roles.includes('org_manager') &&
+      !user.roles.includes('platform_owner');
+    if (isPlainTrainer) {
+      const trainer = await this.myTrainer(user);
+      const targetProfile = await this.prisma.traineeProfile.findFirst({
+        where: { person: { userAccounts: { some: { id: dto.assignedToId } } } },
+      });
+      const assigned =
+        trainer && targetProfile
+          ? (await this.prisma.traineeAllocation.findFirst({
+              where: { traineeProfileId: targetProfile.id, trainerProfileId: trainer.id, status: 'open' },
+            })) ||
+            (await this.prisma.rotation.findFirst({
+              where: { traineeProfileId: targetProfile.id, trainerProfileId: trainer.id, status: { in: ['scheduled', 'active'] } },
+            }))
+          : null;
+      if (!assigned) {
+        throw new BadRequestException('لا يمكن إسناد مهمة لمتدرب غير مسند إليك');
+      }
+    }
+
     const data = await this.prisma.task.create({
       data: {
         organizationId: user.organizationId,
@@ -356,6 +620,9 @@ export class OperationsController {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const existing = await this.prisma.attendance.findFirst({ where: { traineeProfileId: profile.id, date: today } });
+    if (existing?.checkIn && !existing.checkOut) {
+      throw new BadRequestException('تم تسجيل حضورك اليوم بالفعل — لا يمكن تسجيل الحضور مرتين');
+    }
     const attendance = existing
       ? await this.prisma.attendance.update({ where: { id: existing.id }, data: { checkIn: new Date(), status: 'present', ...data } })
       : await this.prisma.attendance.create({ data: { organizationId: user.organizationId, traineeProfileId: profile.id, date: today, checkIn: new Date(), status: 'present', ...data } });

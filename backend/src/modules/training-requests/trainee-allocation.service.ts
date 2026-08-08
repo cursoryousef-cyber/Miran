@@ -40,6 +40,7 @@ import {
   ScopeContextService,
 } from '../../common/authz';
 import { CapacityService } from '../organizations/capacity.service';
+import { ActivationService } from './activation.service';
 
 export type AllocationAction =
   | 'auto'
@@ -63,6 +64,7 @@ export class TraineeAllocationService {
     private prisma: PrismaService,
     private scopeContext: ScopeContextService,
     private capacityService: CapacityService,
+    private activationService: ActivationService,
   ) {}
 
   /** The single open allocation for a trainee row, if any. */
@@ -270,8 +272,14 @@ export class TraineeAllocationService {
       traineeProfileId: string | null;
     },
   ) {
+    let txResult: {
+      data: Prisma.TraineeAllocationGetPayload<Record<string, never>>;
+      closedAllocationId: string | null;
+      success: true;
+      message: string;
+    };
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      txResult = await this.prisma.$transaction(async (tx) => {
         // Lock the hospital row for UPDATE to serialize concurrent allocation requests
         await tx.$executeRaw`SELECT id FROM organizations WHERE id = ${target.hospitalId}::uuid FOR UPDATE`;
 
@@ -426,6 +434,70 @@ export class TraineeAllocationService {
       }
       throw e;
     }
+
+    // Post-commit: a placement that now names a hospital, a department and a
+    // trainer is a trainee ready to actually start — activate them so their
+    // trainer and their own dashboard can see it. Run outside the allocation
+    // transaction (activation does its own writes, including plan
+    // instantiation) and never let a hiccup here undo an allocation that
+    // already succeeded; the row remains allocated and idempotent activation
+    // can be retried by any later allocation call that still satisfies the
+    // condition below.
+    //
+    // This is deliberately independent of the legacy acceptance-chain trigger
+    // (TrainingRequest.status → 'active'), which requires a
+    // hospital_administrator accept step that role no longer has the
+    // capability to perform — see ActivationService.activateSingleRow for the
+    // full explanation. Gating trainee visibility on a chain step that can no
+    // longer be reached is the reason the trainer dashboard read zero.
+    const { data: openAllocation } = txResult;
+    if (
+      openAllocation.traineeProfileId &&
+      openAllocation.hospitalId &&
+      openAllocation.departmentId &&
+      openAllocation.trainerProfileId
+    ) {
+      try {
+        await this.activationService.activateSingleRow(traineeRowId, user.accountId);
+        // The trainer must accept the assignment before it counts as theirs —
+        // downgrade the Rotation(s) activation just opened for this trainer from
+        // 'active' to a pending state. Every scope check elsewhere (trainer
+        // dashboard, assigned-interns, task/logbook/competency scope) already
+        // filters on Rotation.status, so this alone keeps the trainee invisible
+        // to the trainer until they act — no other code needed to change.
+        await this.prisma.rotation.updateMany({
+          where: {
+            traineeProfileId: openAllocation.traineeProfileId,
+            trainerProfileId: openAllocation.trainerProfileId,
+            status: 'active',
+          },
+          data: { status: 'pending_acceptance' },
+        });
+        const trainerAccount = await this.prisma.trainerProfile.findUnique({
+          where: { id: openAllocation.trainerProfileId },
+          select: { person: { select: { userAccounts: { select: { id: true }, take: 1 } } } },
+        });
+        const trainerAccountId = trainerAccount?.person.userAccounts[0]?.id;
+        if (trainerAccountId) {
+          await this.prisma.notification.create({
+            data: {
+              organizationId: openAllocation.hospitalId,
+              userId: trainerAccountId,
+              titleAr: 'طلب إسناد متدرب جديد',
+              bodyAr: 'لديك متدرب مسند بانتظار قبولك — راجع طلبات إسناد المتدربين',
+              type: 'trainee_assignment_request',
+              referenceType: 'Rotation',
+              referenceId: openAllocation.id,
+              sentVia: 'in_app',
+            },
+          });
+        }
+      } catch (e) {
+        console.warn('Post-allocation activation failed (allocation itself succeeded):', e);
+      }
+    }
+
+    return txResult;
   }
 
   /**

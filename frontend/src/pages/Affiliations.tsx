@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { FileText, CheckCircle2, Clock, Building2, Send, AlertCircle, RefreshCw, FolderGit2, Clock3, Sparkles, Users, XCircle, Trash2 } from 'lucide-react';
+import { FileText, CheckCircle2, Clock, Building2, Send, AlertCircle, RefreshCw, FolderGit2, Clock3, Sparkles, Users, XCircle, Trash2, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import {
   Button,
   Table,
@@ -62,10 +63,135 @@ export const Affiliations: React.FC = () => {
     { departmentNameAr: 'الطوارئ', durationWeeks: 8 },
     { departmentNameAr: 'طب الأسرة / اختيارية', durationWeeks: 8 },
   ]);
-  const [reqTrainees, setReqTrainees] = useState<Array<{ academicNumber: string; nationalId: string; nameAr: string }>>([
+  const [reqTrainees, setReqTrainees] = useState<Array<{
+    academicNumber: string;
+    nationalId: string;
+    nameAr: string;
+    specialty?: string;
+    startDate?: string;
+    endDate?: string;
+    email?: string;
+    mobile?: string;
+  }>>([
     { academicNumber: '441001', nationalId: '1099112233', nameAr: 'أحمد محمد علي' },
     { academicNumber: '441002', nationalId: '1099112234', nameAr: 'خالد عبدالله عمر' },
   ]);
+
+  // Excel Roster Import State
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [excelErrors, setExcelErrors] = useState<Array<{ rowNumber: number; academicNumber?: string; nationalId?: string; errors: string[] }>>([]);
+  const [excelSuccessMsg, setExcelSuccessMsg] = useState<string | null>(null);
+
+  const handleRosterExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setExcelErrors([]);
+    setExcelSuccessMsg(null);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rawData: any[] = XLSX.utils.sheet_to_json(ws);
+
+        if (!rawData || rawData.length === 0) {
+          setExcelErrors([{ rowNumber: 1, errors: ['الملف المرفق فارغ ولا يحتوي على بيانات'] }]);
+          return;
+        }
+
+        const newParsedRows: any[] = [];
+        const fileErrors: Array<{ rowNumber: number; academicNumber?: string; nationalId?: string; errors: string[] }> = [];
+
+        const seenAcademicNumbers = new Map<string, number>();
+        const seenNationalIds = new Map<string, number>();
+
+        rawData.forEach((row, idx) => {
+          const rowNumber = idx + 2; // 1-based header offset
+          const rowIssues: string[] = [];
+
+          const academicNumber = String(
+            row['الرقم الأكاديمي'] || row['الرقم الجامعي'] || row['Academic Number'] || row['academicNumber'] || row['academicId'] || ''
+          ).trim();
+
+          const nationalId = String(
+            row['رقم الهوية'] || row['الهوية الوطنية'] || row['رقم الهوية الوطنية'] || row['رقم الهوية / السجل المدني'] || row['National ID'] || row['nationalId'] || ''
+          ).trim();
+
+          const nameAr = String(
+            row['الاسم بالعربية'] || row['اسم المتدرب'] || row['الاسم'] || row['Name'] || row['nameAr'] || ''
+          ).trim();
+
+          const specialty = String(row['التخصص'] || row['Specialty'] || row['specialty'] || '').trim();
+          const startDate = String(row['تاريخ البداية'] || row['Start Date'] || row['startDate'] || '').trim();
+          const endDate = String(row['تاريخ النهاية'] || row['End Date'] || row['endDate'] || '').trim();
+          const email = String(row['البريد الإلكتروني'] || row['Email'] || row['email'] || '').trim();
+          const mobile = String(row['رقم الجوال'] || row['الجوال'] || row['Mobile'] || row['phone'] || '').trim();
+
+          if (!academicNumber) rowIssues.push('الرقم الأكاديمي مطلوب');
+          if (!nationalId) {
+            rowIssues.push('رقم الهوية الوطنية مطلوب');
+          } else if (!/^\d{10}$/.test(nationalId)) {
+            rowIssues.push('رقم الهوية يجب أن يكون 10 أرقام');
+          }
+          if (!nameAr) rowIssues.push('الاسم بالعربية مطلوب');
+
+          if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
+            rowIssues.push('تاريخ نهاية التدريب يجب أن يكون بعد تاريخ البداية');
+          }
+
+          // Duplicate checks within file
+          if (academicNumber) {
+            if (seenAcademicNumbers.has(academicNumber)) {
+              const prevRow = seenAcademicNumbers.get(academicNumber);
+              rowIssues.push(`الرقم الأكاديمي (${academicNumber}) مكرر داخل الملف (الصف ${prevRow} والصف ${rowNumber})`);
+            } else {
+              seenAcademicNumbers.set(academicNumber, rowNumber);
+            }
+          }
+
+          if (nationalId) {
+            if (seenNationalIds.has(nationalId)) {
+              const prevRow = seenNationalIds.get(nationalId);
+              rowIssues.push(`رقم الهوية الوطنية (${nationalId}) مكرر داخل الملف (الصف ${prevRow} والصف ${rowNumber})`);
+            } else {
+              seenNationalIds.set(nationalId, rowNumber);
+            }
+          }
+
+          if (rowIssues.length > 0) {
+            fileErrors.push({ rowNumber, academicNumber, nationalId, errors: rowIssues });
+          } else {
+            newParsedRows.push({
+              academicNumber,
+              nationalId,
+              nameAr,
+              specialty: specialty || undefined,
+              startDate: startDate || undefined,
+              endDate: endDate || undefined,
+              email: email || undefined,
+              mobile: mobile || undefined,
+            });
+          }
+        });
+
+        // All-or-nothing check: if errors exist anywhere in file, refuse import & display error preview
+        if (fileErrors.length > 0) {
+          setExcelErrors(fileErrors);
+        } else {
+          setReqTrainees(newParsedRows);
+          setExcelSuccessMsg(`تم استيراد ${newParsedRows.length} متدرب من ملف Excel بنجاح إلى القائمة!`);
+        }
+      } catch (err: any) {
+        setExcelErrors([{ rowNumber: 1, errors: [`فشل قراءة الملف — ${err?.message || 'تأكد من صيغة الملف'}`] }]);
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['training-requests'],
@@ -531,16 +657,56 @@ export const Affiliations: React.FC = () => {
 
           {/* Candidate Trainees Roster */}
           <div style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', backgroundColor: '#F8FAFC' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
               <span style={{ fontWeight: 800, color: '#0F172A' }}>قائمة أطباء الامتياز / المرشحين (Roster — {reqTrainees.length} متدرب)</span>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => setReqTrainees([...reqTrainees, { academicNumber: `44100${reqTrainees.length + 1}`, nationalId: `109911223${reqTrainees.length + 5}`, nameAr: 'متدرب جديد' }])}
-              >
-                + إضافة متدرب
-              </Button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  hidden
+                  accept=".xlsx, .xls, .csv"
+                  onChange={handleRosterExcelUpload}
+                />
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="success"
+                  startIcon={<FileSpreadsheet size={16} />}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  استيراد Excel
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setReqTrainees([...reqTrainees, { academicNumber: `44100${reqTrainees.length + 1}`, nationalId: `109911223${reqTrainees.length + 5}`, nameAr: 'متدرب جديد' }])}
+                >
+                  + إضافة متدرب
+                </Button>
+              </div>
             </div>
+
+            {/* Excel Errors Preview Alert */}
+            {excelErrors.length > 0 && (
+              <Alert severity="error" onClose={() => setExcelErrors([])} style={{ marginBottom: '12px' }}>
+                <strong>تعذّر الاستيراد — وُجدت أخطاء في {excelErrors.length} صف من ملف Excel:</strong>
+                <div style={{ maxHeight: '150px', overflowY: 'auto', marginTop: '8px', fontSize: '12px' }}>
+                  {excelErrors.map((err, idx) => (
+                    <div key={idx} style={{ padding: '2px 0' }}>
+                      • الصف <strong>{err.rowNumber}</strong> {err.academicNumber ? `(الأكاديمي: ${err.academicNumber})` : ''} {err.nationalId ? `(الهوية: ${err.nationalId})` : ''}: {err.errors.join(' | ')}
+                    </div>
+                  ))}
+                </div>
+              </Alert>
+            )}
+
+            {/* Excel Success Message Alert */}
+            {excelSuccessMsg && (
+              <Alert severity="success" onClose={() => setExcelSuccessMsg(null)} style={{ marginBottom: '12px' }}>
+                {excelSuccessMsg}
+              </Alert>
+            )}
+
             {reqTrainees.map((t, idx) => (
               <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr 40px', gap: '12px', marginBottom: '8px', alignItems: 'center' }}>
                 <TextField

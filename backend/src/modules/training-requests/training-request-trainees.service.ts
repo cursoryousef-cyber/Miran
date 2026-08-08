@@ -626,6 +626,27 @@ export class TrainingRequestTraineesService {
         });
       }
 
+      // A role alone does not let this account sign in: AuthService.login
+      // resolves the organisation to authenticate into from membership
+      // (OrganizationAssignment, falling back to UserOrganization), not from
+      // UserRole. Without this row a newly-approved trainee had a role and a
+      // profile but literally could not log in — "المستخدم غير مرتبط بأي جهة
+      // تابعة للنظام" — which meant nobody could ever reach the trainee
+      // dashboard this promotion exists to make reachable, regardless of any
+      // later allocation.
+      await tx.userOrganization.upsert({
+        where: {
+          userAccountId_organizationId: { userAccountId: account.id, organizationId: request.targetOrgId },
+        },
+        create: {
+          userAccountId: account.id,
+          organizationId: request.targetOrgId,
+          isPrimary: true,
+          isActive: true,
+        },
+        update: { isActive: true },
+      });
+
       const profile = await tx.traineeProfile.upsert({
         where: { personId: person.id },
         create: {

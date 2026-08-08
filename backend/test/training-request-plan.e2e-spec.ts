@@ -439,4 +439,102 @@ describe('One-call submission — request, plan and roster together', () => {
     expect(await prisma.trainingRequest.count()).toBe(before.requests);
     expect(await prisma.trainingPlan.count()).toBe(before.plans);
   });
+
+  describe('Parsed roster validation & duplicate prevention for inline request trainees', () => {
+    it('accepts a valid parsed roster inline and persists all trainee rows', async () => {
+      const res = await http.post('/training-requests').set(auth(uniToken)).send({
+        targetOrgId: s.cluster.id,
+        programId: s.program.id,
+        specialty: 'internal_medicine',
+        ...WINDOW,
+        studentCount: 2,
+        rotations: STANDARD_ROTATIONS,
+        trainees: [
+          { academicNumber: 'EXCEL-801', nationalId: '9880000001', nameAr: 'متدرب إكسل 1', specialty: 'internal_medicine' },
+          { academicNumber: 'EXCEL-802', nationalId: '9880000002', nameAr: 'متدرب إكسل 2', specialty: 'internal_medicine' },
+        ],
+      });
+      expect(res.status).toBe(201);
+      const requestId = res.body.data.id;
+      const trainees = await prisma.trainingRequestTrainee.findMany({ where: { trainingRequestId: requestId } });
+      expect(trainees).toHaveLength(2);
+    });
+
+    it('refuses inline roster with missing required fields (academic number, national ID, name)', async () => {
+      const before = await prisma.trainingRequest.count();
+      const res = await http.post('/training-requests').set(auth(uniToken)).send({
+        targetOrgId: s.cluster.id,
+        programId: s.program.id,
+        specialty: 'internal_medicine',
+        ...WINDOW,
+        studentCount: 1,
+        rotations: STANDARD_ROTATIONS,
+        trainees: [
+          { academicNumber: '', nationalId: '9880000003', nameAr: 'بدون رقم أكاديمي' },
+        ],
+      });
+      expect(res.status).toBe(400);
+      expect(await prisma.trainingRequest.count()).toBe(before);
+    });
+
+    it('refuses inline roster with duplicate academic number within the roster', async () => {
+      const before = await prisma.trainingRequest.count();
+      const res = await http.post('/training-requests').set(auth(uniToken)).send({
+        targetOrgId: s.cluster.id,
+        programId: s.program.id,
+        specialty: 'internal_medicine',
+        ...WINDOW,
+        studentCount: 2,
+        rotations: STANDARD_ROTATIONS,
+        trainees: [
+          { academicNumber: 'DUP-ACAD-8X', nationalId: '9880000004', nameAr: 'أحمد' },
+          { academicNumber: 'DUP-ACAD-8X', nationalId: '9880000005', nameAr: 'سارة' },
+        ],
+      });
+      expect(res.status).toBe(400);
+      expect(await prisma.trainingRequest.count()).toBe(before);
+    });
+
+    it('refuses inline roster with duplicate national ID within the roster', async () => {
+      const before = await prisma.trainingRequest.count();
+      const res = await http.post('/training-requests').set(auth(uniToken)).send({
+        targetOrgId: s.cluster.id,
+        programId: s.program.id,
+        specialty: 'internal_medicine',
+        ...WINDOW,
+        studentCount: 2,
+        rotations: STANDARD_ROTATIONS,
+        trainees: [
+          { academicNumber: 'EXCEL-811', nationalId: '9880000099', nameAr: 'خالد' },
+          { academicNumber: 'EXCEL-812', nationalId: '9880000099', nameAr: 'علي' },
+        ],
+      });
+      expect(res.status).toBe(400);
+      expect(await prisma.trainingRequest.count()).toBe(before);
+    });
+
+    it('refuses inline roster with duplicate national ID or academic number against existing request roster', async () => {
+      const createdReq = await http.post('/training-requests').set(auth(uniToken)).send({
+        targetOrgId: s.cluster.id,
+        programId: s.program.id,
+        specialty: 'internal_medicine',
+        ...WINDOW,
+        studentCount: 1,
+        rotations: STANDARD_ROTATIONS,
+        trainees: [
+          { academicNumber: 'EXISTING-801', nationalId: '9880000888', nameAr: 'متدرب موجود' },
+        ],
+      });
+      expect(createdReq.status).toBe(201);
+      const requestId = createdReq.body.data.id;
+
+      const dupImport = await http.post(`/training-requests/${requestId}/trainees/import`).set(auth(uniToken)).send({
+        rows: [
+          { academicNumber: 'NEW-802', nationalId: '9880000888', nameAr: 'تكرار هوية' },
+        ],
+      });
+      expect(dupImport.status).toBe(400);
+      expect(dupImport.body.rowErrors[0].errors).toContain('رقم الهوية موجود مسبقاً ضمن هذا الطلب');
+    });
+  });
 });

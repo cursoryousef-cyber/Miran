@@ -46,7 +46,7 @@ export const SupervisorDashboard: React.FC = () => {
   const { data: logbook } = useQuery({
     queryKey: ['sv-logbook'],
     queryFn: async () => {
-      const res = await apiClient.get('/logbook/case-logs').catch(() => ({ data: { data: [] } }));
+      const res = await apiClient.get('/logbook/my-logs').catch(() => ({ data: { data: [] } }));
       return res.data?.data ?? [];
     },
   });

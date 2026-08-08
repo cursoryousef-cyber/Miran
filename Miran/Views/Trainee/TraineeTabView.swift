@@ -9,6 +9,13 @@ import SwiftUI
 
 struct TraineeTabView: View {
     var body: some View {
-        TraineeDashboardFullView()
+        TabView {
+            TraineeDashboardFullView()
+                .tabItem { Label("الرئيسية", systemImage: "house.fill") }
+            ScheduleView()
+                .tabItem { Label("جدولي", systemImage: "calendar") }
+            TodayView()
+                .tabItem { Label("اليوم", systemImage: "checkmark.circle") }
+        }
     }
 }

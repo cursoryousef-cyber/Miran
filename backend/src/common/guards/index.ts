@@ -67,8 +67,17 @@ export class RolesGuard implements CanActivate {
     const user = request.user as IAuthenticatedUser;
     if (!user) throw new UnauthorizedException();
 
-    const hasRole = requiredRoles.some((role) => user.roles.includes(role));
+    const hasRole = requiredRoles.some((role) => user.roles?.includes(role));
     if (!hasRole) {
+      console.warn('[AUTH_DEBUG] RolesGuard Forbidden', {
+        userId: user?.accountId,
+        organizationId: user?.organizationId,
+        userRoles: user?.roles,
+        requiredRoles,
+        endpoint: request.url,
+        method: request.method,
+        reason: 'User roles do not match required roles',
+      });
       throw new ForbiddenException('ليس لديك الدور المطلوب لهذا الإجراء');
     }
     return true;

@@ -1,13 +1,14 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { CircularProgress } from '@mui/material';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CircularProgress, Button } from '@mui/material';
 import {
   BellRing, BookOpen, CalendarCheck, CheckCircle2, ClipboardCheck, FileSignature,
-  GraduationCap, MapPin, Route, Target,
+  GraduationCap, LogIn, LogOut, MapPin, Route, Target, Users,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { TraineeCard } from '../../components/trainee/TraineeCard';
 import {
   Badge, EmptyState, KpiCard, KpiGrid, ListRow, Metric, MetricRow, Panel,
   PanelGrid, PanelLink, PageHeader, QuickActions, SplitGrid, StatBar,
@@ -39,6 +40,36 @@ export const TraineeDashboard: React.FC = () => {
       const res = await apiClient.get('/operations/trainee/dashboard').catch(() => ({ data: { data: null } }));
       return res.data?.data ?? null;
     },
+  });
+
+  const { data: colleagues } = useQuery({
+    queryKey: ['te-colleagues'],
+    queryFn: async () => {
+      const res = await apiClient.get('/trainees/my-colleagues').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const queryClient = useQueryClient();
+  const { data: attendanceList } = useQuery({
+    queryKey: ['te-attendance'],
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/attendance').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayAttendance = attendanceList?.find((a: any) => String(a.date).slice(0, 10) === todayStr);
+  const checkedInToday = !!(todayAttendance?.checkIn && !todayAttendance?.checkOut);
+  const checkedOutToday = !!todayAttendance?.checkOut;
+
+  const checkInMutation = useMutation({
+    mutationFn: () => apiClient.post('/operations/attendance/qr', { qrCode: dash?.profile?.cardUuid ?? 'manual' }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['te-attendance'] }); queryClient.invalidateQueries({ queryKey: ['te-dashboard'] }); },
+  });
+  const checkOutMutation = useMutation({
+    mutationFn: () => apiClient.patch(`/operations/attendance/${todayAttendance?.id}/check-out`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['te-attendance'] }); queryClient.invalidateQueries({ queryKey: ['te-dashboard'] }); },
   });
 
   if (isLoading) {
@@ -105,6 +136,48 @@ export const TraineeDashboard: React.FC = () => {
           </MetricRow>
         </div>
       </div>
+
+      <SplitGrid>
+        <TraineeCard profile={dash?.profile} rotation={dash?.rotation} />
+
+        <Panel title="الحضور والانصراف" icon={CalendarCheck} tone={checkedInToday ? 'success' : 'neutral'}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space.md }}>
+            <MetricRow min={104}>
+              <Metric label="نسبة الحضور" value={`${readiness?.attendance?.rate ?? 0}%`} tone="primary" />
+              <Metric label="حالة اليوم" value={checkedOutToday ? 'مكتمل' : checkedInToday ? 'حاضر' : 'لم يسجل'} tone={checkedOutToday ? 'success' : checkedInToday ? 'info' : 'neutral'} />
+            </MetricRow>
+            {todayAttendance && (
+              <div style={{ fontSize: font.caption, color: colour.muted }}>
+                الدخول: {todayAttendance.checkIn ? new Date(todayAttendance.checkIn).toLocaleTimeString('ar-SA') : '—'}
+                {' · '}
+                الخروج: {todayAttendance.checkOut ? new Date(todayAttendance.checkOut).toLocaleTimeString('ar-SA') : '—'}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: space.sm }}>
+              <Button
+                variant="contained" size="small" startIcon={<LogIn size={16} />}
+                disabled={checkedInToday || checkedOutToday || checkInMutation.isPending}
+                onClick={() => checkInMutation.mutate()}
+                sx={{ bgcolor: colour.primary, '&:hover': { bgcolor: colour.primary } }}
+              >
+                تسجيل حضور
+              </Button>
+              <Button
+                variant="outlined" size="small" startIcon={<LogOut size={16} />}
+                disabled={!checkedInToday || checkOutMutation.isPending}
+                onClick={() => checkOutMutation.mutate()}
+              >
+                تسجيل انصراف
+              </Button>
+            </div>
+            {(checkInMutation.isError || checkOutMutation.isError) && (
+              <div style={{ fontSize: font.caption, color: colour.danger }}>
+                {(checkInMutation.error as any)?.response?.data?.message ?? (checkOutMutation.error as any)?.response?.data?.message ?? 'تعذر تنفيذ العملية'}
+              </div>
+            )}
+          </div>
+        </Panel>
+      </SplitGrid>
 
       <KpiGrid min={200}>
         <KpiCard label="الحضور" value={`${readiness?.attendance?.rate ?? 0}%`} icon={CalendarCheck} tone="violet"
@@ -178,6 +251,21 @@ export const TraineeDashboard: React.FC = () => {
             ))
           ) : (
             <EmptyState icon={BellRing} title="لا توجد تنبيهات" />
+          )}
+        </Panel>
+
+        <Panel title="زملائي في التدريب" icon={Users} tone="violet">
+          {colleagues?.length ? (
+            colleagues.map((c: any) => (
+              <ListRow
+                key={c.traineeProfileId}
+                title={c.nameAr}
+                meta={`${c.specialty ?? ''}${c.departmentNameAr ? ` · ${c.departmentNameAr}` : ''}`}
+                trailing={<Badge label={c.trainingStatus === 'active' ? 'نشط' : c.trainingStatus} tone={c.trainingStatus === 'active' ? 'success' : 'neutral'} />}
+              />
+            ))
+          ) : (
+            <EmptyState icon={Users} title="لا يوجد زملاء آخرون في هذا الدوران" />
           )}
         </Panel>
 

@@ -333,7 +333,11 @@ export class TrainersController {
   }
 
   @Get('leaves/upcoming')
-  @RequireCapability(CAPABILITIES.TRAINER_MANAGE)
+  @RequireCapability(
+    CAPABILITIES.TRAINER_MANAGE,
+    CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+    CAPABILITIES.TRAINEE_VIEW_ASSIGNED,
+  )
   @ApiOperation({ summary: 'الإجازات القادمة خلال 30 يوماً' })
   async getUpcomingLeaves(
     @CurrentUser() user: IAuthenticatedUser,

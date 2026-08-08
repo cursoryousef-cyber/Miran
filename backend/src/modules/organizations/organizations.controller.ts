@@ -59,8 +59,12 @@ export class OrganizationsController {
   @Get('hospitals-cards')
   @RequireCapability(CAPABILITIES.ORG_VIEW, CAPABILITIES.CAPACITY_VIEW)
   @ApiOperation({ summary: 'بطاقات بطاقات المستشفيات مع إحصائيات الطاقة الاستيعابية والنسب المباشرة' })
-  async getHospitalCards(@Query('clusterId') clusterId?: string) {
-    return this.organizationsService.getHospitalCardsMetrics(clusterId);
+  async getHospitalCards(
+    @Query('clusterId') clusterId?: string,
+    @CurrentUser() user?: IAuthenticatedUser,
+  ) {
+    const targetClusterId = clusterId || user?.organizationId;
+    return this.organizationsService.getHospitalCardsMetrics(targetClusterId);
   }
 
   @Get('statistics')

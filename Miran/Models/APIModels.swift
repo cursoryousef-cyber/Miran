@@ -391,3 +391,37 @@ struct APIListResponse<T: Codable>: Codable {
 }
 
 
+
+// MARK: - Training Colleague (GET /trainees/my-colleagues)
+struct TrainingColleagueModel: Codable, Identifiable {
+    var id: String { traineeProfileId }
+    let traineeProfileId: String
+    let nameAr: String
+    let nameEn: String?
+    let specialty: String?
+    let departmentNameAr: String
+    let trainingStatus: String
+    let academicNumber: String?
+}
+
+// MARK: - Card QR token (GET /trainees/card/qr-token)
+struct CardQrTokenModel: Codable {
+    let token: String
+}
+
+// MARK: - Single-object API response wrapper (mirrors APIListResponse for non-array payloads)
+struct APIDataResponse<T: Codable>: Codable {
+    let data: T
+}
+
+// MARK: - Trainer assignment request (GET /operations/trainer/assignment-requests)
+struct AssignmentRequestModel: Codable, Identifiable {
+    let id: String
+    let traineeProfileId: String
+    let startDate: String
+    let endDate: String
+    let status: String
+    let traineeProfile: TraineeProfileModel?
+    let department: DepartmentModel?
+    let organization: OrganizationModel?
+}

@@ -23,6 +23,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { IS_PUBLIC_KEY } from '../decorators';
 import { IAuthenticatedUser } from '../interfaces';
 import { Capability } from './capabilities';
 import { ScopeContext, ScopeContextService } from './scope-context.service';
@@ -40,6 +41,12 @@ export class CapabilityGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) return true;
+
     const required = this.reflector.getAllAndOverride<Capability[]>(
       CAPABILITIES_KEY,
       [context.getHandler(), context.getClass()],
@@ -70,9 +77,15 @@ export class CapabilityGuard implements CanActivate {
         : required.some((cap) => this.scopeContext.hasCapability(ctx, cap));
 
     if (!satisfied) {
+      console.warn('[AUTH_DEBUG] CapabilityGuard Forbidden', {
+        userId: user?.accountId,
+        organizationId: user?.organizationId,
+        userRoles: user?.roles,
+        requiredCapabilities: required,
+        contextType: ctx.contextType,
+        reason: 'User lacks required capability or active context type',
+      });
       const held = required.filter((cap) => ctx.capabilities.has(cap));
-      // Distinguish "you never had this" from "not from here" — the second is a
-      // context-switch problem and telling them so saves a support ticket.
       if (held.length > 0) {
         throw new ForbiddenException(
           `هذا الإجراء غير متاح من سياق العمل الحالي (${ctx.contextType}) — بدّل إلى السياق المناسب`,

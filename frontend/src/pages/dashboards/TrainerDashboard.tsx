@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Dialog, DialogTitle, DialogContent, CircularProgress, Button } from '@mui/material';
 import {
   AlertTriangle, BookOpen, CalendarCheck, CheckSquare, ClipboardCheck,
-  PhoneCall, Stethoscope, UserCog, Users,
+  PhoneCall, Stethoscope, UserCog, Users, Inbox, LayoutGrid, UserPlus,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -47,13 +48,73 @@ export const TrainerDashboard: React.FC = () => {
     },
   });
 
+  const [selectedTraineeId, setSelectedTraineeId] = useState<string | null>(null);
+
+  const { data: recentLogs } = useQuery({
+    queryKey: ['tr-recent-logs'],
+    queryFn: async () => {
+      const res = await apiClient.get('/logbook/my-logs').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const { data: groups } = useQuery({
+    queryKey: ['tr-groups'],
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/trainer/groups').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const { data: incoming } = useQuery({
+    queryKey: ['tr-incoming'],
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/trainer/incoming-requests').catch(() => ({ data: { data: null } }));
+      return res.data?.data ?? null;
+    },
+  });
+
+  const queryClient = useQueryClient();
+  const { data: assignmentRequests } = useQuery({
+    queryKey: ['tr-assignment-requests'],
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/trainer/assignment-requests').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const acceptMutation = useMutation({
+    mutationFn: (rotationId: string) => apiClient.post(`/operations/trainer/assignment-requests/${rotationId}/accept`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tr-assignment-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['tr-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['tr-interns'] });
+    },
+  });
+  const rejectMutation = useMutation({
+    mutationFn: ({ rotationId, reason }: { rotationId: string; reason: string }) =>
+      apiClient.post(`/operations/trainer/assignment-requests/${rotationId}/reject`, { reason }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tr-assignment-requests'] }),
+  });
+
+  const { data: traineeDetail, isLoading: detailLoading } = useQuery({
+    queryKey: ['tr-trainee-detail', selectedTraineeId],
+    queryFn: async () => {
+      const res = await apiClient.get(`/operations/trainer/trainee/${selectedTraineeId}`).catch(() => ({ data: { data: null } }));
+      return res.data?.data ?? null;
+    },
+    enabled: !!selectedTraineeId,
+  });
+
   const trainees = interns ?? [];
   const capacity = me?.maxTrainees ?? 0;
   const occupied = trainees.length;
 
-  const pendingLogs = dash?.pendingCaseLogs ?? dash?.logbook?.pending ?? 0;
+  const pendingLogs = dash?.pendingLogbook ?? 0;
   const pendingEvals = dash?.pendingEvaluations ?? 0;
-  const activeCalls = dash?.activeCalls ?? 0;
+  const activeCalls = dash?.openCalls ?? 0;
+  const presentToday = dash?.presentToday ?? 0;
+  const notCheckedIn = dash?.absentOrNotCheckedIn ?? 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'] }}>
@@ -91,7 +152,7 @@ export const TrainerDashboard: React.FC = () => {
                 meta={`${t.traineeNumber ?? ''} · ${t.level ?? ''}`}
                 trailing={<Badge label={t.applicationStatus ?? 'نشط'}
                   tone={t.applicationStatus === 'active' ? 'success' : 'neutral'} />}
-                onClick={() => navigate('/org-members')}
+                onClick={() => setSelectedTraineeId(t.id)}
               />
             ))
           )}
@@ -111,10 +172,46 @@ export const TrainerDashboard: React.FC = () => {
         </Panel>
       </SplitGrid>
 
+      <Panel title="طلبات إسناد المتدربين" icon={UserPlus} tone="warning">
+        {assignmentRequests?.length ? (
+          assignmentRequests.map((r: any) => (
+            <ListRow
+              key={r.id}
+              title={r.traineeProfile?.person?.nameAr ?? '—'}
+              meta={`${r.traineeProfile?.program?.nameAr ?? ''} · ${r.traineeProfile?.sponsorOrganization?.nameAr ?? ''} · ${r.organization?.nameAr ?? ''} · ${r.department?.nameAr ?? ''} · ${String(r.startDate).slice(0, 10)} → ${String(r.endDate).slice(0, 10)}`}
+              trailing={
+                <div style={{ display: 'flex', gap: space.sm }}>
+                  <Button size="small" variant="contained" color="success"
+                    disabled={acceptMutation.isPending}
+                    onClick={() => acceptMutation.mutate(r.id)}>
+                    قبول
+                  </Button>
+                  <Button size="small" variant="outlined" color="error"
+                    disabled={rejectMutation.isPending}
+                    onClick={() => {
+                      const reason = window.prompt('سبب الرفض (إلزامي):');
+                      if (reason?.trim()) rejectMutation.mutate({ rotationId: r.id, reason: reason.trim() });
+                    }}>
+                    رفض
+                  </Button>
+                </div>
+              }
+            />
+          ))
+        ) : (
+          <EmptyState icon={UserPlus} title="لا توجد طلبات إسناد بانتظار قرارك" />
+        )}
+      </Panel>
+
       <PanelGrid>
         <Panel title="الحضور" icon={CalendarCheck} tone="violet">
-          {dash?.attendanceToday ? (
-            <StatBar label="حضور اليوم" value={dash.attendanceToday.present ?? 0} max={dash.attendanceToday.total || 1} />
+          {occupied > 0 ? (
+            <>
+              <StatBar label="حاضر اليوم" value={presentToday} max={occupied || 1} />
+              <div style={{ marginTop: space.sm, fontSize: 12.5, color: colour.muted }}>
+                لم يسجل / غائب: {notCheckedIn}
+              </div>
+            </>
           ) : (
             <EmptyState icon={CalendarCheck} title="لا توجد بيانات حضور اليوم" />
           )}
@@ -126,15 +223,80 @@ export const TrainerDashboard: React.FC = () => {
         </Panel>
 
         <Panel title="آخر النشاطات" icon={BookOpen} tone="neutral">
-          {dash?.recentLogs?.length ? (
-            dash.recentLogs.slice(0, 5).map((l: any) => (
-              <ListRow key={l.id} title={l.diagnosis ?? 'سجل حالة'} meta={l.status} />
+          {recentLogs?.length ? (
+            recentLogs.slice(0, 5).map((l: any) => (
+              <ListRow key={l.id} title={l.diagnosis ?? 'سجل حالة'}
+                meta={`${l.traineeProfile?.person?.nameAr ?? ''} · ${l.status}`} />
             ))
           ) : (
             <EmptyState icon={BookOpen} title="لا توجد نشاطات حديثة" />
           )}
         </Panel>
       </PanelGrid>
+
+      <PanelGrid>
+        <Panel title="مجموعات المتدربين" icon={LayoutGrid} tone="info">
+          {groups?.length ? (
+            groups.map((g: any) => (
+              <ListRow key={g.departmentId} title={g.departmentNameAr}
+                meta={`${g.trainees.length} متدرب`} />
+            ))
+          ) : (
+            <EmptyState icon={LayoutGrid} title="لا توجد مجموعات حالياً" />
+          )}
+        </Panel>
+
+        <Panel title="الطلبات الواردة" icon={Inbox} tone="warning">
+          {incoming && (incoming.evaluations?.length || incoming.clinicalLogs?.length) ? (
+            <>
+              {incoming.evaluations?.map((e: any) => (
+                <ListRow key={`ev-${e.id}`} title="تقييم مطلوب" meta={e.rotationId ?? ''} trailing={<Badge label="تقييم" tone="violet" />} />
+              ))}
+              {incoming.clinicalLogs?.map((l: any) => (
+                <ListRow key={`log-${l.id}`} title={l.traineeProfile?.person?.nameAr ?? 'سجل سريري'}
+                  meta={l.diagnosis} trailing={<Badge label="اعتماد سجل" tone="warning" />}
+                  onClick={() => navigate('/logbook')} />
+              ))}
+            </>
+          ) : (
+            <EmptyState icon={Inbox} title="لا توجد طلبات بانتظار إجراءك" />
+          )}
+        </Panel>
+      </PanelGrid>
+
+      <Dialog open={!!selectedTraineeId} onClose={() => setSelectedTraineeId(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>{traineeDetail?.profile?.person?.nameAr ?? 'ملف المتدرب'}</DialogTitle>
+        <DialogContent>
+          {detailLoading ? (
+            <div style={{ display: 'grid', placeItems: 'center', padding: 40 }}><CircularProgress size={28} /></div>
+          ) : traineeDetail ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg, paddingBottom: space.lg }}>
+              <div style={{ fontSize: 13, color: colour.muted }}>
+                {traineeDetail.profile.traineeNumber} · {traineeDetail.profile.organization?.nameAr}
+              </div>
+              <StatBar label="نسبة الحضور" value={traineeDetail.attendanceRate ?? 0} max={100} />
+              <Panel title="الروتيشن" icon={Stethoscope} tone="primary">
+                {traineeDetail.rotation ? (
+                  <ListRow title={traineeDetail.rotation.department?.nameAr}
+                    meta={`${String(traineeDetail.rotation.startDate).slice(0, 10)} → ${String(traineeDetail.rotation.endDate).slice(0, 10)}`} />
+                ) : <EmptyState icon={Stethoscope} title="لا يوجد روتيشن نشط" />}
+              </Panel>
+              <Panel title="المهام" icon={CheckSquare} tone="warning">
+                {traineeDetail.tasks?.length ? traineeDetail.tasks.slice(0, 5).map((t: any) => (
+                  <ListRow key={t.id} title={t.titleAr} meta={t.status} />
+                )) : <EmptyState icon={CheckSquare} title="لا توجد مهام" />}
+              </Panel>
+              <Panel title="السجل السريري" icon={BookOpen} tone="info">
+                {traineeDetail.clinicalLogs?.length ? traineeDetail.clinicalLogs.slice(0, 5).map((l: any) => (
+                  <ListRow key={l.id} title={l.diagnosis} meta={l.status} />
+                )) : <EmptyState icon={BookOpen} title="لا توجد سجلات" />}
+              </Panel>
+            </div>
+          ) : (
+            <EmptyState icon={Users} title="تعذر تحميل بيانات المتدرب" />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

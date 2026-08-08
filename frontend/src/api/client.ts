@@ -9,19 +9,30 @@ export const apiClient = axios.create({
   },
 });
 
-// Interceptor: Attach JWT Token & Active Org Context
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
-  const orgId = localStorage.getItem('active_org_id');
+// ── Interceptor: Attach JWT Token & Active Org Context ──────────────────────
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('access_token');
+    const orgId = localStorage.getItem('active_org_id');
 
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  if (orgId) {
-    config.headers['X-Organization-Id'] = orgId;
-  }
-  return config;
-});
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    if (orgId) {
+      config.headers['X-Organization-Id'] = orgId;
+    }
+
+    if (import.meta.env.DEV) {
+      console.debug(`[API Request] ${config.method?.toUpperCase()} ${config.url}`, {
+        hasToken: Boolean(token),
+        orgId,
+      });
+    }
+
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
 
 // Queue state for handling concurrent 401 requests during token refresh
 let isRefreshing = false;
@@ -41,21 +52,26 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
-// Interceptor: Refresh Token on 401 with Queue & Re-trying
+// ── Interceptor: Handle 401 Refresh & Safety Logout ──────────────────────────
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const status = error.response?.status;
 
-    // Do not attempt refresh on login or refresh-token calls themselves
+    if (import.meta.env.DEV) {
+      console.debug(`[API Error] ${status} ${originalRequest?.url}`, error.response?.data);
+    }
+
+    // Do not attempt refresh on auth login or refresh-token calls themselves
     if (
-      originalRequest.url?.includes('/auth/login') ||
-      originalRequest.url?.includes('/auth/refresh-token')
+      originalRequest?.url?.includes('/auth/login') ||
+      originalRequest?.url?.includes('/auth/refresh-token')
     ) {
       return Promise.reject(error);
     }
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });

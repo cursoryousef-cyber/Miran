@@ -46,7 +46,16 @@ export class OrgMembersController {
       nameEn: m.userAccount.person?.nameEn,
       nationalId: m.userAccount.person?.nationalId,
       phone: m.userAccount.person?.phone,
-      roles: m.userAccount.userRoles.map((ur) => ({ code: ur.role.code, nameAr: ur.role.nameAr, id: ur.role.id })),
+      // Merged from both role models: UserRole (legacy) and each
+      // OrganizationAssignment's own role (newer — this is what
+      // hospital_training_admin/training_director/etc. assignments carry).
+      // Reading only the first meant a member assigned through the newer model
+      // showed an empty role list, so no role filter or badge could ever find
+      // them even though they were a real, visible member of the org.
+      roles: this.mergeRoles(
+        m.userAccount.userRoles.map((ur: any) => ({ code: ur.role.code, nameAr: ur.role.nameAr, id: ur.role.id })),
+        m.assignedRoles ?? [],
+      ),
       isPrimary: m.isPrimary,
     }));
 
@@ -55,6 +64,15 @@ export class OrgMembersController {
     }
 
     return { data: members, meta: { total, page: parseInt(page || '1'), limit: 50 } };
+  }
+
+  private mergeRoles(
+    a: Array<{ id: string; code: string; nameAr: string }>,
+    b: Array<{ id: string; code: string; nameAr: string }>,
+  ): Array<{ id: string; code: string; nameAr: string }> {
+    const byId = new Map<string, { id: string; code: string; nameAr: string }>();
+    for (const r of [...a, ...b]) byId.set(r.id, r);
+    return [...byId.values()];
   }
 
   // ─── إضافة عضو جديد ──────────────────────────────────────────────────────

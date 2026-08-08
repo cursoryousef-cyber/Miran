@@ -148,8 +148,16 @@ export class TrainingRequestsService {
   }
 
   async create(dto: CreateTrainingRequestDto, user?: IAuthenticatedUser) {
-    const reqCount = await this.prisma.trainingRequest.count();
-    const requestNumber = `TR-${new Date().getFullYear()}-${(reqCount + 1).toString().padStart(4, '0')}`;
+    const latest = await this.prisma.trainingRequest.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: { requestNumber: true },
+    });
+    let seq = 1;
+    if (latest?.requestNumber) {
+      const match = latest.requestNumber.match(/\d+$/);
+      if (match) seq = parseInt(match[0], 10) + 1;
+    }
+    const requestNumber = `TR-${new Date().getFullYear()}-${seq.toString().padStart(4, '0')}`;
     const sourceOrgId = user?.organizationId || dto.targetOrgId;
 
     await this.assertRequestDirection(sourceOrgId, dto.targetOrgId);

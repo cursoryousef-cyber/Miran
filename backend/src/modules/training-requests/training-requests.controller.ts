@@ -115,8 +115,14 @@ export class TrainingRequestsController {
   @Get('hospital-review')
   @RequireRoles(...HOSPITAL_ROLES, ...CLUSTER_ROLES)
   @ApiOperation({ summary: 'قائمة المتدربين الموزَّعين على المستشفى لمراجعتها' })
-  async findForHospitalReview(@OrgContext() orgId: string) {
-    return this.traineesService.findForHospitalReview(orgId);
+  async findForHospitalReview(
+    @OrgContext() orgId: string,
+    @Query('hospitalId') hospitalIdQuery?: string,
+    @CurrentUser() user?: IAuthenticatedUser,
+  ) {
+    const targetOrgId = hospitalIdQuery || orgId || user?.organizationId;
+    if (!targetOrgId) return { data: [] };
+    return this.traineesService.findForHospitalReview(targetOrgId);
   }
 
   @Get(':id/summary')

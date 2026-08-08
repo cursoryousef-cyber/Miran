@@ -370,29 +370,59 @@ export async function resetE2EScenario() {
   });
 
   // Trainee profiles and persons the tests themselves create — promoting a
-  // candidate row to a real profile, for instance — are not part of the seeded
-  // scenario, so they survived the reset and collided with the next run on
-  // national_id. Cleaned by the reserved 9x prefix these fixtures use.
+  // candidate row to a real profile through the real approval endpoint, for
+  // instance — are not part of the seeded scenario, so without this they
+  // survive the reset and the next run collides on national_id, academic
+  // number and account email. Every profile living in a scenario organisation
+  // is treated as test fixture and torn down completely: its operational
+  // records, its allocation history, the account and role/membership rows
+  // promotion created for it, and finally the person and profile themselves.
   const testProfiles = await prisma.traineeProfile.findMany({
     where: { organizationId: { in: orgIds } },
     select: { id: true, personId: true },
   });
   const testProfileIds = testProfiles.map((p) => p.id);
+  const testPersonIds = testProfiles.map((p) => p.personId);
+
   if (testProfileIds.length > 0) {
     await prisma.rotation.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
     await prisma.attendance.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
     await prisma.shift.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
     await prisma.clinicalCaseLog.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
+    await prisma.competencyProgress.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
+    await prisma.document.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
+    await prisma.traineeAllocation.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
   }
-  await prisma.traineeProfile.deleteMany({
-    where: { traineeNumber: { startsWith: 'BYPASS-' } },
+
+  if (testPersonIds.length > 0) {
+    const testAccounts = await prisma.userAccount.findMany({
+      where: { personId: { in: testPersonIds } },
+      select: { id: true },
+    });
+    const testAccountIds = testAccounts.map((a) => a.id);
+    if (testAccountIds.length > 0) {
+      await prisma.userRole.deleteMany({ where: { userAccountId: { in: testAccountIds } } });
+      await prisma.userOrganization.deleteMany({ where: { userAccountId: { in: testAccountIds } } });
+      await prisma.organizationAssignment.deleteMany({ where: { userAccountId: { in: testAccountIds } } });
+      await prisma.notification.deleteMany({ where: { userId: { in: testAccountIds } } });
+      await prisma.task.deleteMany({ where: { OR: [{ assignedToId: { in: testAccountIds } }, { assignedById: { in: testAccountIds } }] } });
+      await prisma.evaluation.deleteMany({ where: { OR: [{ evaluatorId: { in: testAccountIds } }, { evaluateeId: { in: testAccountIds } }] } });
+      await prisma.userAccount.deleteMany({ where: { id: { in: testAccountIds } } });
+    }
+  }
+
+  await prisma.trainingRequestTrainee.updateMany({
+    where: { traineeProfileId: { in: testProfileIds } },
+    data: { traineeProfileId: null, personId: null },
   });
-  await prisma.traineeProfile.deleteMany({
-    where: { traineeNumber: { startsWith: 'LEG-' } },
-  });
+  await prisma.traineeProfile.deleteMany({ where: { id: { in: testProfileIds } } });
+
+  // Rows created directly against the scenario's candidate-row national ID
+  // prefix (9x) but never promoted to a profile — e.g. rows left at 'draft'
+  // when a test stops partway through.
   await prisma.person.deleteMany({
     where: {
-      nationalId: { startsWith: '94' },
+      nationalId: { startsWith: '9' },
       traineeProfile: null,
       trainerProfile: null,
       userAccounts: { none: {} },

@@ -244,7 +244,10 @@ export class OrganizationAssignmentService {
     organizationId: string,
     opts: { skip?: number; take?: number } = {},
   ): Promise<{
-    members: Array<{ userAccountId: string; isActive: boolean; isPrimary: boolean; userAccount: any }>;
+    members: Array<{
+      userAccountId: string; isActive: boolean; isPrimary: boolean; userAccount: any;
+      assignedRoles: Array<{ id: string; code: string; nameAr: string }>;
+    }>;
     total: number;
   }> {
     const userAccountInclude = {
@@ -256,14 +259,26 @@ export class OrganizationAssignmentService {
 
     const assignments = await this.prisma.organizationAssignment.findMany({
       where: { organizationId, sourceType: { in: MEMBERSHIP_SOURCES } },
-      include: { userAccount: userAccountInclude },
+      include: { userAccount: userAccountInclude, role: true },
       orderBy: [{ isPrimary: 'desc' }, { startDate: 'asc' }],
     });
 
-    let rows: Array<{ userAccountId: string; isActive: boolean; isPrimary: boolean; userAccount: any }>;
+    let rows: Array<{
+      userAccountId: string; isActive: boolean; isPrimary: boolean; userAccount: any;
+      assignedRoles: Array<{ id: string; code: string; nameAr: string }>;
+    }>;
 
     if (assignments.length > 0) {
+      // A representative row decides the membership flags (active/primary), the
+      // same as before. Roles are collected separately from every assignment the
+      // account holds in this org — the earlier version kept only the
+      // representative row's own fields and never exposed `role` at all, so an
+      // account whose role lived on OrganizationAssignment (rather than the
+      // legacy UserRole table) reached the caller with an empty role list. That
+      // is what made every role filter and role badge on the org-members screen
+      // silently miss anyone assigned through the newer model.
       const byAccount = new Map<string, { userAccountId: string; isActive: boolean; isPrimary: boolean; userAccount: any }>();
+      const rolesByAccount = new Map<string, Map<string, { id: string; code: string; nameAr: string }>>();
       for (const a of assignments) {
         const existing = byAccount.get(a.userAccountId);
         if (!existing || (a.isActive && !existing.isActive) || (a.isPrimary && !existing.isPrimary)) {
@@ -274,8 +289,17 @@ export class OrganizationAssignmentService {
             userAccount: a.userAccount,
           });
         }
+        if (a.role) {
+          if (!rolesByAccount.has(a.userAccountId)) rolesByAccount.set(a.userAccountId, new Map());
+          rolesByAccount.get(a.userAccountId)!.set(a.role.id, {
+            id: a.role.id, code: a.role.code, nameAr: a.role.nameAr,
+          });
+        }
       }
-      rows = [...byAccount.values()];
+      rows = [...byAccount.values()].map((r) => ({
+        ...r,
+        assignedRoles: [...(rolesByAccount.get(r.userAccountId)?.values() ?? [])],
+      }));
     } else {
       const userOrgs = await this.prisma.userOrganization.findMany({
         where: { organizationId },
@@ -286,6 +310,9 @@ export class OrganizationAssignmentService {
         isActive: uo.isActive,
         isPrimary: uo.isPrimary,
         userAccount: uo.userAccount,
+        // Legacy membership carries no role of its own; the account's UserRole
+        // rows (merged in by the controller) are the only source here.
+        assignedRoles: [],
       }));
     }
 

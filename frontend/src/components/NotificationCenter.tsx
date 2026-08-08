@@ -20,11 +20,11 @@ export const NotificationCenter: React.FC = () => {
   const { data: unreadData } = useQuery({
     queryKey: ['notifications-unread-count'],
     queryFn: async () => {
-      const res = await apiClient.get('/notifications/unread-count').catch(() => ({ data: { data: { count: 0 } } }));
+      const res = await apiClient.get('/notifications/unread-count');
       return res.data?.data || { count: 0 };
     },
     enabled: hasToken,
-    refetchInterval: hasToken ? 30000 : false,
+    refetchInterval: (query) => (query.state.status === 'error' || !hasToken ? false : 30000),
   });
 
   const { data: notificationsData, isLoading } = useQuery({

@@ -7,11 +7,13 @@ import {
   Query,
   ConflictException,
   GoneException,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
-import { CurrentUser, RequireRoles } from '../../common/decorators';
+import { CurrentUser, Public, RequireRoles } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationService } from '../notifications/notification.service';
@@ -35,6 +37,7 @@ export class TraineesController {
     private notificationService: NotificationService,
     private capacityService: CapacityService,
     private allocationService: TraineeAllocationService,
+    private cardJwt: JwtService,
   ) {}
 
   // ─── بيانات المتدرب الخاصة ────────────────────────────────────────────────
@@ -90,6 +93,137 @@ export class TraineesController {
       })),
       completionPercentage,
       qrCodeData: `MIRAN-DIGITAL-ID-${profile.traineeNumber}-${profile.cardUuid || profile.id}`,
+    };
+  }
+
+  // ─── زملائي في التدريب ────────────────────────────────────────────────────
+  /**
+   * Colleagues are derived from the trainee's own active Rotation — same
+   * trainer, department and organisation, overlapping the caller's own dates
+   * where dates exist. The scope (trainerProfileId/departmentId/organizationId)
+   * is resolved server-side from the JWT via the caller's active Rotation; none
+   * of it is accepted as input, so a caller cannot widen its own view by
+   * passing another scope.
+   */
+  @Get('my-colleagues')
+  @RequireRoles('trainee', 'platform_owner', 'org_manager')
+  @ApiOperation({ summary: 'زملاء المتدرب في نفس الروتيشن الفعّال — لا يقبل نطاقاً من العميل' })
+  async getMyColleagues(@CurrentUser() user: IAuthenticatedUser) {
+    const profile = await this.prisma.traineeProfile.findFirst({
+      where: { person: { userAccounts: { some: { id: user.accountId } } } },
+    });
+    if (!profile) return { data: [] };
+
+    const myRotation = await this.prisma.rotation.findFirst({
+      where: { traineeProfileId: profile.id, status: 'active' },
+    });
+    if (!myRotation) return { data: [] };
+
+    const overlapping = myRotation.startDate && myRotation.endDate
+      ? { startDate: { lte: myRotation.endDate }, endDate: { gte: myRotation.startDate } }
+      : {};
+
+    const rotations = await this.prisma.rotation.findMany({
+      where: {
+        status: 'active',
+        trainerProfileId: myRotation.trainerProfileId,
+        departmentId: myRotation.departmentId,
+        organizationId: myRotation.organizationId,
+        traineeProfileId: { not: profile.id },
+        ...overlapping,
+      },
+      include: {
+        traineeProfile: {
+          include: { person: true, program: true },
+        },
+        department: true,
+      },
+      distinct: ['traineeProfileId'],
+    });
+
+    const data = rotations.map((r) => ({
+      traineeProfileId: r.traineeProfileId,
+      nameAr: r.traineeProfile.person.nameAr,
+      nameEn: r.traineeProfile.person.nameEn,
+      specialty: r.traineeProfile.program?.nameAr ?? null,
+      departmentNameAr: r.department.nameAr,
+      trainingStatus: r.traineeProfile.applicationStatus,
+      academicNumber: r.traineeProfile.traineeNumber,
+    }));
+
+    return { data };
+  }
+
+  // ─── بطاقة طالب امتياز — رمز تحقق موقّع ────────────────────────────────────
+  /**
+   * The QR payload is a signed, opaque JWT — never the raw national ID or any
+   * other sensitive field — carrying only the traineeProfileId and the card's
+   * current cardUuid so a reissued card invalidates every QR printed before
+   * it. Signed with a secret dedicated to this purpose (see TraineesModule),
+   * separate from session tokens, and long-lived to match physical card life;
+   * revocation is enforced at verify time against live cardStatus/cardUuid,
+   * not by token expiry alone.
+   */
+  @Get('card/qr-token')
+  @RequireRoles('trainee', 'platform_owner', 'org_manager')
+  @ApiOperation({ summary: 'إصدار رمز QR موقّع لبطاقة طالب الامتياز' })
+  async getCardQrToken(@CurrentUser() user: IAuthenticatedUser) {
+    const profile = await this.prisma.traineeProfile.findFirst({
+      where: { person: { userAccounts: { some: { id: user.accountId } } } },
+    });
+    if (!profile) throw new BadRequestException('لا يوجد ملف متدرب لهذا الحساب');
+    if (!profile.cardUuid) throw new BadRequestException('لم يتم إصدار بطاقة لهذا المتدرب بعد');
+
+    const token = await this.cardJwt.signAsync(
+      { sub: profile.id, cuid: profile.cardUuid },
+      { expiresIn: '365d' },
+    );
+    return { data: { token } };
+  }
+
+  // ─── التحقق من بطاقة طالب امتياز — عام (لا يتطلب تسجيل دخول) ──────────────
+  @Public()
+  @Get('card/verify')
+  @ApiOperation({ summary: 'التحقق من صلاحية بطاقة طالب امتياز عبر رمز QR — يعرض الحد الأدنى من البيانات' })
+  async verifyCard(@Query('token') token: string) {
+    if (!token) throw new BadRequestException('الرمز مطلوب');
+    let payload: { sub: string; cuid: string };
+    try {
+      payload = await this.cardJwt.verifyAsync(token);
+    } catch {
+      return { data: { valid: false, reason: 'رمز غير صالح أو منتهي الصلاحية' } };
+    }
+
+    const profile = await this.prisma.traineeProfile.findUnique({
+      where: { id: payload.sub },
+      include: {
+        person: true,
+        program: true,
+        organization: true,
+        sponsorOrganization: true,
+        rotations: { where: { status: 'active' }, take: 1, include: { department: true, trainerProfile: { include: { person: true } } } },
+      },
+    });
+
+    if (!profile || profile.cardUuid !== payload.cuid) {
+      return { data: { valid: false, reason: 'البطاقة غير مرتبطة بأي متدرب فعلي' } };
+    }
+    if (profile.cardStatus !== 'active') {
+      return { data: { valid: false, reason: 'البطاقة ملغاة أو منتهية الصلاحية', cardStatus: profile.cardStatus } };
+    }
+
+    const rotation = profile.rotations[0];
+    return {
+      data: {
+        valid: true,
+        nameAr: profile.person.nameAr,
+        specialty: profile.program?.nameAr ?? null,
+        university: profile.sponsorOrganization?.nameAr ?? null,
+        hospital: profile.organization?.nameAr ?? null,
+        department: rotation?.department?.nameAr ?? null,
+        trainer: rotation?.trainerProfile?.person?.nameAr ?? null,
+        cardStatus: profile.cardStatus,
+      },
     };
   }
 
