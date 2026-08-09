@@ -508,7 +508,7 @@ export class CapacityService {
     const db = tx || this.prisma;
     const org = await db.organization.findUnique({
       where: { id: organizationId },
-      select: { id: true },
+      select: { id: true, capacity: true },
     });
     if (!org) return { capacity: 0, occupied: 0, available: 0, occupancyPercentage: 0 };
 
@@ -527,7 +527,8 @@ export class CapacityService {
       }),
     ]);
 
-    const capacity = departments.reduce((total, d) => total + d.capacity, 0);
+    const deptSum = departments.reduce((total, d) => total + d.capacity, 0);
+    const capacity = org.capacity > 0 ? org.capacity : deptSum;
     const occupants = new Set<string>([
       ...allocations.map((a) => `row:${a.traineeRowId}`),
       ...rotations.map((r) => `profile:${r.traineeProfileId}`),

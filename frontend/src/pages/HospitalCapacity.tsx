@@ -253,23 +253,61 @@ export const HospitalCapacity: React.FC = () => {
                     sx={{ height: 8, borderRadius: 4, mt: 1 }}
                   />
                 </Grid>
-                <Grid item xs={8} sm={4}>
-                  <TextField
-                    label="الطاقة الكلية الجديدة"
-                    type="number"
-                    size="small"
-                    fullWidth
-                    value={hospitalTotalInput ?? data.hospital.capacity}
-                    onChange={(e) => setHospitalTotalInput(Number(e.target.value))}
-                  />
+                <Grid item xs={12} sm={5}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <IconButton
+                      size="small"
+                      onClick={() => {
+                        const currentVal = hospitalTotalInput ?? data.hospital.capacity;
+                        setHospitalTotalInput(Math.max(0, currentVal - 1));
+                      }}
+                      sx={{ border: '1px solid #CBD5E1', borderRadius: 1.5 }}
+                    >
+                      <Minus size={18} />
+                    </IconButton>
+                    <TextField
+                      label="الطاقة الكلية الجديدة"
+                      type="number"
+                      size="small"
+                      fullWidth
+                      inputProps={{ min: 0, style: { textAlign: 'center', fontWeight: 700 } }}
+                      value={hospitalTotalInput ?? data.hospital.capacity}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        setHospitalTotalInput(isNaN(val) ? 0 : Math.max(0, val));
+                      }}
+                    />
+                    <IconButton
+                      size="small"
+                      onClick={() => {
+                        const currentVal = hospitalTotalInput ?? data.hospital.capacity;
+                        setHospitalTotalInput(currentVal + 1);
+                      }}
+                      sx={{ border: '1px solid #CBD5E1', borderRadius: 1.5 }}
+                    >
+                      <Plus size={18} />
+                    </IconButton>
+                  </Box>
                 </Grid>
-                <Grid item xs={4} sm={2}>
+                <Grid item xs={12} sm={3}>
                   <Button
                     variant="contained"
-                    disabled={updateHospitalMutation.isPending || hospitalTotalInput === null}
-                    onClick={() => updateHospitalMutation.mutate(hospitalTotalInput!)}
+                    disabled={updateHospitalMutation.isPending || hospitalTotalInput === null || hospitalTotalInput === data.hospital.capacity}
+                    onClick={() => {
+                      const val = hospitalTotalInput ?? data.hospital.capacity;
+                      if (val < 0) {
+                        setErrorMsg('الطاقة الاستيعابية لا يمكن أن تكون أقل من صفر');
+                        return;
+                      }
+                      if (val < data.hospital.occupied) {
+                        setErrorMsg(`لا يمكن تخفيض الطاقة الكلية إلى ${val} — يوجد حالياً ${data.hospital.occupied} متدرب مُسجّل فعلياً`);
+                        return;
+                      }
+                      updateHospitalMutation.mutate(val);
+                    }}
+                    sx={{ backgroundColor: '#0F766E', '&:hover': { backgroundColor: '#0D655E' }, whiteSpace: 'nowrap' }}
                   >
-                    حفظ
+                    {updateHospitalMutation.isPending ? <CircularProgress size={20} color="inherit" /> : 'حفظ'}
                   </Button>
                 </Grid>
               </Grid>

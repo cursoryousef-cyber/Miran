@@ -116,6 +116,10 @@ export class HospitalCapacityService {
     this.assertHospitalScope(user, hospitalId);
     await this.requireHospital(hospitalId);
 
+    if (dto.capacity < 0) {
+      throw new BadRequestException('الطاقة الاستيعابية الكلية لا يمكن أن تكون أقل من صفر');
+    }
+
     const current = await this.capacityService.getHospitalOccupancy(hospitalId);
     if (dto.capacity < current.occupied) {
       throw new BadRequestException(
