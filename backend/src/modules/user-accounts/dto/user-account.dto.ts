@@ -43,12 +43,14 @@ export class CreateUserAccountDto {
   @MinLength(8, { message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' })
   password?: string;
 
-  @ApiProperty({ description: 'معرف الجهة التابع لها الحساب' })
-  @IsNotEmpty({ message: 'معرف الجهة مطلوب' })
-  organizationId!: string;
+  @ApiPropertyOptional({ description: 'معرف الجهة التابع لها الحساب' })
+  @IsOptional()
+  @IsString()
+  organizationId?: string;
 
   @ApiPropertyOptional({ description: 'معرف المستشفى التابع له الحساب' })
   @IsOptional()
+  @IsString()
   hospitalId?: string;
 
   @ApiPropertyOptional({ description: 'رمز الدور المطلوب تعيينه للمستخدم في هذه الجهة' })

@@ -110,7 +110,32 @@ export const UsersPage: React.FC = () => {
 
   const createMutation = useMutation({
     mutationFn: async (payload: any) => {
-      const res = await apiClient.post('/user-accounts', payload);
+      const cleanPayload: any = {
+        email: payload.email.trim().toLowerCase(),
+        roleCode: payload.roleCode,
+      };
+
+      if (payload.nameAr?.trim()) cleanPayload.nameAr = payload.nameAr.trim();
+      if (payload.nameEn?.trim()) cleanPayload.nameEn = payload.nameEn.trim();
+      if (payload.nationalId?.trim()) cleanPayload.nationalId = payload.nationalId.trim();
+      if (payload.phone?.trim()) cleanPayload.phone = payload.phone.trim();
+      if (payload.password?.trim()) cleanPayload.password = payload.password.trim();
+
+      const orgId = payload.organizationId?.trim();
+      const hospId = payload.hospitalId?.trim();
+
+      if (orgId) cleanPayload.organizationId = orgId;
+      if (hospId) cleanPayload.hospitalId = hospId;
+
+      if (payload.roleCode === 'hospital_training_admin') {
+        if (!cleanPayload.organizationId && cleanPayload.hospitalId) {
+          cleanPayload.organizationId = cleanPayload.hospitalId;
+        } else if (!cleanPayload.hospitalId && cleanPayload.organizationId) {
+          cleanPayload.hospitalId = cleanPayload.organizationId;
+        }
+      }
+
+      const res = await apiClient.post('/user-accounts', cleanPayload);
       return res.data;
     },
     onSuccess: () => {
