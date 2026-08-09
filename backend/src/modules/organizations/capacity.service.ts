@@ -231,7 +231,6 @@ export class CapacityService {
       case 'specialty':
         return this.getSpecialtyOccupancy(scope.organizationId, {
           specialtyCode: scope.specialtyCode,
-          gender: scope.gender,
           trainingPeriod: scope.trainingPeriod,
         });
       case 'supervisor':
@@ -532,7 +531,7 @@ export class CapacityService {
         where: {
           organizationId,
           status: 'active',
-          OR: [{ endDate: null }, { endDate: { gte: today } }],
+          endDate: { gte: today },
         },
         select: { traineeProfileId: true },
       }),
@@ -585,7 +584,7 @@ export class CapacityService {
         where: {
           departmentId,
           status: 'active',
-          OR: [{ endDate: null }, { endDate: { gte: today } }],
+          endDate: { gte: today },
         },
         select: { traineeProfileId: true },
       }),
@@ -633,7 +632,7 @@ export class CapacityService {
         where: {
           trainerProfileId,
           status: 'active',
-          OR: [{ endDate: null }, { endDate: { gte: today } }],
+          endDate: { gte: today },
         },
         select: { traineeProfileId: true },
       }),
