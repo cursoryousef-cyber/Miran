@@ -30,7 +30,7 @@ const SECTIONS: Section[] = [
   { key: 'capacity',     label: 'الطاقة الاستيعابية', render: () => <HospitalCapacity /> },
   { key: 'trainers',     label: 'المدربون',           render: (goTo) => <TrainerCards onNavigate={goTo} /> },
   { key: 'calls',        label: '🔔 النداءات',        render: () => <CallsHub /> },
-  { key: 'acceptance',   label: 'سلسلة القبول',       render: () => <HospitalReview /> },
+  { key: 'acceptance',   label: 'سلسلة القبول',       render: () => <AcceptanceChain /> },
   { key: 'reassignment', label: 'إعادة الإسناد',      render: () => <TrainerReassignment /> },
   { key: 'leaves',       label: 'الإجازات',           render: () => <TrainerLeaveManagement /> },
   { key: 'logbook',      label: 'السجل السريري',      render: () => <LogbookPage /> },
