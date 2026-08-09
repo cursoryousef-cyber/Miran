@@ -194,8 +194,10 @@ export const HospitalReview: React.FC = () => {
               const req = row.trainingRequest;
               const specialtyName = row.specialty || req?.specialtyAr || req?.specialtyEn || 'غير محدد';
               const sourceOrgName = req?.sourceOrg?.nameAr || 'التجمع الصحي';
-              const periodText = req?.startDate && req?.endDate
-                ? `${String(req.startDate).slice(0, 10)} → ${String(req.endDate).slice(0, 10)}`
+              const start = row.startDate || req?.trainingStartDate || req?.startDate;
+              const end = row.endDate || req?.trainingEndDate || req?.endDate;
+              const periodText = start && end
+                ? `${String(start).slice(0, 10)} → ${String(end).slice(0, 10)}`
                 : 'غير محددة';
 
               return (
@@ -354,7 +356,7 @@ export const HospitalReview: React.FC = () => {
               <div><strong>الجهة / التجمع المرسل:</strong> {selectedRow.trainingRequest?.sourceOrg?.nameAr || '—'}</div>
               <div><strong>رقم الطلب:</strong> {selectedRow.trainingRequest?.requestNumber || '—'}</div>
               <div><strong>عدد المتدربين المطلوبين بالطلب:</strong> {selectedRow.trainingRequest?.totalTraineesRequested || 1}</div>
-              <div><strong>الفترة المطلوبة:</strong> {selectedRow.trainingRequest?.startDate ? `${String(selectedRow.trainingRequest.startDate).slice(0, 10)} إلى ${String(selectedRow.trainingRequest.endDate).slice(0, 10)}` : '—'}</div>
+              <div><strong>الفترة المطلوبة:</strong> {(selectedRow.startDate || selectedRow.trainingRequest?.trainingStartDate || selectedRow.trainingRequest?.startDate) ? `${String(selectedRow.startDate || selectedRow.trainingRequest?.trainingStartDate || selectedRow.trainingRequest?.startDate).slice(0, 10)} إلى ${String(selectedRow.endDate || selectedRow.trainingRequest?.trainingEndDate || selectedRow.trainingRequest?.endDate).slice(0, 10)}` : 'غير محددة'}</div>
               <div><strong>تاريخ تقديم الطلب:</strong> {selectedRow.trainingRequest?.createdAt ? String(selectedRow.trainingRequest.createdAt).slice(0, 10) : '—'}</div>
               <div><strong>القسم المحدد بالطلب:</strong> {selectedRow.assignedDepartment?.nameAr || 'لم يحدد بعد'}</div>
               <div><strong>المدرب المحدد بالطلب:</strong> {selectedRow.assignedTrainer?.person?.nameAr || 'لم يحدد بعد'}</div>
