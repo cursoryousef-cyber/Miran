@@ -322,7 +322,7 @@ export class UserAccountsService implements OnModuleInit {
       throw new BadRequestException('تعذّر تحديد نطاق الحساب — يجب تحديد الجهة أو المستشفى');
     }
 
-    if (['hospital_training_admin', 'hospital_administrator', 'hospitalAdmin'].includes(dto.roleCode)) {
+    if (dto.roleCode && ['hospital_training_admin', 'hospital_administrator', 'hospitalAdmin'].includes(dto.roleCode)) {
       const targetHospitalId = scope.hospitalId || primaryOrgId;
       const existingAdmin = await this.prisma.userRole.findFirst({
         where: {
