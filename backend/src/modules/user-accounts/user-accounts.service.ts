@@ -49,46 +49,44 @@ export class UserAccountsService implements OnModuleInit {
     const allRoles = await this.prisma.role.findMany();
     const roleIdByCode = new Map(allRoles.map((r) => [r.code, r.id]));
 
-    // System admin -> platform_owner
-    if (roleIdByCode.has('platform_owner') && roleIdByCode.has('system_admin')) {
-      await this.prisma.userRole.updateMany({
-        where: { roleId: roleIdByCode.get('system_admin')! },
-        data: { roleId: roleIdByCode.get('platform_owner')! },
-      });
-    }
+    const legacyMap: [string, string][] = [
+      ['system_admin', 'platform_owner'],
+      ['cluster_administrator', 'cluster_manager'],
+      ['hospital_administrator', 'hospital_training_admin'],
+      ['hospitalAdmin', 'hospital_training_admin'],
+      ['academic_affairs', 'academic_supervisor'],
+    ];
 
-    // Cluster admin -> cluster_manager
-    if (roleIdByCode.has('cluster_manager') && roleIdByCode.has('cluster_administrator')) {
-      await this.prisma.userRole.updateMany({
-        where: { roleId: roleIdByCode.get('cluster_administrator')! },
-        data: { roleId: roleIdByCode.get('cluster_manager')! },
-      });
-    }
+    for (const [legacyCode, targetCode] of legacyMap) {
+      const legacyId = roleIdByCode.get(legacyCode);
+      const targetId = roleIdByCode.get(targetCode);
+      if (!legacyId || !targetId || legacyId === targetId) continue;
 
-    // Hospital admin -> hospital_training_admin
-    if (roleIdByCode.has('hospital_training_admin')) {
-      const legacyHospRole = roleIdByCode.get('hospital_administrator');
-      if (legacyHospRole) {
-        await this.prisma.userRole.updateMany({
-          where: { roleId: legacyHospRole },
-          data: { roleId: roleIdByCode.get('hospital_training_admin')! },
+      const userRoles = await this.prisma.userRole.findMany({
+        where: { roleId: legacyId },
+      });
+
+      for (const ur of userRoles) {
+        const existing = await this.prisma.userRole.findUnique({
+          where: {
+            userAccountId_roleId_organizationId: {
+              userAccountId: ur.userAccountId,
+              roleId: targetId,
+              organizationId: ur.organizationId,
+            },
+          },
         });
+        if (existing) {
+          await this.prisma.userRole.delete({ where: { id: ur.id } }).catch(() => null);
+        } else {
+          await this.prisma.userRole
+            .update({
+              where: { id: ur.id },
+              data: { roleId: targetId },
+            })
+            .catch(() => null);
+        }
       }
-      const aliasHospRole = roleIdByCode.get('hospitalAdmin');
-      if (aliasHospRole) {
-        await this.prisma.userRole.updateMany({
-          where: { roleId: aliasHospRole },
-          data: { roleId: roleIdByCode.get('hospital_training_admin')! },
-        });
-      }
-    }
-
-    // Academic affairs -> academic_supervisor
-    if (roleIdByCode.has('academic_supervisor') && roleIdByCode.has('academic_affairs')) {
-      await this.prisma.userRole.updateMany({
-        where: { roleId: roleIdByCode.get('academic_affairs')! },
-        data: { roleId: roleIdByCode.get('academic_supervisor')! },
-      });
     }
   }
 
