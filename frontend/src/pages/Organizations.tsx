@@ -5,11 +5,11 @@ import { useAuth } from '../context/AuthContext';
 import { hasPermission } from '../utils/rbac';
 import {
   Building2, Plus, Search, CheckCircle2, AlertCircle, Archive, Clock, RefreshCw, Edit, Trash2, Eye,
-  BedDouble, Users, Gauge, ChevronDown, ChevronRight, Network, Layers, ClipboardList, Shield,
+  BedDouble, Users, Gauge, ChevronDown, ChevronRight, Network, Layers, ClipboardList, Shield, ArrowRight, UserPlus,
 } from 'lucide-react';
 import {
-  Button, TextField, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tabs, Tab,
-  Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip, Skeleton, Box, Typography,
+  Button, TextField, Chip, Table, TableBody, TableCell, TableHead, TableRow, Paper, Tabs, Tab,
+  Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip, Skeleton, Box, Typography, Alert, AlertTitle,
 } from '@mui/material';
 import {
   DataPageShell, EmptyState, Metric, MetricRow, StatBar, Surface, ViewToggle,
@@ -139,6 +139,7 @@ export const Organizations: React.FC = () => {
     nameAr: '',
     nameEn: '',
     organizationTypeId: '',
+    parentId: '',
     cityAr: 'عرعر',
     regionAr: 'الحدود الشمالية',
     status: 'active',
@@ -195,7 +196,10 @@ export const Organizations: React.FC = () => {
   // Mutations
   const createMutation = useMutation({
     mutationFn: async (payload: any) => {
-      const res = await apiClient.post('/organizations', payload);
+      const res = await apiClient.post('/organizations', {
+        ...payload,
+        parentId: payload.parentId || null,
+      });
       return res.data;
     },
     onSuccess: () => {
@@ -208,7 +212,10 @@ export const Organizations: React.FC = () => {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
-      const res = await apiClient.patch(`/organizations/${id}`, payload);
+      const res = await apiClient.patch(`/organizations/${id}`, {
+        ...payload,
+        parentId: payload.parentId || null,
+      });
       return res.data;
     },
     onSuccess: () => {
@@ -232,11 +239,13 @@ export const Organizations: React.FC = () => {
   });
 
   const resetForm = () => {
+    const defaultTypeId = orgTypes?.find((t: any) => t.code === 'hospital')?.id || orgTypes?.[0]?.id || '';
     setFormData({
       code: '',
       nameAr: '',
       nameEn: '',
-      organizationTypeId: '',
+      organizationTypeId: defaultTypeId,
+      parentId: '',
       cityAr: 'عرعر',
       regionAr: 'الحدود الشمالية',
       status: 'active',
@@ -270,6 +279,7 @@ export const Organizations: React.FC = () => {
   const rows = data?.data ?? [];
   const treeRoots = treeData ?? [];
   const orgStats = stats ?? null;
+  const clusterOrgs = rows.filter((o: any) => o.organizationType?.code === 'cluster');
 
   return (
     <DataPageShell
@@ -310,7 +320,7 @@ export const Organizations: React.FC = () => {
           {canCreate && (
             <Button variant="contained" startIcon={<Plus size={17} />}
               onClick={() => { resetForm(); setOpenCreate(true); }}>
-              إضافة جهة
+              إضافة جهة / مستشفى
             </Button>
           )}
         </>
@@ -348,6 +358,18 @@ export const Organizations: React.FC = () => {
         </>
       }
     >
+      {/* Workflow Guidance Banner */}
+      <Alert severity="info" icon={<Building2 size={20} />} sx={{ mb: 2.5, borderRadius: 2, border: '1px solid #BAE6FD', backgroundColor: '#F0F9FF' }}>
+        <AlertTitle sx={{ fontWeight: 800, color: '#0369A1' }}>تسلسل إعداد المستشفى وإدارة التدريب</AlertTitle>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', fontSize: 13, mt: 0.5, color: '#0C4A6E' }}>
+          <span><strong>1. إنشاء المستشفى</strong> (مستقل بدليل <code>parentId = null</code> أو يتبع تجمعاً)</span>
+          <ArrowRight size={14} />
+          <span><strong>2. الانتقال إلى إدارة المستخدمين</strong></span>
+          <ArrowRight size={14} />
+          <span><strong>3. إنشاء حساب «إدارة التدريب بالمستشفى» وربطه بالمستشفى</strong></span>
+        </Box>
+      </Alert>
+
       {treeMode ? (
         <Paper className="glass-card" sx={{ p: 3 }}>
           <Typography variant="h6" fontWeight={800} color="primary" sx={{ mb: 2 }}>
@@ -363,7 +385,7 @@ export const Organizations: React.FC = () => {
                 level={0}
                 canUpdate={canUpdate}
                 canDelete={canDelete}
-                onEdit={(org) => { setOpenEdit(org); setFormData({ code: org.code, nameAr: org.nameAr, nameEn: org.nameEn || '', organizationTypeId: org.organizationTypeId || '', cityAr: org.cityAr || 'عرعر', regionAr: org.regionAr || 'الحدود الشمالية', status: org.status || 'active' }); }}
+                onEdit={(org) => { setOpenEdit(org); setFormData({ code: org.code, nameAr: org.nameAr, nameEn: org.nameEn || '', organizationTypeId: org.organizationTypeId || '', parentId: org.parentId || '', cityAr: org.cityAr || 'عرعر', regionAr: org.regionAr || 'الحدود الشمالية', status: org.status || 'active' }); }}
                 onDetails={(org) => setOpenDetails(org)}
                 onDelete={(id) => setDeleteId(id)}
               />
@@ -427,6 +449,7 @@ export const Organizations: React.FC = () => {
                             setFormData({
                               code: org.code, nameAr: org.nameAr, nameEn: org.nameEn || '',
                               organizationTypeId: org.organizationTypeId || '',
+                              parentId: org.parentId || '',
                               cityAr: org.cityAr || 'عرعر', regionAr: org.regionAr || 'الحدود الشمالية',
                               status: org.status || 'active',
                             });
@@ -490,6 +513,7 @@ export const Organizations: React.FC = () => {
                             setFormData({
                               code: org.code, nameAr: org.nameAr, nameEn: org.nameEn || '',
                               organizationTypeId: org.organizationTypeId || '',
+                              parentId: org.parentId || '',
                               cityAr: org.cityAr || 'عرعر', regionAr: org.regionAr || 'الحدود الشمالية',
                               status: org.status || 'active',
                             });
@@ -506,6 +530,111 @@ export const Organizations: React.FC = () => {
           </Table>
         </div>
       )}
+
+      {/* Modal: Create Organization */}
+      <Dialog open={openCreate} onClose={() => setOpenCreate(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800 }}>إضافة جهة أو مستشفى جديد في المنظومة</DialogTitle>
+        <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+          <TextField
+            label="رمز الجهة (Code) *"
+            placeholder="مثال: HOSP_SPECIALIST_01"
+            fullWidth
+            size="small"
+            required
+            value={formData.code}
+            onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+          />
+          <TextField
+            label="اسم الجهة بالعربية *"
+            placeholder="مثال: مستشفى التخصصي المتقدم"
+            fullWidth
+            size="small"
+            required
+            value={formData.nameAr}
+            onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })}
+          />
+          <FormControl fullWidth size="small" required>
+            <InputLabel>نوع الجهة *</InputLabel>
+            <Select
+              value={formData.organizationTypeId}
+              label="نوع الجهة *"
+              onChange={(e) => setFormData({ ...formData, organizationTypeId: e.target.value })}
+            >
+              {orgTypes?.map((t: any) => (
+                <MenuItem key={t.id} value={t.id}>
+                  {t.nameAr} ({t.code})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl fullWidth size="small">
+            <InputLabel>الجهة التابع لها (Parent Org)</InputLabel>
+            <Select
+              value={formData.parentId}
+              label="الجهة التابع لها (Parent Org)"
+              onChange={(e) => setFormData({ ...formData, parentId: e.target.value })}
+            >
+              <MenuItem value="">مستشفى/جهة مستقلة تماماً (parentId = null)</MenuItem>
+              {clusterOrgs.map((c: any) => (
+                <MenuItem key={c.id} value={c.id}>
+                  تجمع: {c.nameAr} ({c.code})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField
+            label="المدينة"
+            fullWidth
+            size="small"
+            value={formData.cityAr}
+            onChange={(e) => setFormData({ ...formData, cityAr: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setOpenCreate(false)}>إلغاء</Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveCreate}
+            disabled={!formData.code || !formData.nameAr || !formData.organizationTypeId || createMutation.isPending}
+            sx={{ fontWeight: 700 }}
+          >
+            {createMutation.isPending ? 'جاري الحفظ...' : 'حفظ ونشر الجهة'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal: Edit Organization */}
+      <Dialog open={Boolean(openEdit)} onClose={() => setOpenEdit(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800 }}>تعديل بيانات الجهة</DialogTitle>
+        <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+          <TextField
+            label="اسم الجهة بالعربية *"
+            fullWidth
+            size="small"
+            required
+            value={formData.nameAr}
+            onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })}
+          />
+          <TextField
+            label="المدينة"
+            fullWidth
+            size="small"
+            value={formData.cityAr}
+            onChange={(e) => setFormData({ ...formData, cityAr: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setOpenEdit(null)}>إلغاء</Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveUpdate}
+            disabled={!formData.nameAr || updateMutation.isPending}
+            sx={{ fontWeight: 700 }}
+          >
+            {updateMutation.isPending ? 'جاري التعديل...' : 'حفظ التعديلات'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Modal Details */}
       <Dialog open={Boolean(openDetails)} onClose={() => setOpenDetails(null)} maxWidth="sm" fullWidth>

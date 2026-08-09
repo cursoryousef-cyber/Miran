@@ -13,8 +13,9 @@ import {
 } from 'lucide-react';
 import {
   Button, TextField, Chip, Table, TableBody, TableCell, TableHead, TableRow,
-  TablePagination, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Tooltip, FormControl, InputLabel, Select, MenuItem, Alert, Divider
+  TablePagination, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Tooltip, FormControl, InputLabel, Select, MenuItem, Alert, AlertTitle, Box, Divider
 } from '@mui/material';
+import { ArrowRight } from 'lucide-react';
 import { colour, font, space } from '../components/ui/tokens';
 
 export const UsersPage: React.FC = () => {
@@ -216,6 +217,18 @@ export const UsersPage: React.FC = () => {
         </>
       }
     >
+      {/* Workflow Guidance Banner */}
+      <Alert severity="info" icon={<Building2 size={20} />} sx={{ mb: 2, borderRadius: 2, border: '1px solid #BAE6FD', backgroundColor: '#F0F9FF' }}>
+        <AlertTitle sx={{ fontWeight: 800, color: '#0369A1' }}>ربط مسؤول التدريب بالمستشفى المستقل</AlertTitle>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', fontSize: 13, mt: 0.5, color: '#0C4A6E' }}>
+          <span><strong>1. إنشاء المستشفى المستقل من شاشة الجهات</strong></span>
+          <ArrowRight size={14} />
+          <span><strong>2. إضافة مستخدم بـ «إدارة التدريب بالمستشفى»</strong></span>
+          <ArrowRight size={14} />
+          <span><strong>3. تحديد المستشفى التابع له حتمياً للحصول على النطاق المعزول (Hospital Scope)</strong></span>
+        </Box>
+      </Alert>
+
       <div className="glass-card" style={{ padding: `${space.md}px ${space.xl}px`, display: 'flex', gap: space.md, alignItems: 'center' }}>
         <TextField
           placeholder="البحث باسم المستخدم، البريد الإلكتروني، أو الهوية الوطنية..."
