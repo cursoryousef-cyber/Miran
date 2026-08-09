@@ -56,7 +56,7 @@ const UNIVERSITY_ROLES = ['university_administrator', 'academic_affairs', 'platf
 // the hospital, it does not run training. Role lists are retained only for the
 // legacy RolesGuard on endpoints not yet migrated to capabilities; capability
 // checks are the authority wherever both are present.
-const HOSPITAL_ROLES = ['hospital_training_admin', 'department_head', 'training_supervisor', 'platform_owner'] as const;
+const HOSPITAL_ROLES = ['hospital_training_admin', 'hospital_administrator', 'department_head', 'training_supervisor', 'platform_owner'] as const;
 
 @ApiTags('Training Requests (طلبات التدريب التشغيلية الواردة للتجمع)')
 @ApiBearerAuth('JWT-auth')

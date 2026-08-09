@@ -13,9 +13,10 @@ import {
 
 // Maps current status → which role should act
 const ROLE_STATUS_MAP: Record<string, string[]> = {
-  hospital_administrator: ['approved'],
-  department_head: ['approved'],
-  training_supervisor: ['hospital_administrator_accepted'],
+  hospital_training_admin: ['approved', 'allocated', 'hospital_review', 'on_hold'],
+  hospital_administrator: ['approved', 'allocated', 'hospital_review', 'on_hold'],
+  department_head: ['approved', 'allocated', 'hospital_review'],
+  training_supervisor: ['hospital_administrator_accepted', 'allocated'],
   trainer: ['training_supervisor_accepted'],
 };
 
@@ -110,6 +111,7 @@ export const AcceptanceChain: React.FC = () => {
   });
 
   const roleLabel: Record<string, string> = {
+    hospital_training_admin: 'إدارة التدريب بالمستشفى',
     hospital_administrator: 'مدير المستشفى',
     department_head: 'رئيس القسم',
     training_supervisor: 'المشرف التدريبي',

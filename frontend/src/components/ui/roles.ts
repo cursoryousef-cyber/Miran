@@ -2,7 +2,7 @@ import {
   Award, GraduationCap, LayoutDashboard, Network, Stethoscope, UserCog, Users,
   Building2, ClipboardList, FolderGit2, FileSpreadsheet, RotateCcw, BedDouble,
   CheckSquare, BookOpen, AlertTriangle, Shield, Key, Activity, GitMerge, Settings,
-  FileSignature, BellRing, UsersRound, Route, PhoneCall,
+  FileSignature, BellRing, UsersRound, Route, PhoneCall, Inbox,
 } from 'lucide-react';
 
 /**
@@ -147,7 +147,7 @@ const HOSPITAL_TRAINING_NAV: NavSection[] = [
     title: 'المتدربون',
     items: [
       {
-        name: 'المتدربون الموزعون للمستشفى', path: '/hospital?tab=requests', icon: Users,
+        name: 'طلبات التدريب الواردة', path: '/hospital?tab=requests', icon: Inbox,
         requires: ['trainee.view.hospital'],
       },
       { name: 'السجل السريري', path: '/logbook', icon: BookOpen, requires: ['logbook.view'] },

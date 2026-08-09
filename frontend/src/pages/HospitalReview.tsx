@@ -179,37 +179,56 @@ export const HospitalReview: React.FC = () => {
           { label: 'تنتظر مستندات', value: missingDocs, icon: FileWarning, tone: missingDocs ? 'warning' : 'neutral' },
         ]}
     >
+      <div style={{ marginBottom: '16px' }}><ViewToggle value={view} onChange={setView} /></div>
 
       {successMsg && <Alert severity="success" onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
 
       {view === 'cards' ? (
         (rows).length === 0 ? (
-          <div className="glass-card"><EmptyState icon={Inbox} title="لا توجد حالات للمراجعة حالياً" /></div>
+          <div className="glass-card"><EmptyState icon={Inbox} title="لا توجد طلبات تدريب واردة للمراجعة حالياً" hint="سيتم ظهور الطلبات المحالة من التجمع الصحي تلقائياً فور إرسالها." /></div>
         ) : (
           <CardGrid>
             {rows.map((row: any) => {
               const st = STATUS_LABELS[row.status] || { label: row.status };
+              const req = row.trainingRequest;
+              const specialtyName = row.specialty || req?.specialtyAr || req?.specialtyEn || 'غير محدد';
+              const sourceOrgName = req?.sourceOrg?.nameAr || 'التجمع الصحي';
+              const periodText = req?.startDate && req?.endDate
+                ? `${String(req.startDate).slice(0, 10)} → ${String(req.endDate).slice(0, 10)}`
+                : 'غير محددة';
+
               return (
                 <EntityCard
                   key={row.id}
                   avatarText={(row.nameAr ?? '?').slice(0, 2)}
                   tone={row.status === 'on_hold' ? 'warning' : row.status === 'rejected' ? 'danger' : 'primary'}
                   title={row.nameAr}
-                  subtitle={`${row.nationalId ?? ''} · ${row.trainingRequest?.sourceOrg?.nameAr ?? ''}`}
+                  subtitle={`الرقم: ${row.nationalId ?? '—'} · الجهة: ${sourceOrgName}`}
                   badges={[
                     { label: st.label, tone: row.status === 'on_hold' ? 'warning' : row.status === 'rejected' ? 'danger' : 'info' },
-                    ...(row.specialty ? [{ label: row.specialty, tone: 'success' as const }] : []),
+                    { label: `التخصص: ${specialtyName}`, tone: 'success' as const },
+                    ...(req?.totalTraineesRequested ? [{ label: `عدد المطلوبين بالطلب: ${req.totalTraineesRequested}`, tone: 'violet' as const }] : []),
                   ]}
                   metrics={[
-                    { label: 'القسم', value: row.assignedDepartment?.nameAr ?? 'غير محدد', tone: 'info' },
-                    { label: 'المدرب', value: row.assignedTrainer?.person?.nameAr ?? 'غير محدد', tone: 'violet' },
+                    { label: 'القسم السريري', value: row.assignedDepartment?.nameAr ?? 'غير محدد', tone: 'info' },
+                    { label: 'المدرب السريري', value: row.assignedTrainer?.person?.nameAr ?? 'غير محدد', tone: 'violet' },
                   ]}
-                  footnote={row.trainingRequest?.requestNumber}
+                  footnote={`رقم الطلب: ${req?.requestNumber ?? '—'} · الفترة: ${periodText}`}
                   actions={[
-                    { label: 'بدء المراجعة', icon: PlayCircle, tone: 'info',
-                      visible: row.status === 'allocated', onClick: () => startReviewMut.mutate(row.id) },
-                    { label: 'تفاصيل', icon: Eye, tone: 'neutral', onClick: () => setSelectedRow(row) },
+                    ...(row.status === 'allocated' ? [{
+                      label: 'بدء المراجعة والقبول', icon: PlayCircle, tone: 'info' as const,
+                      onClick: () => startReviewMut.mutate(row.id),
+                    }] : []),
+                    ...(['allocated', 'hospital_review', 'on_hold', 'accepted'].includes(row.status) ? [{
+                      label: 'توزيع قسم/مدرب', icon: Edit3, tone: 'success' as const,
+                      onClick: () => openDialog(row, 'assign'),
+                    }] : []),
+                    ...(['hospital_review', 'allocated'].includes(row.status) ? [{
+                      label: 'رفض', icon: XCircle, tone: 'danger' as const,
+                      onClick: () => openDialog(row, 'reject'),
+                    }] : []),
+                    { label: 'عرض التفاصيل', icon: Eye, tone: 'neutral' as const, onClick: () => openDialog(row, 'details') },
                   ]}
                 />
               );
@@ -221,10 +240,10 @@ export const HospitalReview: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>المتدرب</TableCell>
-              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الجامعة / الطلب</TableCell>
-              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>التخصص</TableCell>
-              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>القسم / المدرب</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>المتدرب والجهة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>التخصص والفترة</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الطلب والعدد</TableCell>
+              <TableCell style={{ color: '#64748B', fontWeight: 700 }}>التوزيع الحالي (قسم/مدرب)</TableCell>
               <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الحالة</TableCell>
               <TableCell style={{ color: '#64748B', fontWeight: 700, textAlign: 'center' }}>الإجراءات</TableCell>
             </TableRow>
@@ -233,23 +252,34 @@ export const HospitalReview: React.FC = () => {
             {isLoading ? (
               <TableRow><TableCell colSpan={6} align="center"><CircularProgress size={24} /></TableCell></TableRow>
             ) : rows.length === 0 ? (
-              <TableRow><TableCell colSpan={6} align="center" style={{ color: '#64748B', padding: '32px' }}>لا توجد حالات للمراجعة حالياً</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} align="center" style={{ color: '#64748B', padding: '32px' }}>لا توجد طلبات تدريب واردة للمراجعة حالياً</TableCell></TableRow>
             ) : (
               rows.map((row: any) => {
                 const st = STATUS_LABELS[row.status] || { label: row.status, color: 'default' as const };
+                const req = row.trainingRequest;
+                const specialtyName = row.specialty || req?.specialtyAr || req?.specialtyEn || 'غير محدد';
+                const sourceOrgName = req?.sourceOrg?.nameAr || 'التجمع الصحي';
+                const periodText = req?.startDate && req?.endDate
+                  ? `${String(req.startDate).slice(0, 10)} → ${String(req.endDate).slice(0, 10)}`
+                  : 'غير محددة';
+
                 return (
                   <TableRow key={row.id}>
                     <TableCell style={{ fontWeight: 700, color: '#0F172A' }}>
                       {row.nameAr}
-                      <div style={{ fontSize: '11px', color: '#64748B', fontFamily: 'monospace' }}>{row.nationalId}</div>
+                      <div style={{ fontSize: '11px', color: '#64748B', fontFamily: 'monospace' }}>{row.nationalId || '—'}</div>
+                      <div style={{ fontSize: '11px', color: '#0891B2' }}>{sourceOrgName}</div>
                     </TableCell>
-                    <TableCell style={{ fontSize: '12px', color: '#64748B' }}>
-                      {row.trainingRequest?.sourceOrg?.nameAr || '—'}
-                      <div style={{ fontFamily: 'monospace', color: '#0891B2' }}>{row.trainingRequest?.requestNumber}</div>
-                    </TableCell>
-                    <TableCell style={{ color: '#047857' }}>{row.specialty || '—'}</TableCell>
                     <TableCell style={{ fontSize: '12px' }}>
-                      <div style={{ color: '#0284C7' }}>{row.assignedDepartment?.nameAr || 'غير محدد'}</div>
+                      <div style={{ fontWeight: 700, color: '#047857' }}>{specialtyName}</div>
+                      <div style={{ fontSize: '11px', color: '#64748B' }}>{periodText}</div>
+                    </TableCell>
+                    <TableCell style={{ fontSize: '12px' }}>
+                      <div style={{ fontFamily: 'monospace', color: '#0284C7', fontWeight: 700 }}>{req?.requestNumber || '—'}</div>
+                      <div style={{ fontSize: '11px', color: '#64748B' }}>المطلوب بالطلب: {req?.totalTraineesRequested || 1} متدرب</div>
+                    </TableCell>
+                    <TableCell style={{ fontSize: '12px' }}>
+                      <div style={{ color: '#0284C7', fontWeight: 700 }}>{row.assignedDepartment?.nameAr || 'غير محدد'}</div>
                       <div style={{ color: '#059669' }}>{row.assignedTrainer?.person?.nameAr || 'غير محدد'}</div>
                     </TableCell>
                     <TableCell>
@@ -257,32 +287,36 @@ export const HospitalReview: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        <Tooltip title="عرض التفاصيل">
+                          <Button size="small" variant="outlined" style={{ borderColor: '#64748B', color: '#64748B', minWidth: 0, padding: '4px 8px' }}
+                            onClick={() => openDialog(row, 'details')}>
+                            <Eye size={14} />
+                          </Button>
+                        </Tooltip>
                         {row.status === 'allocated' && (
-                          <Tooltip title="بدء المراجعة">
+                          <Tooltip title="بدء المراجعة والقبول">
                             <Button size="small" variant="contained" style={{ background: '#0284c7', minWidth: 0, padding: '4px 8px' }}
                               onClick={() => startReviewMut.mutate(row.id)} disabled={startReviewMut.isPending}>
                               <PlayCircle size={14} />
                             </Button>
                           </Tooltip>
                         )}
-                        {row.status === 'on_hold' && (
-                          <Tooltip title="استئناف المراجعة">
+                        {['allocated', 'hospital_review', 'on_hold', 'accepted'].includes(row.status) && (
+                          <Tooltip title="توزيع على القسم والمدرب">
                             <Button size="small" variant="contained" style={{ background: '#059669', minWidth: 0, padding: '4px 8px' }}
-                              onClick={() => resumeMut.mutate(row.id)} disabled={resumeMut.isPending}>
-                              <PlayCircle size={14} />
+                              onClick={() => openDialog(row, 'assign')}>
+                              <Edit3 size={14} />
                             </Button>
                           </Tooltip>
                         )}
-                        {['allocated', 'hospital_review'].includes(row.status) && (
-                          <Tooltip title="إيقاف مؤقت">
-                            <Button size="small" variant="outlined" style={{ borderColor: '#94a3b8', color: '#64748B', minWidth: 0, padding: '4px 8px' }}
-                              onClick={() => openDialog(row, 'hold')}>
-                              <PauseCircle size={14} />
-                            </Button>
-                          </Tooltip>
-                        )}
-                        {['hospital_review', 'on_hold'].includes(row.status) && (
+                        {['allocated', 'hospital_review', 'on_hold'].includes(row.status) && (
                           <>
+                            <Tooltip title="طلب مستندات">
+                              <Button size="small" variant="outlined" style={{ borderColor: '#0891B2', color: '#0891B2', minWidth: 0, padding: '4px 8px' }}
+                                onClick={() => openDialog(row, 'docs')}>
+                                <FileText size={14} />
+                              </Button>
+                            </Tooltip>
                             <Tooltip title="إعادة للتجمع">
                               <Button size="small" variant="outlined" style={{ borderColor: '#D97706', color: '#D97706', minWidth: 0, padding: '4px 8px' }}
                                 onClick={() => openDialog(row, 'return')}>
@@ -293,28 +327,6 @@ export const HospitalReview: React.FC = () => {
                               <Button size="small" variant="outlined" color="error" style={{ minWidth: 0, padding: '4px 8px' }}
                                 onClick={() => openDialog(row, 'reject')}>
                                 <XCircle size={14} />
-                              </Button>
-                            </Tooltip>
-                          </>
-                        )}
-                        {['allocated', 'hospital_review', 'on_hold'].includes(row.status) && (
-                          <>
-                            <Tooltip title="طلب مستندات">
-                              <Button size="small" variant="outlined" style={{ borderColor: '#0891B2', color: '#0891B2', minWidth: 0, padding: '4px 8px' }}
-                                onClick={() => openDialog(row, 'docs')}>
-                                <FileText size={14} />
-                              </Button>
-                            </Tooltip>
-                            <Tooltip title="طلب تصحيح بيانات">
-                              <Button size="small" variant="outlined" style={{ borderColor: '#7C3AED', color: '#7C3AED', minWidth: 0, padding: '4px 8px' }}
-                                onClick={() => openDialog(row, 'correction')}>
-                                <AlertTriangle size={14} />
-                              </Button>
-                            </Tooltip>
-                            <Tooltip title="تعديل التعيين">
-                              <Button size="small" variant="outlined" style={{ borderColor: '#059669', color: '#059669', minWidth: 0, padding: '4px 8px' }}
-                                onClick={() => openDialog(row, 'assign')}>
-                                <Edit3 size={14} />
                               </Button>
                             </Tooltip>
                           </>
@@ -330,18 +342,43 @@ export const HospitalReview: React.FC = () => {
       </TableContainer>
       )}
 
+      {/* Details Dialog */}
+      <Dialog open={dialog === 'details'} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>تفاصيل طلب التدريب الوارد</DialogTitle>
+        <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {selectedRow && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '14px' }}>
+              <div><strong>اسم المتدرب:</strong> {selectedRow.nameAr}</div>
+              <div><strong>الرقم الهوية / الوظيفي:</strong> {selectedRow.nationalId || '—'}</div>
+              <div><strong>التخصص التدريبي:</strong> {selectedRow.specialty || selectedRow.trainingRequest?.specialtyAr || '—'}</div>
+              <div><strong>الجهة / التجمع المرسل:</strong> {selectedRow.trainingRequest?.sourceOrg?.nameAr || '—'}</div>
+              <div><strong>رقم الطلب:</strong> {selectedRow.trainingRequest?.requestNumber || '—'}</div>
+              <div><strong>عدد المتدربين المطلوبين بالطلب:</strong> {selectedRow.trainingRequest?.totalTraineesRequested || 1}</div>
+              <div><strong>الفترة المطلوبة:</strong> {selectedRow.trainingRequest?.startDate ? `${String(selectedRow.trainingRequest.startDate).slice(0, 10)} إلى ${String(selectedRow.trainingRequest.endDate).slice(0, 10)}` : '—'}</div>
+              <div><strong>تاريخ تقديم الطلب:</strong> {selectedRow.trainingRequest?.createdAt ? String(selectedRow.trainingRequest.createdAt).slice(0, 10) : '—'}</div>
+              <div><strong>القسم المحدد بالطلب:</strong> {selectedRow.assignedDepartment?.nameAr || 'لم يحدد بعد'}</div>
+              <div><strong>المدرب المحدد بالطلب:</strong> {selectedRow.assignedTrainer?.person?.nameAr || 'لم يحدد بعد'}</div>
+              <div><strong>الحالة الحالية:</strong> {STATUS_LABELS[selectedRow.status]?.label || selectedRow.status}</div>
+            </div>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialog(null)}>إغلاق</Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Reject Dialog */}
       <Dialog open={dialog === 'reject'} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>
-        <DialogTitle style={{ fontWeight: 800, color: '#DC2626' }}>رفض المتدرب نهائياً</DialogTitle>
+        <DialogTitle style={{ fontWeight: 800, color: '#DC2626' }}>رفض طلب التدريب</DialogTitle>
         <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <Alert severity="warning">المتدرب: <strong>{selectedRow?.nameAr}</strong> — سيتم إخطار الجامعة بالرفض.</Alert>
+          <Alert severity="warning">المتدرب: <strong>{selectedRow?.nameAr}</strong> — سيتم إخطار التجمع والجامعة بالرفض مع بيان السبب.</Alert>
           <TextField label="سبب الرفض *" value={reason} onChange={(e) => setReason(e.target.value)} fullWidth required multiline rows={2} size="small" />
           <TextField label="ملاحظات إضافية" value={notes} onChange={(e) => setNotes(e.target.value)} fullWidth multiline rows={2} size="small" />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialog(null)}>إلغاء</Button>
           <Button variant="contained" color="error" onClick={() => rejectMut.mutate()} disabled={rejectMut.isPending || !reason}>
-            {rejectMut.isPending ? <CircularProgress size={20} /> : 'تأكيد الرفض'}
+            {rejectMut.isPending ? <CircularProgress size={20} color="inherit" /> : 'تأكيد الرفض'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -357,7 +394,7 @@ export const HospitalReview: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setDialog(null)}>إلغاء</Button>
           <Button variant="contained" style={{ background: '#D97706' }} onClick={() => returnMut.mutate()} disabled={returnMut.isPending || !reason}>
-            {returnMut.isPending ? <CircularProgress size={20} /> : 'إعادة للتجمع'}
+            {returnMut.isPending ? <CircularProgress size={20} color="inherit" /> : 'إعادة للتجمع'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -386,7 +423,7 @@ export const HospitalReview: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setDialog(null)}>إلغاء</Button>
           <Button variant="contained" onClick={() => docsMut.mutate()} disabled={docsMut.isPending || selectedDocs.length === 0}>
-            {docsMut.isPending ? <CircularProgress size={20} /> : 'إرسال الطلب'}
+            {docsMut.isPending ? <CircularProgress size={20} color="inherit" /> : 'إرسال الطلب'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -409,42 +446,51 @@ export const HospitalReview: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setDialog(null)}>إلغاء</Button>
           <Button variant="contained" onClick={() => correctionMut.mutate()} disabled={correctionMut.isPending || !correctionFields}>
-            {correctionMut.isPending ? <CircularProgress size={20} /> : 'إرسال طلب التصحيح'}
+            {correctionMut.isPending ? <CircularProgress size={20} color="inherit" /> : 'إرسال طلب التصحيح'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Change Assignment Dialog */}
+      {/* Change / Confirm Assignment Dialog */}
       <Dialog open={dialog === 'assign'} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>
-        <DialogTitle style={{ fontWeight: 800 }}>تعديل التعيين</DialogTitle>
-        <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <Alert severity="info">المتدرب: <strong>{selectedRow?.nameAr}</strong></Alert>
+        <DialogTitle style={{ fontWeight: 800 }}>توزيع المتدرب على القسم والمدرب والفترة التدريبية</DialogTitle>
+        <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <Alert severity="info">
+            المتدرب: <strong>{selectedRow?.nameAr}</strong> — يتم التحقق تلقائياً من سعة القسم والمقاعد المتاحة.
+          </Alert>
           <FormControl fullWidth size="small">
-            <InputLabel>القسم المستهدف</InputLabel>
-            <Select value={newDeptId} onChange={(e) => setNewDeptId(e.target.value)} label="القسم المستهدف">
-              <MenuItem value="">— بدون تغيير —</MenuItem>
+            <InputLabel>القسم السريري المستهدف *</InputLabel>
+            <Select value={newDeptId} onChange={(e) => setNewDeptId(e.target.value)} label="القسم السريري المستهدف *">
+              <MenuItem value="">— اختر القسم —</MenuItem>
               {departments.map((d: any) => (
-                <MenuItem key={d.id} value={d.id}>{d.nameAr}</MenuItem>
+                <MenuItem key={d.id} value={d.id}>
+                  {d.nameAr} {d.capacity ? `(السعة: ${d.capacity} مقعد)` : ''}
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
           <FormControl fullWidth size="small">
             <InputLabel>المدرب السريري</InputLabel>
             <Select value={newTrainerId} onChange={(e) => setNewTrainerId(e.target.value)} label="المدرب السريري">
-              <MenuItem value="">— بدون تغيير —</MenuItem>
+              <MenuItem value="">— اختر المدرب —</MenuItem>
               {trainers.map((t: any) => (
                 <MenuItem key={t.id} value={t.id}>{t.nameAr || t.email}</MenuItem>
               ))}
             </Select>
           </FormControl>
-          <TextField type="date" label="تاريخ البداية المعدَّل" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} fullWidth size="small" InputLabelProps={{ shrink: true }} />
-          <TextField type="date" label="تاريخ النهاية المعدَّل" value={newEndDate} onChange={(e) => setNewEndDate(e.target.value)} fullWidth size="small" InputLabelProps={{ shrink: true }} />
-          <TextField label="سبب التعديل" value={notes} onChange={(e) => setNotes(e.target.value)} fullWidth size="small" />
+          <TextField type="date" label="تاريخ بداية الفترة التدريبية" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} fullWidth size="small" InputLabelProps={{ shrink: true }} />
+          <TextField type="date" label="تاريخ نهاية الفترة التدريبية" value={newEndDate} onChange={(e) => setNewEndDate(e.target.value)} fullWidth size="small" InputLabelProps={{ shrink: true }} />
+          <TextField label="ملاحظات التوزيع" value={notes} onChange={(e) => setNotes(e.target.value)} fullWidth size="small" multiline rows={2} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialog(null)}>إلغاء</Button>
-          <Button variant="contained" style={{ background: '#059669' }} onClick={() => assignMut.mutate()} disabled={assignMut.isPending}>
-            {assignMut.isPending ? <CircularProgress size={20} /> : 'حفظ التعديل'}
+          <Button
+            variant="contained"
+            style={{ background: '#0F766E' }}
+            onClick={() => assignMut.mutate()}
+            disabled={assignMut.isPending || !newDeptId}
+          >
+            {assignMut.isPending ? <CircularProgress size={20} color="inherit" /> : 'تأكيد التوزيع على القسم والمدرب'}
           </Button>
         </DialogActions>
       </Dialog>

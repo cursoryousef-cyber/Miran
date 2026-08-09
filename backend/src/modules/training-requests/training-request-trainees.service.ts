@@ -1112,17 +1112,27 @@ export class TrainingRequestTraineesService {
     const data = await this.prisma.trainingRequestTrainee.findMany({
       where: {
         assignedHospitalId: hospitalOrgId,
-        status: { in: ['allocated', 'hospital_review', 'on_hold', 'hospital_returned_to_cluster'] },
+        status: { in: ['allocated', 'hospital_review', 'on_hold', 'hospital_returned_to_cluster', 'accepted', 'active'] },
       },
       include: {
         documents: true,
-        assignedHospital: { select: { nameAr: true } },
-        assignedDepartment: { select: { nameAr: true } },
-        assignedTrainer: { select: { id: true, person: { select: { nameAr: true } } } },
+        assignedHospital: { select: { id: true, nameAr: true, nameEn: true } },
+        assignedDepartment: { select: { id: true, nameAr: true, nameEn: true, capacity: true } },
+        assignedTrainer: { select: { id: true, person: { select: { id: true, nameAr: true, nameEn: true } } } },
         trainingRequest: {
           select: {
+            id: true,
             requestNumber: true,
-            sourceOrg: { select: { nameAr: true } },
+            specialty: true,
+            specialtyAr: true,
+            specialtyEn: true,
+            startDate: true,
+            endDate: true,
+            createdAt: true,
+            totalTraineesRequested: true,
+            status: true,
+            sourceOrg: { select: { id: true, nameAr: true, nameEn: true } },
+            targetOrg: { select: { id: true, nameAr: true, nameEn: true } },
           },
         },
       },

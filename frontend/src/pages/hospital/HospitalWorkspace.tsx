@@ -26,11 +26,11 @@ interface Section {
 
 const SECTIONS: Section[] = [
   { key: 'overview',     label: 'نظرة عامة',         render: (goTo) => <WorkspaceOverview onNavigate={goTo} /> },
+  { key: 'requests',     label: '📥 طلبات التدريب الواردة', render: () => <HospitalReview /> },
   { key: 'capacity',     label: 'الطاقة الاستيعابية', render: () => <HospitalCapacity /> },
   { key: 'trainers',     label: 'المدربون',           render: (goTo) => <TrainerCards onNavigate={goTo} /> },
   { key: 'calls',        label: '🔔 النداءات',        render: () => <CallsHub /> },
-  { key: 'requests',     label: 'المتدربون الموزعون للمستشفى', render: () => <HospitalReview /> },
-  { key: 'acceptance',   label: 'سلسلة القبول',       render: () => <AcceptanceChain /> },
+  { key: 'acceptance',   label: 'سلسلة القبول',       render: () => <HospitalReview /> },
   { key: 'reassignment', label: 'إعادة الإسناد',      render: () => <TrainerReassignment /> },
   { key: 'leaves',       label: 'الإجازات',           render: () => <TrainerLeaveManagement /> },
   { key: 'logbook',      label: 'السجل السريري',      render: () => <LogbookPage /> },
