@@ -562,9 +562,12 @@ export class CapacityService {
    */
   async getDepartmentOccupancy(
     departmentId: string,
-    trainingPeriod?: string,
-    tx?: Prisma.TransactionClient,
+    trainingPeriodOrTx?: string | Prisma.TransactionClient,
+    transactionClient?: Prisma.TransactionClient,
   ): Promise<OccupancyResult> {
+    const trainingPeriod = typeof trainingPeriodOrTx === 'string' ? trainingPeriodOrTx : undefined;
+    const tx = typeof trainingPeriodOrTx === 'string' ? transactionClient : (trainingPeriodOrTx || transactionClient);
+
     const db = tx || this.prisma;
     const dept = await db.department.findUnique({
       where: { id: departmentId },
