@@ -138,7 +138,7 @@ const HOSPITAL_TRAINING_NAV: NavSection[] = [
         requires: ['capacity.manage'],
       },
       {
-        name: 'المدربون والأطباء', path: '/org-members', icon: UsersRound,
+        name: 'بطاقات المدربين', path: '/hospital?tab=trainers', icon: UsersRound,
         requires: ['trainer.manage'],
       },
     ],

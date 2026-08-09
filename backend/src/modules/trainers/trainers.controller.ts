@@ -146,6 +146,18 @@ export class TrainersController {
     return this.qualificationService.removeQualification(qualificationId, user);
   }
 
+  @Patch(':id')
+  @RequireCapability(CAPABILITIES.TRAINER_MANAGE)
+  @ScopedResource('trainerProfile', 'id')
+  @ApiOperation({ summary: 'تعديل بيانات وأهلية وسعة المدرب' })
+  async updateTrainerProfile(
+    @Param('id') id: string,
+    @Body() dto: { isActive?: boolean; maxTrainees?: number; departmentId?: string; titleAr?: string },
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    return this.qualificationService.updateTrainerProfile(id, dto, user);
+  }
+
   // ─── Profile Endpoints ──────────────────────────────────────────────────────
 
   /** Own profile — scoped by the caller's own account, so it needs no capability. */

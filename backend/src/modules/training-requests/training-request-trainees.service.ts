@@ -1032,6 +1032,21 @@ export class TrainingRequestTraineesService {
         );
       }
 
+      const today = new Date();
+      const activeLeave = await this.prisma.trainerLeave.findFirst({
+        where: {
+          trainerProfileId: dto.trainerProfileId,
+          status: { in: ['approved', 'active'] },
+          startDate: { lte: today },
+          endDate: { gte: today },
+        },
+      });
+      if (activeLeave) {
+        throw new BadRequestException(
+          `المدرب «${trainer.person?.nameAr ?? ''}» في إجازة حالياً — لا يمكن إسناد متدربين جدد إليه`,
+        );
+      }
+
       const trainerOcc = await this.capacityService.getTrainerOccupancy(dto.trainerProfileId);
       if (trainerOcc.available <= 0) {
         throw new BadRequestException(

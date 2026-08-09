@@ -79,7 +79,7 @@ export class TrainerQualificationService {
    */
   async listWorkspaceCards(organizationId: string) {
     const trainers = await this.prisma.trainerProfile.findMany({
-      where: { organizationId, isActive: true },
+      where: { organizationId },
       include: {
         person: { select: { nameAr: true, nameEn: true, phone: true, email: true, nationalId: true } },
         department: { select: { id: true, nameAr: true, code: true } },
@@ -136,6 +136,7 @@ export class TrainerQualificationService {
 
       return {
         id: t.id,
+        isActive: t.isActive,
         nationalId: t.person.nationalId,
         nameAr: t.person.nameAr,
         nameEn: t.person.nameEn,
@@ -181,6 +182,44 @@ export class TrainerQualificationService {
     });
 
     return { data };
+  }
+
+  async updateTrainerProfile(
+    trainerProfileId: string,
+    dto: { isActive?: boolean; maxTrainees?: number; departmentId?: string; titleAr?: string },
+    user: IAuthenticatedUser,
+  ) {
+    const trainer = await this.requireTrainerInScope(trainerProfileId, user);
+
+    if (dto.maxTrainees !== undefined) {
+      const activeOccupancy = await this.prisma.rotation.count({
+        where: { trainerProfileId, status: 'active' },
+      });
+      if (dto.maxTrainees < activeOccupancy) {
+        throw new BadRequestException(
+          `لا يمكن تخفيض سعة المدرب إلى ${dto.maxTrainees} — لديه حالياً ${activeOccupancy} متدرب نشط`,
+        );
+      }
+    }
+
+    const updated = await this.prisma.trainerProfile.update({
+      where: { id: trainerProfileId },
+      data: {
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+        ...(dto.maxTrainees !== undefined ? { maxTrainees: dto.maxTrainees } : {}),
+        ...(dto.departmentId !== undefined ? { departmentId: dto.departmentId } : {}),
+        ...(dto.titleAr !== undefined ? { titleAr: dto.titleAr } : {}),
+        updatedById: user.accountId,
+      },
+      include: {
+        person: { select: { nameAr: true, nameEn: true, phone: true, email: true, nationalId: true } },
+        department: { select: { id: true, nameAr: true, code: true } },
+      },
+    });
+
+    await this.audit(user, trainer.organizationId, 'update_trainer_profile', trainerProfileId, null, dto);
+
+    return { data: updated, success: true, message: 'تم تحديث بيانات وأهلية المدرب بنجاح' };
   }
 
   async addQualification(

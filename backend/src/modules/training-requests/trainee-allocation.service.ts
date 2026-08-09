@@ -757,6 +757,21 @@ export class TraineeAllocationService {
       );
     }
 
+    const today = new Date();
+    const activeLeave = await this.prisma.trainerLeave.findFirst({
+      where: {
+        trainerProfileId,
+        status: { in: ['approved', 'active'] },
+        startDate: { lte: today },
+        endDate: { gte: today },
+      },
+    });
+    if (activeLeave) {
+      throw new BadRequestException(
+        `المدرب «${trainer.person?.nameAr ?? ''}» في إجازة حالياً — لا يمكن إسناد متدربين جدد إليه`,
+      );
+    }
+
     if (trainerProfileId === previousTrainerId) return;
     const occ =
       await this.capacityService.getTrainerOccupancy(trainerProfileId);
