@@ -198,7 +198,19 @@ export const UsersPage: React.FC = () => {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
-      const res = await apiClient.patch(`/user-accounts/${id}`, payload);
+      const cleanPayload: any = {};
+      if (payload.nameAr) cleanPayload.nameAr = payload.nameAr;
+      if (payload.nameEn) cleanPayload.nameEn = payload.nameEn;
+      if (payload.email) cleanPayload.email = payload.email;
+      if (payload.phone) cleanPayload.phone = payload.phone;
+      if (payload.nationalId) cleanPayload.nationalId = payload.nationalId;
+      if (payload.roleCode) cleanPayload.roleCode = payload.roleCode;
+      if (payload.organizationId) cleanPayload.organizationId = payload.organizationId;
+      if (payload.hospitalId) cleanPayload.hospitalId = payload.hospitalId;
+      if (payload.password && payload.password.trim().length > 0 && payload.password !== 'Miran@Admin2024!') {
+        cleanPayload.password = payload.password;
+      }
+      const res = await apiClient.patch(`/user-accounts/${id}`, cleanPayload);
       return res.data;
     },
     onSuccess: () => {

@@ -1,7 +1,7 @@
 import { Controller, Post, Get, Body, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { LoginDto, SwitchOrgDto, RefreshTokenDto, ActivateAccountDto } from './dto/auth.dto';
+import { LoginDto, SwitchOrgDto, RefreshTokenDto, ActivateAccountDto, ChangePasswordDto } from './dto/auth.dto';
 import { Public, CurrentUser } from '../../common/decorators';
 import { JwtAuthGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
@@ -56,5 +56,17 @@ export class AuthController {
   @ApiOperation({ summary: 'تفعيل حساب جديد وتعيين كلمة المرور' })
   async activateAccount(@Body() dto: ActivateAccountDto) {
     return this.authService.activateAccount(dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'تغيير كلمة المرور للمستخدم الحالي' })
+  async changePassword(
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(user, dto);
   }
 }

@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
-import { LoginDto, SwitchOrgDto, RefreshTokenDto, ActivateAccountDto } from './dto/auth.dto';
+import { LoginDto, SwitchOrgDto, RefreshTokenDto, ActivateAccountDto, ChangePasswordDto } from './dto/auth.dto';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { OrganizationAssignmentService } from '../organization-assignments/organization-assignment.service';
 import { capabilitiesForRoles } from '../../common/authz/capabilities';
@@ -265,6 +265,29 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('رمز التحديث غير صالح أو منتهي الصلاحية');
     }
+  }
+
+  async changePassword(user: IAuthenticatedUser, dto: ChangePasswordDto) {
+    const account = await this.prisma.userAccount.findUnique({
+      where: { id: user.accountId },
+    });
+
+    if (!account || !account.passwordHash) {
+      throw new UnauthorizedException('الحساب غير موجود');
+    }
+
+    const isMatch = await bcrypt.compare(dto.currentPassword, account.passwordHash);
+    if (!isMatch) {
+      throw new BadRequestException('كلمة المرور الحالية غير صحيحة');
+    }
+
+    const newHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.userAccount.update({
+      where: { id: account.id },
+      data: { passwordHash: newHash },
+    });
+
+    return { message: 'تم تغيير كلمة المرور بنجاح' };
   }
 
   async getProfile(user: IAuthenticatedUser) {

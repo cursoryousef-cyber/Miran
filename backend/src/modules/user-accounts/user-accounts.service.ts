@@ -569,10 +569,40 @@ export class UserAccountsService implements OnModuleInit {
           },
         });
       }
+
+      let passwordHash: string | undefined;
+      if (dto.password && dto.password.trim().length > 0) {
+        passwordHash = await bcrypt.hash(dto.password, 10);
+      }
+
+      const targetOrgId = dto.hospitalId || dto.organizationId;
+      if (dto.roleCode || targetOrgId) {
+        const roleCodeToUse = dto.roleCode || account.userRoles?.[0]?.role?.code;
+        const orgIdToUse = targetOrgId || account.userRoles?.[0]?.organizationId;
+        if (roleCodeToUse && orgIdToUse) {
+          const role = await tx.role.findUnique({ where: { code: roleCodeToUse } });
+          if (role) {
+            // Delete old role for account if replacing
+            if (account.userRoles?.[0]) {
+              await tx.userRole.deleteMany({ where: { userAccountId: id } });
+            }
+            await tx.userRole.create({
+              data: {
+                userAccountId: id,
+                roleId: role.id,
+                organizationId: orgIdToUse,
+                assignedById: user?.accountId,
+              },
+            }).catch(() => null);
+          }
+        }
+      }
+
       return tx.userAccount.update({
         where: { id },
         data: {
           ...(dto.email ? { email: dto.email } : {}),
+          ...(passwordHash ? { passwordHash } : {}),
           updatedById: user?.accountId,
         },
         include: { person: true, userRoles: { include: { role: true, organization: true } } },

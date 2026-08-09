@@ -43,3 +43,15 @@ export class ActivateAccountDto {
   @MinLength(8, { message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' })
   password!: string;
 }
+
+export class ChangePasswordDto {
+  @ApiProperty({ description: 'كلمة المرور الحالية' })
+  @IsString()
+  @IsNotEmpty({ message: 'كلمة المرور الحالية مطلوبة' })
+  currentPassword!: string;
+
+  @ApiProperty({ description: 'كلمة المرور الجديدة' })
+  @IsString()
+  @MinLength(8, { message: 'كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل' })
+  newPassword!: string;
+}

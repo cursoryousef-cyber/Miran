@@ -99,6 +99,11 @@ export class UpdateUserAccountDto {
   @IsOptional()
   @IsString()
   roleCode?: string;
+
+  @ApiPropertyOptional({ description: 'كلمة المرور' })
+  @IsOptional()
+  @IsString()
+  password?: string;
 }
 
 export class AddUserToOrgDto {

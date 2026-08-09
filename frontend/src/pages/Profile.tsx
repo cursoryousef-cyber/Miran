@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Lock,
   Edit,
+  Key,
 } from 'lucide-react';
 import {
   Box,
@@ -43,6 +44,7 @@ const colour = {
 export const ProfilePage: React.FC = () => {
   const { user, updateUser } = useAuth();
   const [openEdit, setOpenEdit] = useState(false);
+  const [openPassword, setOpenPassword] = useState(false);
   const [nameAr, setNameAr] = useState(user?.nameAr || '');
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '');
@@ -51,6 +53,14 @@ export const ProfilePage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Change Password state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwdSaving, setPwdSaving] = useState(false);
+  const [pwdError, setPwdError] = useState<string | null>(null);
+  const [pwdSuccess, setPwdSuccess] = useState<string | null>(null);
+
   if (!user) {
     return (
       <Box sx={{ p: 4, textAlign: 'center' }}>
@@ -58,6 +68,40 @@ export const ProfilePage: React.FC = () => {
       </Box>
     );
   }
+
+  const handleChangePassword = async () => {
+    setPwdError(null);
+    setPwdSuccess(null);
+    if (!currentPassword) {
+      setPwdError('كلمة المرور الحالية مطلوبة');
+      return;
+    }
+    if (!newPassword || newPassword.length < 8) {
+      setPwdError('كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwdError('كلمة المرور الجديدة وتأكيدها غير متطابقين');
+      return;
+    }
+
+    setPwdSaving(true);
+    try {
+      await apiClient.post('/auth/change-password', {
+        currentPassword,
+        newPassword,
+      });
+      setPwdSuccess('تم تغيير كلمة المرور بنجاح. يمكنك تسجيل الدخول بها مجدداً.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setOpenPassword(false);
+    } catch (err: any) {
+      setPwdError(err?.response?.data?.message || 'تعذر تغيير كلمة المرور');
+    } finally {
+      setPwdSaving(false);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -155,29 +199,48 @@ export const ProfilePage: React.FC = () => {
           backgroundColor: colour.cardBg,
         }}
       >
-        {/* Section 1: Personal Info Header with Edit Button */}
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        {/* Section 1: Personal Info Header with Edit & Password Buttons */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 800, color: colour.primary, display: 'flex', alignItems: 'center', gap: 1 }}>
             <User size={18} />
             البيانات الشخصية والحساب
           </Typography>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<Edit size={14} />}
-            onClick={() => {
-              setNameAr(user.nameAr || '');
-              setEmail(user.email || '');
-              setPhone(user.phone || '');
-              setNationalId(user.nationalId || '');
-              setOpenEdit(true);
-            }}
-            sx={{ borderColor: colour.primary, color: colour.primary, fontWeight: 700 }}
-          >
-            تحديث البيانات الشخصية
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<Key size={14} />}
+              onClick={() => {
+                setPwdError(null);
+                setPwdSuccess(null);
+                setCurrentPassword('');
+                setNewPassword('');
+                setConfirmPassword('');
+                setOpenPassword(true);
+              }}
+              sx={{ borderColor: colour.info, color: colour.info, fontWeight: 700 }}
+            >
+              تغير كلمة المرور
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<Edit size={14} />}
+              onClick={() => {
+                setNameAr(user.nameAr || '');
+                setEmail(user.email || '');
+                setPhone(user.phone || '');
+                setNationalId(user.nationalId || '');
+                setOpenEdit(true);
+              }}
+              sx={{ borderColor: colour.primary, color: colour.primary, fontWeight: 700 }}
+            >
+              تحديث البيانات الشخصية
+            </Button>
+          </Box>
         </Box>
 
+        {pwdSuccess && <Alert severity="success" sx={{ mb: 2 }}>{pwdSuccess}</Alert>}
         {successMsg && <Alert severity="success" sx={{ mb: 2 }}>{successMsg}</Alert>}
 
         <Grid container spacing={2.5} sx={{ mb: 3 }}>
@@ -324,6 +387,49 @@ export const ProfilePage: React.FC = () => {
             sx={{ bgcolor: colour.primary, fontWeight: 700 }}
           >
             {isSaving ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Change Password Dialog */}
+      <Dialog open={openPassword} onClose={() => setOpenPassword(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800 }}>تغيير كلمة المرور</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+          {pwdError && <Alert severity="error">{pwdError}</Alert>}
+          <TextField
+            label="كلمة المرور الحالية"
+            type="password"
+            fullWidth
+            required
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+          />
+          <TextField
+            label="كلمة المرور الجديدة (8 أحرف على الأقل)"
+            type="password"
+            fullWidth
+            required
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+          <TextField
+            label="تأكيد كلمة المرور الجديدة"
+            type="password"
+            fullWidth
+            required
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setOpenPassword(false)}>إلغاء</Button>
+          <Button
+            variant="contained"
+            disabled={pwdSaving}
+            onClick={handleChangePassword}
+            sx={{ bgcolor: colour.info, fontWeight: 700 }}
+          >
+            {pwdSaving ? 'جاري التحديث...' : 'تأكيد كلمة المرور الجديدة'}
           </Button>
         </DialogActions>
       </Dialog>
