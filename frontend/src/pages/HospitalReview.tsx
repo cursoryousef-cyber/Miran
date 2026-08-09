@@ -45,27 +45,27 @@ export const HospitalReview: React.FC = () => {
 
   const orgId = user?.activeOrganization?.id;
 
-  // Load departments and trainers for assignment dialog
-  const { data: deptData } = useQuery({
-    queryKey: ['org-departments', orgId],
+  // Load departments with capacity and workspace trainers for assignment dialog
+  const { data: capacityData } = useQuery({
+    queryKey: ['hospital-capacity-breakdown', orgId],
     queryFn: async () => {
-      const res = await apiClient.get('/org-members/departments');
+      const res = await apiClient.get(`/organizations/${orgId}/capacity`);
+      return res.data;
+    },
+    enabled: !!orgId,
+  });
+
+  const { data: trainerCardsData } = useQuery({
+    queryKey: ['trainer-cards-assignment', orgId],
+    queryFn: async () => {
+      const res = await apiClient.get('/trainers/workspace-cards');
       return res.data?.data || [];
     },
     enabled: !!orgId,
   });
 
-  const { data: trainerData } = useQuery({
-    queryKey: ['org-trainers', orgId],
-    queryFn: async () => {
-      const res = await apiClient.get('/org-members', { params: { role: 'trainer' } });
-      return res.data?.data || [];
-    },
-    enabled: !!orgId,
-  });
-
-  const departments: any[] = deptData || [];
-  const trainers: any[] = trainerData || [];
+  const departments: any[] = capacityData?.departments || [];
+  const trainers: any[] = trainerCardsData || [];
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['hospital-review-trainees', orgId],
@@ -78,19 +78,6 @@ export const HospitalReview: React.FC = () => {
 
   const rows: any[] = data?.data || [];
 
-  const mutate = (action: string, payload: any = {}) =>
-    useMutation({
-      mutationFn: () => apiClient.post(`/training-requests/trainees/${selectedRow?.id}/${action}`, payload),
-      onSuccess: (res: any) => {
-        qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] });
-        setDialog(null);
-        setSelectedRow(null);
-        setSuccessMsg(res.data?.message || 'تمت العملية بنجاح');
-      },
-      onError: (err: any) => setErrorMsg(err.response?.data?.message || err.message),
-    });
-
-  // Individual mutations to avoid hook rule violations
   const startReviewMut = useMutation({
     mutationFn: (rowId: string) =>
       apiClient.post(`/training-requests/trainees/${rowId}/hospital-review/start`),
@@ -130,7 +117,17 @@ export const HospitalReview: React.FC = () => {
       endDate: newEndDate || undefined,
       reason: notes,
     }),
-    onSuccess: (res: any) => { qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] }); setDialog(null); setSuccessMsg(res.data?.message); },
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] });
+      qc.invalidateQueries({ queryKey: ['hospital-capacity-breakdown'] });
+      qc.invalidateQueries({ queryKey: ['hospital-capacity'] });
+      qc.invalidateQueries({ queryKey: ['trainer-cards-assignment'] });
+      qc.invalidateQueries({ queryKey: ['trainer-cards'] });
+      qc.invalidateQueries({ queryKey: ['hospitals-cards'] });
+      qc.invalidateQueries({ queryKey: ['rotations-departments'] });
+      setDialog(null);
+      setSuccessMsg(res.data?.message || 'تم إسناد المتدرب وتحديث سعة القسم والمدرب بنجاح');
+    },
     onError: (err: any) => setErrorMsg(err.response?.data?.message || err.message),
   });
 
@@ -464,20 +461,40 @@ export const HospitalReview: React.FC = () => {
             <InputLabel>القسم السريري المستهدف *</InputLabel>
             <Select value={newDeptId} onChange={(e) => setNewDeptId(e.target.value)} label="القسم السريري المستهدف *">
               <MenuItem value="">— اختر القسم —</MenuItem>
-              {departments.map((d: any) => (
-                <MenuItem key={d.id} value={d.id}>
-                  {d.nameAr} {d.capacity ? `(السعة: ${d.capacity} مقعد)` : ''}
-                </MenuItem>
-              ))}
+              {departments.map((d: any) => {
+                const cap = d.occupancy?.capacity ?? d.capacity ?? 0;
+                const occ = d.occupancy?.occupied ?? 0;
+                const avail = d.occupancy?.available ?? Math.max(0, cap - occ);
+                const isFull = avail <= 0;
+                return (
+                  <MenuItem key={d.id} value={d.id} disabled={isFull}>
+                    {d.nameAr} — السعة: {cap} | المشغول: {occ} | المتاح: {avail} مقعد {isFull ? '(ممتلئ)' : ''}
+                  </MenuItem>
+                );
+              })}
             </Select>
           </FormControl>
           <FormControl fullWidth size="small">
             <InputLabel>المدرب السريري</InputLabel>
             <Select value={newTrainerId} onChange={(e) => setNewTrainerId(e.target.value)} label="المدرب السريري">
               <MenuItem value="">— اختر المدرب —</MenuItem>
-              {trainers.map((t: any) => (
-                <MenuItem key={t.id} value={t.id}>{t.nameAr || t.email}</MenuItem>
-              ))}
+              {trainers.map((t: any) => {
+                const isUnqualified = !t.isActive;
+                const isOnLeave = Boolean(t.onLeave);
+                const isFull = (t.available ?? 0) <= 0;
+                const isDisabled = isUnqualified || isOnLeave || isFull;
+
+                let hint = `(المتاح: ${t.available ?? 0} من ${t.maxTrainees ?? 5})`;
+                if (isUnqualified) hint = '(غير مؤهل للتدريب)';
+                else if (isOnLeave) hint = '(في إجازة حالياً)';
+                else if (isFull) hint = '(وصل لأقصى سعة)';
+
+                return (
+                  <MenuItem key={t.id} value={t.id} disabled={isDisabled}>
+                    {t.nameAr} {t.department?.nameAr ? `(${t.department.nameAr})` : ''} — {hint}
+                  </MenuItem>
+                );
+              })}
             </Select>
           </FormControl>
           <TextField type="date" label="تاريخ بداية الفترة التدريبية" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} fullWidth size="small" InputLabelProps={{ shrink: true }} />

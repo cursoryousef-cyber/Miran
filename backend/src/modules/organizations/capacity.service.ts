@@ -560,13 +560,33 @@ export class CapacityService {
    * Department capacity is declared on the department itself; occupancy is the
    * same union as above, narrowed to active trainees in this department.
    */
-  async getDepartmentOccupancy(departmentId: string, tx?: Prisma.TransactionClient): Promise<OccupancyResult> {
+  async getDepartmentOccupancy(
+    departmentId: string,
+    trainingPeriod?: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<OccupancyResult> {
     const db = tx || this.prisma;
     const dept = await db.department.findUnique({
       where: { id: departmentId },
-      select: { capacity: true, isActive: true },
+      select: { organizationId: true, capacity: true, isActive: true },
     });
     if (!dept) return { capacity: 0, occupied: 0, available: 0, occupancyPercentage: 0 };
+
+    let effectiveCapacity = dept.capacity;
+    if (trainingPeriod) {
+      const periodAlloc = await db.capacityAllocation.findFirst({
+        where: {
+          organizationId: dept.organizationId,
+          scopeType: 'department',
+          scopeId: departmentId,
+          trainingPeriod,
+        },
+        select: { totalCapacity: true },
+      });
+      if (periodAlloc) {
+        effectiveCapacity = periodAlloc.totalCapacity;
+      }
+    }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -605,7 +625,7 @@ export class CapacityService {
     ]);
 
     // An inactive department offers no training seats regardless of its number.
-    return this.toExplicitResult(dept.isActive ? dept.capacity : 0, occupants.size);
+    return this.toExplicitResult(dept.isActive ? effectiveCapacity : 0, occupants.size);
   }
 
   async getTrainerOccupancy(trainerProfileId: string, tx?: Prisma.TransactionClient): Promise<OccupancyResult> {
