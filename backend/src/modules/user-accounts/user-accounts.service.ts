@@ -76,12 +76,20 @@ export class UserAccountsService implements OnModuleInit {
             },
           },
         });
+        const compoundKey = {
+          userAccountId_roleId_organizationId: {
+            userAccountId: ur.userAccountId,
+            roleId: ur.roleId,
+            organizationId: ur.organizationId,
+          },
+        };
+
         if (existing) {
-          await this.prisma.userRole.delete({ where: { id: ur.id } }).catch(() => null);
+          await this.prisma.userRole.delete({ where: compoundKey }).catch(() => null);
         } else {
           await this.prisma.userRole
             .update({
-              where: { id: ur.id },
+              where: compoundKey,
               data: { roleId: targetId },
             })
             .catch(() => null);
