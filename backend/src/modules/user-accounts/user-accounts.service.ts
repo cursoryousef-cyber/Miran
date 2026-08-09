@@ -8,7 +8,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateUserAccountDto, AddUserToOrgDto, AssignRoleDto } from './dto/user-account.dto';
+import { CreateUserAccountDto, UpdateUserAccountDto, AddUserToOrgDto, AssignRoleDto } from './dto/user-account.dto';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { membershipWhere } from '../organization-assignments/organization-assignment.service';
 import { roleScope } from '../../common/role-scope';
@@ -27,7 +27,7 @@ export class UserAccountsService implements OnModuleInit {
 
   private async migrateDeprecatedRoles() {
     const canonicalRoles = [
-      { code: 'platform_owner', nameAr: 'مالك المنصة الوطنية', nameEn: 'Platform Owner' },
+      { code: 'platform_owner', nameAr: 'مالك المنصة الإلكترونية', nameEn: 'Platform Owner' },
       { code: 'cluster_manager', nameAr: 'مشرف التدريب بالتجمع', nameEn: 'Cluster Training Manager' },
       { code: 'hospital_training_admin', nameAr: 'إدارة التدريب بالمستشفى', nameEn: 'Hospital Training Admin' },
       { code: 'department_head', nameAr: 'رئيس القسم السريري', nameEn: 'Department Head' },
@@ -168,7 +168,14 @@ export class UserAccountsService implements OnModuleInit {
           },
         },
         userRoles: {
-          include: { role: true, organization: { include: { organizationType: true } } },
+          include: {
+            role: {
+              include: {
+                rolePermissions: { include: { permission: true } },
+              },
+            },
+            organization: { include: { organizationType: true, parent: { select: { id: true, nameAr: true, code: true } } } },
+          },
         },
         userPermissions: {
           include: { permission: true, organization: true },
@@ -543,6 +550,42 @@ export class UserAccountsService implements OnModuleInit {
       where: { id },
       data: {
         isActive: !account.isActive,
+        updatedById: user?.accountId,
+      },
+    });
+  }
+
+  async update(id: string, dto: UpdateUserAccountDto, user?: IAuthenticatedUser) {
+    const account = await this.findOne(id);
+    return this.prisma.$transaction(async (tx) => {
+      if (dto.nameAr || dto.nameEn || dto.nationalId || dto.phone) {
+        await tx.person.update({
+          where: { id: account.personId },
+          data: {
+            ...(dto.nameAr ? { nameAr: dto.nameAr } : {}),
+            ...(dto.nameEn ? { nameEn: dto.nameEn } : {}),
+            ...(dto.nationalId ? { nationalId: dto.nationalId } : {}),
+            ...(dto.phone ? { phone: dto.phone } : {}),
+          },
+        });
+      }
+      return tx.userAccount.update({
+        where: { id },
+        data: {
+          ...(dto.email ? { email: dto.email } : {}),
+          updatedById: user?.accountId,
+        },
+        include: { person: true, userRoles: { include: { role: true, organization: true } } },
+      });
+    });
+  }
+
+  async delete(id: string, user?: IAuthenticatedUser) {
+    return this.prisma.userAccount.update({
+      where: { id },
+      data: {
+        isActive: false,
+        deletedAt: new Date(),
         updatedById: user?.accountId,
       },
     });

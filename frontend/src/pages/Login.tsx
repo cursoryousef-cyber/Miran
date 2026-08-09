@@ -87,7 +87,7 @@ export const Login: React.FC = () => {
             <ShieldCheck size={32} color="#FFFFFF" />
           </div>
           <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', margin: 0 }}>تسجيل الدخول — مِران</h2>
-          <p style={{ fontSize: '13px', color: '#64748B', marginTop: '8px' }}>المنصة الوطنية لإدارة التدريب الصحي</p>
+          <p style={{ fontSize: '13px', color: '#64748B', marginTop: '8px' }}>المنصة الإلكترونية لإدارة التدريب الصحي</p>
         </div>
 
         {error && (

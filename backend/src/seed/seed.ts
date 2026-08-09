@@ -45,7 +45,7 @@ async function main() {
   console.log('🎭 Seeding Roles...');
 
   const roles = [
-    { code: 'platform_owner', nameAr: 'مدير المنصة الوطنية', nameEn: 'Platform Owner', hierarchyLevel: 100, isSystem: true },
+    { code: 'platform_owner', nameAr: 'مدير المنصة الإلكترونية', nameEn: 'Platform Owner', hierarchyLevel: 100, isSystem: true },
     { code: 'system_admin', nameAr: 'مدير النظام التنفيذي', nameEn: 'System Administrator', hierarchyLevel: 95, isSystem: true },
     { code: 'holding_administrator', nameAr: 'مدير الصحة القابضة', nameEn: 'Holding Administrator', hierarchyLevel: 90, isSystem: true },
     { code: 'cluster_administrator', nameAr: 'مدير التجمع الصحي', nameEn: 'Cluster Administrator', hierarchyLevel: 80, isSystem: true },
@@ -237,7 +237,7 @@ async function main() {
     // 1. Platform Owner
     {
       natId: '1000000000',
-      nameAr: 'مدير المنصة الوطنية',
+      nameAr: 'مدير المنصة الإلكترونية',
       email: 'platform@miran.health',
       username: 'platform',
       roleCode: 'platform_owner',

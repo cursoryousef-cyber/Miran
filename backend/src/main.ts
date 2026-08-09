@@ -33,12 +33,13 @@ async function bootstrap() {
   });
 
   // Global Prefix & API Versioning
-  const apiPrefix = process.env.API_PREFIX || 'api/v1';
+  const apiPrefix = process.env.API_PREFIX || 'api';
   app.setGlobalPrefix(apiPrefix, {
     exclude: ['/', 'health', 'api/docs'],
   });
   app.enableVersioning({
     type: VersioningType.URI,
+    defaultVersion: '1',
   });
 
   // Global Validation Pipe

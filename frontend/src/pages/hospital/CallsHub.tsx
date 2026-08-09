@@ -117,6 +117,28 @@ export const CallsHub: React.FC = () => {
     enabled: isTrainee,
   });
 
+  const [targetType, setTargetType] = useState<string>('all_trainees');
+  const [selectedTrainers, setSelectedTrainers] = useState<string[]>([]);
+  const [selectedTrainees, setSelectedTrainees] = useState<string[]>([]);
+
+  const { data: hospitalTrainers } = useQuery({
+    queryKey: ['calls-hospital-trainers'],
+    queryFn: async () => {
+      const res = await apiClient.get('/trainers/workspace-cards').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+    enabled: isTrainer,
+  });
+
+  const { data: hospitalTrainees } = useQuery({
+    queryKey: ['calls-hospital-trainees'],
+    queryFn: async () => {
+      const res = await apiClient.get('/trainees/incoming').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+    enabled: isTrainer,
+  });
+
   const handleLaunch = async () => {
     setLaunching(true);
     setLaunchMsg(null);
@@ -133,10 +155,13 @@ export const CallsHub: React.FC = () => {
         location: locationEl || undefined,
         note: noteEl || undefined,
         expectedMinutes: minutesEl,
+        targetType,
+        targetTrainerIds: selectedTrainers,
+        targetTraineeIds: selectedTrainees,
       });
 
-      const notified = res.data?.data?.notifiedCount ?? 0;
-      setLaunchMsg(`✅ تم إطلاق النداء بنجاح وتنبيه ${notified} متدرباً`);
+      const notified = res.data?.data?.traineesNotified ?? res.data?.data?.notifiedCount ?? 0;
+      setLaunchMsg(`✅ تم إطلاق النداء بنجاح ونشر الإشعارات لجميع المستهدفين (${notified} مستلماً)`);
       refetchActive();
       qc.invalidateQueries({ queryKey: ['calls-history'] });
     } catch (e: any) {
@@ -367,11 +392,64 @@ export const CallsHub: React.FC = () => {
                   ))}
                 </Select>
               </FormControl>
+
+              <FormControl size="small" fullWidth>
+                <InputLabel>فئة المستلمين المستهدفة</InputLabel>
+                <Select
+                  value={targetType}
+                  onChange={(e) => setTargetType(e.target.value)}
+                  label="فئة المستلمين المستهدفة"
+                >
+                  <MenuItem value="all_trainees">جميع المتدربين بالمستشفى</MenuItem>
+                  <MenuItem value="selected_trainees">متدربون محددون</MenuItem>
+                  <MenuItem value="all_trainers">جميع المدربين بالمستشفى</MenuItem>
+                  <MenuItem value="selected_trainers">مدربون محددون</MenuItem>
+                  <MenuItem value="all_both">جميع المدربين والمتدربين</MenuItem>
+                </Select>
+              </FormControl>
+
               <TextField label="عنوان النداء (اختياري)" size="small" fullWidth inputProps={{ id: 'launch-title' }} />
-              <TextField label="الموقع" size="small" fullWidth inputProps={{ id: 'launch-location' }} />
+              <TextField label="الموقع السريري" size="small" fullWidth inputProps={{ id: 'launch-location' }} />
               <TextField label="المدة المتوقعة (دقيقة)" size="small" type="number" defaultValue={15} fullWidth inputProps={{ id: 'launch-minutes', min: 5, max: 120 }} />
             </div>
-            <TextField label="ملاحظة للمتدربين" size="small" fullWidth multiline rows={2} inputProps={{ id: 'launch-note' }} sx={{ mb: 2 }} />
+
+            {targetType === 'selected_trainers' && (
+              <FormControl size="small" fullWidth sx={{ mb: 2 }}>
+                <InputLabel>تحديد المدربين</InputLabel>
+                <Select
+                  multiple
+                  value={selectedTrainers}
+                  onChange={(e) => setSelectedTrainers(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+                  label="تحديد المدربين"
+                >
+                  {(hospitalTrainers ?? []).map((tr: any) => (
+                    <MenuItem key={tr.id} value={tr.id}>
+                      {tr.person?.nameAr || tr.nameAr || tr.id} ({tr.department?.nameAr || 'قسم عام'})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
+            {targetType === 'selected_trainees' && (
+              <FormControl size="small" fullWidth sx={{ mb: 2 }}>
+                <InputLabel>تحديد المتدربين</InputLabel>
+                <Select
+                  multiple
+                  value={selectedTrainees}
+                  onChange={(e) => setSelectedTrainees(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+                  label="تحديد المتدربين"
+                >
+                  {(hospitalTrainees ?? []).map((t: any) => (
+                    <MenuItem key={t.id} value={t.id}>
+                      {t.person?.nameAr || t.id} ({t.program?.nameAr || 'امتياز'})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
+            <TextField label="الوصف والملاحظات للمستلمين" size="small" fullWidth multiline rows={2} inputProps={{ id: 'launch-note' }} sx={{ mb: 2 }} />
             {launchMsg && (
               <div style={{ marginBottom: space.md, color: launchMsg.startsWith('✅') ? colour.primary : colour.danger, fontWeight: 700, fontSize: font.body }}>
                 {launchMsg}

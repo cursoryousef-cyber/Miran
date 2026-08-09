@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import {
   Button, TextField, Chip, Table, TableBody, TableCell, TableHead, TableRow,
-  TablePagination, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Tooltip, FormControl, InputLabel, Select, MenuItem, Alert, AlertTitle, Box, Divider
+  TablePagination, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Tooltip, FormControl, InputLabel, Select, MenuItem, Alert, AlertTitle, Box, Divider, Typography
 } from '@mui/material';
 import { ArrowRight } from 'lucide-react';
 import { colour, font, space } from '../components/ui/tokens';
@@ -51,6 +51,57 @@ export const UsersPage: React.FC = () => {
   const canDelete = hasPermission(user, 'delete', 'users');
 
   const isPlatformOwner = user?.roles?.includes('platform_owner') ?? false;
+
+  // Fetch detailed account info when editing
+  const { data: editUserDetail } = useQuery({
+    queryKey: ['user-detail', openEdit?.id],
+    queryFn: async () => {
+      if (!openEdit?.id) return null;
+      const res = await apiClient.get(`/user-accounts/${openEdit.id}`);
+      return res.data;
+    },
+    enabled: !!openEdit?.id,
+  });
+
+  const roleNameMap: Record<string, string> = useMemo(() => ({
+    platform_owner: 'مدير المنصة الإلكترونية',
+    cluster_manager: 'مشرف التدريب بالتجمع',
+    hospital_training_admin: 'إدارة التدريب بالمستشفى',
+    department_head: 'رئيس القسم العلمي',
+    training_supervisor: 'مشرف التدريب السريري',
+    university_administrator: 'مسؤول الجامعة',
+    academic_supervisor: 'المشرف الأكاديمي',
+    trainer: 'مدرب سريري',
+    trainee: 'متدرب / طبيب امتياز',
+  }), []);
+
+  const userPermissionsList = useMemo(() => {
+    if (!editUserDetail) return [];
+    const permsMap = new Map<string, { code: string; nameAr: string; module: string }>();
+    editUserDetail.userRoles?.forEach((ur: any) => {
+      ur.role?.rolePermissions?.forEach((rp: any) => {
+        if (rp.permission) {
+          permsMap.set(rp.permission.code, rp.permission);
+        }
+      });
+    });
+    editUserDetail.userPermissions?.forEach((up: any) => {
+      if (up.permission) {
+        permsMap.set(up.permission.code, up.permission);
+      }
+    });
+    return Array.from(permsMap.values());
+  }, [editUserDetail]);
+
+  const groupedPermissions = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    userPermissionsList.forEach((p) => {
+      const mod = p.module || 'صلاحيات عامة';
+      if (!groups[mod]) groups[mod] = [];
+      groups[mod].push(p);
+    });
+    return groups;
+  }, [userPermissionsList]);
 
   // Fetch Accounts (Global for Platform Owner)
   const { data, isLoading, refetch } = useQuery({
@@ -497,7 +548,7 @@ export const UsersPage: React.FC = () => {
                 label="اختر الدور القيادي / السريري (Role)"
                 onChange={(e) => setFormData({ ...formData, roleCode: e.target.value })}
               >
-                <MenuItem value="platform_owner">مالك المنصة الوطنية (Platform Owner)</MenuItem>
+                <MenuItem value="platform_owner">مالك المنصة الإلكترونية (Platform Owner)</MenuItem>
                 <MenuItem value="cluster_manager">مشرف التدريب بالتجمع (Cluster Manager)</MenuItem>
                 <MenuItem value="hospital_training_admin">إدارة التدريب بالمستشفى (Hospital Training Admin)</MenuItem>
                 <MenuItem value="department_head">رئيس القسم السريري (Department Head)</MenuItem>
@@ -588,18 +639,127 @@ export const UsersPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* Dialog: Edit User */}
-      <Dialog open={!!openEdit} onClose={() => setOpenEdit(null)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 800, color: colour.text }}>تعديل بيانات الحساب والصلاحيات</DialogTitle>
-        <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: space.md }}>
-          <TextField label="الاسم بالعربية" fullWidth size="small" value={formData.nameAr} onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })} />
-          <TextField label="البريد الإلكتروني" type="email" fullWidth size="small" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+      <Dialog open={!!openEdit} onClose={() => setOpenEdit(null)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, color: colour.text, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Edit size={20} color={colour.primary} />
+          تعديل بيانات الحساب والصلاحيات
+        </DialogTitle>
+        <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+
+          {/* Section 1: Account Info */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: colour.primary, mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <UsersIcon size={16} />
+              بيانات الحساب الأساسية
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+              <TextField label="الاسم بالعربية" fullWidth size="small" value={formData.nameAr} onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })} />
+              <TextField label="البريد الإلكتروني" type="email" fullWidth size="small" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+              <TextField label="رقم الجوال" fullWidth size="small" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+              <TextField label="رقم الهوية الوطنية" fullWidth size="small" value={formData.nationalId} onChange={(e) => setFormData({ ...formData, nationalId: e.target.value })} />
+            </Box>
+          </Box>
+
+          <Divider />
+
+          {/* Section 2: Affiliated Facility */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: colour.primary, mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Building2 size={16} />
+              المنشأة التابعة والتجمع الصحي
+            </Typography>
+            <Box sx={{ p: 2, background: '#F8FAFC', borderRadius: 2, border: `1px solid ${colour.border}`, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+              <div>
+                <Typography variant="caption" sx={{ color: colour.muted, display: 'block', mb: 0.5 }}>اسم المنشأة / المستشفى:</Typography>
+                <Chip
+                  label={editUserDetail?.userRoles?.[0]?.organization?.nameAr || openEdit?.userRoles?.[0]?.organization?.nameAr || 'المنصة الإلكترونية'}
+                  color="primary"
+                  variant="outlined"
+                  sx={{ fontWeight: 700 }}
+                />
+              </div>
+              <div>
+                <Typography variant="caption" sx={{ color: colour.muted, display: 'block', mb: 0.5 }}>التجمع الصحي التابع له:</Typography>
+                <Chip
+                  label={editUserDetail?.userRoles?.[0]?.organization?.parent?.nameAr || 'جهة / مستشفى مستقل'}
+                  color="info"
+                  variant="outlined"
+                  sx={{ fontWeight: 700 }}
+                />
+              </div>
+            </Box>
+          </Box>
+
+          <Divider />
+
+          {/* Section 3: Current Role */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: colour.primary, mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Shield size={16} />
+              الدور الحالي المعتمد
+            </Typography>
+            <Box sx={{ p: 2, background: colour.primarySoft, borderRadius: 2, border: `1px solid #99F6E4`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <Typography variant="body2" sx={{ fontWeight: 800, color: colour.primary }}>
+                  {roleNameMap[formData.roleCode] || formData.roleCode}
+                </Typography>
+                <Typography variant="caption" sx={{ color: colour.primary, opacity: 0.85 }}>
+                  Role Code: <code>{formData.roleCode}</code>
+                </Typography>
+              </div>
+              <Chip label="نطاق معزول ومفعّل" color="success" size="small" sx={{ fontWeight: 700 }} />
+            </Box>
+          </Box>
+
+          <Divider />
+
+          {/* Section 4: Assigned Permissions */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: colour.primary, mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <ShieldCheck size={16} />
+              الصلاحيات الفعلية المسندة (مجمعة حسب الوحدة)
+            </Typography>
+
+            {Object.keys(groupedPermissions).length === 0 ? (
+              <Alert severity="info" sx={{ py: 0.5, fontSize: 12 }}>
+                الصلاحيات مستخرجة حياً من دور الحساب بالنظام.
+              </Alert>
+            ) : (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {Object.entries(groupedPermissions).map(([mod, perms]) => (
+                  <Box key={mod} sx={{ p: 1.5, background: '#F8FAFC', borderRadius: 2, border: `1px solid ${colour.border}` }}>
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: colour.text, mb: 1, display: 'block' }}>
+                      📦 وحدة {mod}
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
+                      {perms.map((p: any) => (
+                        <Chip
+                          key={p.code}
+                          label={`${p.nameAr || p.code}`}
+                          size="small"
+                          color="success"
+                          variant="outlined"
+                          sx={{ fontSize: 11, fontWeight: 700 }}
+                        />
+                      ))}
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
+
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
           <Button onClick={() => setOpenEdit(null)} sx={{ color: colour.muted }}>إلغاء</Button>
-          <Button variant="contained" onClick={() => openEdit && updateMutation.mutate({ id: openEdit.id, payload: formData })}>
-            تحديث الحساب
+          <Button
+            variant="contained"
+            onClick={() => openEdit && updateMutation.mutate({ id: openEdit.id, payload: formData })}
+            disabled={updateMutation.isPending}
+            sx={{ background: colour.primary, fontWeight: 700 }}
+          >
+            {updateMutation.isPending ? 'جاري التحديث...' : 'تحديث الحساب'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -611,7 +771,7 @@ export const UsersPage: React.FC = () => {
           <div><strong>الاسم:</strong> {openDetails?.person?.nameAr} ({openDetails?.person?.nameEn || '—'})</div>
           <div><strong>البريد الإلكتروني:</strong> {openDetails?.email}</div>
           <div><strong>الهوية الوطنية:</strong> {openDetails?.person?.nationalId || '—'}</div>
-          <div><strong>الجهة الرئيسية:</strong> {openDetails?.userRoles?.[0]?.organization?.nameAr || 'المنصة الوطنية'}</div>
+          <div><strong>الجهة الرئيسية:</strong> {openDetails?.userRoles?.[0]?.organization?.nameAr || 'المنصة الإلكترونية'}</div>
           <div><strong>الحالة:</strong> {openDetails?.isActive ? 'نشط' : 'معلق'}</div>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>

@@ -98,8 +98,8 @@ const C = CAPABILITIES;
  * federation by definition; they are not narrowed by the active organisation.
  */
 export const CAPABILITY_CONTEXTS: Record<Capability, ContextType[]> = {
-  [C.TRAINING_REQUEST_CREATE]: ['university', 'platform'],
-  [C.TRAINING_REQUEST_VIEW]: ['university', 'cluster', 'platform'],
+  [C.TRAINING_REQUEST_CREATE]: ['university', 'platform', 'cluster'],
+  [C.TRAINING_REQUEST_VIEW]: ['university', 'cluster', 'platform', 'hospital'],
   [C.TRAINING_REQUEST_REVIEW]: ['cluster', 'platform'],
   [C.TRAINING_REQUEST_APPROVE]: ['cluster', 'platform'],
   [C.TRAINING_REQUEST_RETURN]: ['cluster', 'platform'],
@@ -172,6 +172,7 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
 
   // ── Cluster training management (Canonical: cluster_manager) ────────────
   cluster_manager: [
+    C.TRAINING_REQUEST_CREATE,
     C.TRAINING_REQUEST_VIEW,
     C.TRAINING_REQUEST_REVIEW,
     C.TRAINING_REQUEST_APPROVE,
@@ -194,6 +195,7 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
   ],
   // Legacy aliases for cluster management
   training_director: [
+    C.TRAINING_REQUEST_CREATE,
     C.TRAINING_REQUEST_VIEW,
     C.TRAINING_REQUEST_REVIEW,
     C.TRAINING_REQUEST_APPROVE,
@@ -215,6 +217,7 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
     C.REPORT_VIEW,
   ],
   cluster_administrator: [
+    C.TRAINING_REQUEST_CREATE,
     C.TRAINING_REQUEST_VIEW,
     C.TRAINING_REQUEST_REVIEW,
     C.TRAINING_REQUEST_APPROVE,

@@ -46,6 +46,16 @@ export const Declarations: React.FC = () => {
     },
   });
 
+  const acceptMutation = useMutation({
+    mutationFn: async (declarationId: string) => {
+      await apiClient.post('/declarations/accept', { declarationId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['declarations'] });
+      queryClient.invalidateQueries({ queryKey: ['declarations-statistics'] });
+    },
+  });
+
   const decls: any[] = declarations ?? [];
   const signed = decls.filter((d: any) => d.isSigned || d.signedAt).length;
   const pendingDecl = decls.length - signed;
@@ -53,7 +63,7 @@ export const Declarations: React.FC = () => {
 
   return (
     <DataPageShell
-        title="إدارة الإقرارات والتعهدات الوطنية (Declarations & Compliance)"
+        title="إدارة الإقرارات والتعهدات الإلكترونية (Declarations & Compliance)"
         subtitle="إدارة إقرارات الانضمام وتعهدات الشؤون الأكاديمية والتوقيعات الرقمية للمتدربين"
         actions={<>
 
@@ -107,6 +117,7 @@ export const Declarations: React.FC = () => {
                 <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الإصدار (Version)</TableCell>
                 <TableCell style={{ color: '#64748B', fontWeight: 700 }}>عدد التوقيعات</TableCell>
                 <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الحالة</TableCell>
+                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>التوقيع الرقمي</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -118,7 +129,22 @@ export const Declarations: React.FC = () => {
                   </TableCell>
                   <TableCell style={{ fontWeight: 700, color: '#0891B2' }}>v{dec.version}</TableCell>
                   <TableCell style={{ fontWeight: 700, color: '#047857' }}>{dec._count?.acceptances || 0} موافقة</TableCell>
-                  <TableCell><Chip label="مفعّل وممتثل" color="success" size="small" /></TableCell>
+                  <TableCell><Chip label={dec.isSigned ? "موقع ومكتمل" : "مفعّل للمواقفة"} color={dec.isSigned ? "success" : "warning"} size="small" /></TableCell>
+                  <TableCell>
+                    {dec.isSigned ? (
+                      <Chip label="تم التوقيع ✅" color="success" variant="outlined" size="small" style={{ fontWeight: 700 }} />
+                    ) : (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        disabled={acceptMutation.isPending}
+                        onClick={() => acceptMutation.mutate(dec.id)}
+                        style={{ background: '#0F766E', fontWeight: 700, fontSize: 11 }}
+                      >
+                        {acceptMutation.isPending ? 'جاري الاعتماد...' : 'توقيع وموافقة'}
+                      </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

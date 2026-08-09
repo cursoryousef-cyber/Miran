@@ -150,7 +150,6 @@ const HOSPITAL_TRAINING_NAV: NavSection[] = [
         name: 'طلبات التدريب الواردة', path: '/hospital?tab=requests', icon: Inbox,
         requires: ['trainee.view.hospital'],
       },
-      { name: 'السجل السريري', path: '/logbook', icon: BookOpen, requires: ['logbook.view'] },
       { name: 'البلاغات', path: '/incidents', icon: AlertTriangle, requires: ['incident.view'] },
     ],
   },
@@ -291,7 +290,7 @@ const TRAINEE_NAV: NavSection[] = [
 
 const IDENTITIES: Record<string, RoleIdentity> = {
   platform: {
-    key: 'platform', label: 'مدير المنصة الوطنية', eyebrow: 'NATIONAL CONTROL CENTRE',
+    key: 'platform', label: 'مدير المنصة الإلكترونية', eyebrow: 'NATIONAL CONTROL CENTRE',
     tagline: 'حوكمة الجهات والتجمعات على مستوى المملكة',
     icon: LayoutDashboard, accent: '#0F766E', accentSoft: '#F0FDFA',
     landing: '/', nav: PLATFORM_NAV,

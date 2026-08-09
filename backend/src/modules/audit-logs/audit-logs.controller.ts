@@ -56,7 +56,7 @@ export class AuditLogsController {
           action: 'CREATE_ORGANIZATION',
           entityType: 'Organization',
           entityId: 'HOSP-NORTH-TOWER',
-          actor: { email: 'platform@miran.health', person: { nameAr: 'مدير المنصة الوطنية' } },
+          actor: { email: 'platform@miran.health', person: { nameAr: 'مدير المنصة الإلكترونية' } },
           ipAddress: '192.168.1.100',
           userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
           oldValues: null,

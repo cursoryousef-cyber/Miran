@@ -58,36 +58,53 @@ export class CallsController {
       location?: string;
       expectedMinutes?: number;
       departmentId?: string;
+      targetType?: string;
+      targetTrainerIds?: string[];
+      targetTraineeIds?: string[];
     },
   ) {
-    const trainerProfile = await this.prisma.trainerProfile.findFirst({
+    let trainerProfile = await this.prisma.trainerProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
       select: { id: true, departmentId: true },
     });
 
-    const departmentId: string = trainerProfile?.departmentId ?? dto.departmentId ?? '';
+    if (!trainerProfile) {
+      // Admin / supervisor launching on behalf of hospital
+      const fallbackTrainer = await this.prisma.trainerProfile.findFirst({
+        where: { organizationId: user.organizationId },
+        select: { id: true, departmentId: true },
+      });
+      trainerProfile = fallbackTrainer;
+    }
+
+    let departmentId: string = trainerProfile?.departmentId ?? dto.departmentId ?? '';
+    if (!departmentId) {
+      const anyDept = await this.prisma.department.findFirst({
+        where: { organizationId: user.organizationId },
+        select: { id: true },
+      });
+      departmentId = anyDept?.id ?? '';
+    }
+
     const trainerProfileId: string = trainerProfile?.id ?? '';
 
     if (!trainerProfileId) {
-      throw new BadRequestException('لم يتم العثور على ملف المدرب — يُرجى ربط حسابك بملف مدرب');
-    }
-    if (!departmentId) {
-      throw new BadRequestException('يجب تحديد القسم (departmentId) لإطلاق النداء');
+      throw new BadRequestException('لم يتم العثور على مدرب مرخص بالمستشفى لإطلاق النداء باسمه');
     }
 
-    // ── Concurrent-call cap: one active call per trainer ──────────────────
+    // ── Concurrent-call cap: one active call per trainer profile ─────────────
     const existing = await this.prisma.trainerCall.findFirst({
       where: { trainerProfileId, status: 'active' },
       select: { id: true },
     });
     if (existing) {
-      throw new BadRequestException('لديك نداء نشط بالفعل — أنهِ النداء الحالي قبل إطلاق نداء جديد');
+      throw new BadRequestException('يوجد نداء نشط بالفعل لهذا المدرب — أنهِ النداء الحالي أولاً');
     }
 
     const call = await this.prisma.trainerCall.create({
       data: {
         organizationId: user.organizationId,
-        departmentId,
+        departmentId: departmentId || 'default-dept',
         trainerProfileId,
         callType: dto.callType || 'urgent',
         customTitle: dto.customTitle,
@@ -99,18 +116,17 @@ export class CallsController {
       },
     });
 
+    // ── Target Recipients Scoped Strictly to Current Hospital ──────────────
+    const targetUserAccountIds = new Set<string>();
 
-    // ── Notify trainees (scoped to department when available) ─────────────
+    // 1. Trainees inside hospital
     const trainees = await this.prisma.traineeProfile.findMany({
       where: {
         organizationId: user.organizationId,
-        ...(departmentId
-          ? {
-              rotations: {
-                some: { departmentId, status: 'active' },
-              },
-            }
+        ...(departmentId && (!dto.targetType || dto.targetType === 'department')
+          ? { rotations: { some: { departmentId, status: 'active' } } }
           : {}),
+        ...(dto.targetTraineeIds?.length ? { id: { in: dto.targetTraineeIds } } : {}),
       },
       include: {
         person: { include: { userAccounts: { select: { id: true } } } },
@@ -128,18 +144,38 @@ export class CallsController {
         },
       });
       const accountId = trainee.person?.userAccounts?.[0]?.id;
-      if (accountId) {
-        await this.prisma.notification.create({
-          data: {
-            organizationId: user.organizationId,
-            userId: accountId,
-            titleAr: `🔔 نداء جديد: ${dto.customTitle ?? call.callType}`,
-            bodyAr: dto.note ?? 'يُرجى التوجه فوراً',
-            type: 'call_alert',
-            isRead: false,
-          },
-        });
-      }
+      if (accountId) targetUserAccountIds.add(accountId);
+    }
+
+    // 2. Trainers inside hospital (if all_trainers or all_both or selected_trainers)
+    if (['all_trainers', 'all_both', 'selected_trainers'].includes(dto.targetType || '')) {
+      const trainers = await this.prisma.trainerProfile.findMany({
+        where: {
+          organizationId: user.organizationId,
+          ...(dto.targetTrainerIds?.length ? { id: { in: dto.targetTrainerIds } } : {}),
+        },
+        include: {
+          person: { include: { userAccounts: { select: { id: true } } } },
+        },
+      });
+      trainers.forEach((tr) => {
+        const accountId = tr.person?.userAccounts?.[0]?.id;
+        if (accountId) targetUserAccountIds.add(accountId);
+      });
+    }
+
+    // 3. Dispatch Notifications via Prisma Notification System
+    for (const accountId of targetUserAccountIds) {
+      await this.prisma.notification.create({
+        data: {
+          organizationId: user.organizationId,
+          userId: accountId,
+          titleAr: `🔔 نداء جديد: ${dto.customTitle ?? call.callType}`,
+          bodyAr: dto.note ?? 'يُرجى التوجه فوراً للموقع المspecified',
+          type: 'call_alert',
+          isRead: false,
+        },
+      });
     }
 
     await this.prisma.auditLog.create({

@@ -98,6 +98,26 @@ export class CandidateTraineeInputDto {
 }
 
 export class CreateTrainingRequestDto {
+  @ApiPropertyOptional({ description: 'نوع الطلب (university_request, cluster_request)' })
+  @IsOptional()
+  @IsString()
+  requestType?: string;
+
+  @ApiPropertyOptional({ description: 'معرف المستشفى المستهدف في حال طلب التجمع المباشر' })
+  @IsOptional()
+  @IsUUID('4')
+  targetHospitalId?: string;
+
+  @ApiPropertyOptional({ description: 'رابط خطاب التجمع الرسمي المرفق' })
+  @IsOptional()
+  @IsString()
+  clusterLetterUrl?: string;
+
+  @ApiPropertyOptional({ description: 'روابط المرفقات المسموحة بالطلب' })
+  @IsOptional()
+  @IsArray()
+  attachmentUrls?: string[];
+
   @ApiProperty({ description: 'معرف الجهة الهدف (التجمع الصحي)' })
   @IsUUID('4')
   @IsNotEmpty()

@@ -59,6 +59,48 @@ export class CreateUserAccountDto {
   roleCode?: string;
 }
 
+export class UpdateUserAccountDto {
+  @ApiPropertyOptional({ description: 'الاسم بالعربية' })
+  @IsOptional()
+  @IsString()
+  nameAr?: string;
+
+  @ApiPropertyOptional({ description: 'الاسم بالإنجليزية' })
+  @IsOptional()
+  @IsString()
+  nameEn?: string;
+
+  @ApiPropertyOptional({ description: 'البريد الإلكتروني' })
+  @IsOptional()
+  @IsEmail({}, { message: 'البريد غير صالح' })
+  email?: string;
+
+  @ApiPropertyOptional({ description: 'الهوية الوطنية' })
+  @IsOptional()
+  @IsString()
+  nationalId?: string;
+
+  @ApiPropertyOptional({ description: 'رقم الجوال' })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiPropertyOptional({ description: 'معرف الجهة' })
+  @IsOptional()
+  @IsString()
+  organizationId?: string;
+
+  @ApiPropertyOptional({ description: 'معرف المستشفى' })
+  @IsOptional()
+  @IsString()
+  hospitalId?: string;
+
+  @ApiPropertyOptional({ description: 'رمز الدور' })
+  @IsOptional()
+  @IsString()
+  roleCode?: string;
+}
+
 export class AddUserToOrgDto {
   @ApiProperty({ description: 'معرف الجهة' })
   @IsUUID('4', { message: 'معرف الجهة غير صالح' })

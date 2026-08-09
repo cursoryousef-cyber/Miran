@@ -8,6 +8,8 @@ export interface UserOrg {
   nameAr: string;
   nameEn: string;
   isPrimary?: boolean;
+  parentId?: string | null;
+  parentNameAr?: string | null;
 }
 
 export interface UserProfile {
@@ -15,15 +17,12 @@ export interface UserProfile {
   personId: string;
   nameAr: string;
   nameEn?: string;
+  nationalId?: string | null;
+  phone?: string | null;
+  isActive?: boolean;
   email: string;
   roles?: string[];
   permissions?: string[];
-  /**
-   * What this session may do in the *active* organisation, resolved by the
-   * backend. Navigation and action visibility are driven from this rather than
-   * from role names, so a menu item can never appear for a user the API will
-   * refuse — the two read the same answer.
-   */
   capabilities?: string[];
   activeOrganization: UserOrg;
   availableOrganizations: UserOrg[];
@@ -44,6 +43,7 @@ interface AuthContextType {
   /** Whether the session holds at least one of the capabilities. */
   hasAnyCapability: (capabilities: string[]) => boolean;
   /** @deprecated Role-derived guesswork — use hasCapability. */
+  updateUser: (data: Partial<UserProfile>) => void;
   can: (action: RBACAction, scope: RBACScope) => boolean;
 }
 
@@ -126,6 +126,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return capabilities.some((c) => user?.capabilities?.includes(c) ?? false);
   };
 
+  const updateUser = (data: Partial<UserProfile>) => {
+    if (user) {
+      const updatedUser: UserProfile = { ...user, ...data };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
+      setUser(updatedUser);
+    }
+  };
+
   const can = (action: RBACAction, scope: RBACScope): boolean => {
     return hasPermission(user, action, scope);
   };
@@ -144,6 +152,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hasAnyRole,
         hasCapability,
         hasAnyCapability,
+        updateUser,
         can,
       }}
     >

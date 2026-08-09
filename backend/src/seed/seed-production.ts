@@ -45,7 +45,7 @@ async function main() {
   }
 
   const roles = [
-    { code: 'platform_owner', nameAr: 'مدير المنصة الوطنية', hierarchyLevel: 100 },
+    { code: 'platform_owner', nameAr: 'مدير المنصة الإلكترونية', hierarchyLevel: 100 },
     { code: 'cluster_manager', nameAr: 'مدير التجمع الصحي', hierarchyLevel: 20 },
     { code: 'org_manager', nameAr: 'مدير مستشفى / جهة', hierarchyLevel: 10 },
     { code: 'academic_supervisor', nameAr: 'مشرف أكاديمي / مشرف امتياز', hierarchyLevel: 7 },
@@ -175,7 +175,7 @@ async function main() {
   const accountsDef = [
     {
       email: 'platform@miran.health',
-      nameAr: 'مدير المنصة الوطنية',
+      nameAr: 'مدير المنصة الإلكترونية',
       nationalId: '1099999999',
       roleCode: 'platform_owner',
       orgId: northTowerHosp.id,

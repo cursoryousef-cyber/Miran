@@ -1,4 +1,4 @@
-import React, { useState, Suspense, lazy } from 'react';
+import React, { useState, useMemo, Suspense, lazy } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Tabs, Tab, Box, CircularProgress } from '@mui/material';
 import { Stethoscope } from 'lucide-react';
@@ -42,15 +42,33 @@ export const HospitalWorkspace: React.FC = () => {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const requested = params.get('tab');
-  const initial = SECTIONS.some((s) => s.key === requested) ? requested! : 'overview';
+
+  const isHospitalAdmin = user?.roles?.some((r) =>
+    ['hospital_training_admin', 'hospital_administrator', 'org_manager'].includes(r),
+  );
+
+  const availableSections = useMemo(() => {
+    if (isHospitalAdmin) {
+      return SECTIONS.filter((s) => s.key !== 'logbook');
+    }
+    return SECTIONS;
+  }, [isHospitalAdmin]);
+
+  const initial = availableSections.some((s) => s.key === requested) ? requested! : 'overview';
   const [active, setActive] = useState(initial);
+
+  React.useEffect(() => {
+    if (requested && availableSections.some((s) => s.key === requested)) {
+      setActive(requested);
+    }
+  }, [requested, availableSections]);
 
   const goTo = (tab: string) => {
     setActive(tab);
     setParams({ tab }, { replace: true });
   };
 
-  const section = SECTIONS.find((s) => s.key === active) ?? SECTIONS[0];
+  const section = availableSections.find((s) => s.key === active) ?? availableSections[0];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -73,7 +91,7 @@ export const HospitalWorkspace: React.FC = () => {
             '& .MuiTabs-indicator': { backgroundColor: '#0F766E', height: 3 },
           }}
         >
-          {SECTIONS.map((s) => <Tab key={s.key} value={s.key} label={s.label} />)}
+          {availableSections.map((s) => <Tab key={s.key} value={s.key} label={s.label} />)}
         </Tabs>
       </Box>
 

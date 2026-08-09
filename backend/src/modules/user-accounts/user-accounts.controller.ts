@@ -8,10 +8,11 @@ import {
   Param,
   Query,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { UserAccountsService } from './user-accounts.service';
-import { CreateUserAccountDto, AddUserToOrgDto, AssignRoleDto } from './dto/user-account.dto';
+import { CreateUserAccountDto, UpdateUserAccountDto, AddUserToOrgDto, AssignRoleDto } from './dto/user-account.dto';
 import { CurrentUser, OrgContext, RequirePermissions } from '../../common/decorators';
 import { JwtAuthGuard, PermissionsGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
@@ -100,5 +101,30 @@ export class UserAccountsController {
     @CurrentUser() user: IAuthenticatedUser,
   ) {
     return this.userAccountsService.toggleActive(id, user);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'تحديث بيانات حساب الدخول' })
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserAccountDto,
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    const isSelf = user?.accountId === id;
+    const canManage = user?.roles?.some((r) => ['platform_owner', 'cluster_manager', 'hospital_training_admin', 'system_admin'].includes(r)) || user?.permissions?.includes('manage_users');
+    if (!isSelf && !canManage) {
+      throw new ForbiddenException('ليس لديك الصلاحية لتحديث بيانات هذا الحساب');
+    }
+    return this.userAccountsService.update(id, dto, user);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'حذف/إيقاف حساب الدخول (Soft Delete)' })
+  @RequirePermissions('manage_users')
+  async remove(
+    @Param('id') id: string,
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    return this.userAccountsService.delete(id, user);
   }
 }

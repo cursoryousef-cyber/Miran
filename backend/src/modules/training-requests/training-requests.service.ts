@@ -111,7 +111,7 @@ export class TrainingRequestsService {
    * to approve anything. Validating the endpoints here closes that path at the
    * only place it can be created.
    */
-  private async assertRequestDirection(sourceOrgId: string, targetOrgId: string) {
+  private async assertRequestDirection(sourceOrgId: string, targetOrgId: string, requestType?: string) {
     if (sourceOrgId === targetOrgId) {
       throw new BadRequestException('لا يمكن أن تكون الجهة المرسلة والمستقبلة واحدة');
     }
@@ -132,6 +132,15 @@ export class TrainingRequestsService {
 
     const sourceType = source.organizationType?.code;
     const targetType = target.organizationType?.code;
+
+    if (requestType === 'cluster_request' || sourceType === 'cluster') {
+      if (targetType !== 'hospital' && targetType !== 'cluster') {
+        throw new BadRequestException(
+          `طلب التجمع المباشر يُوجَّه إلى مستشفى أو تجمع — «${target.nameAr}» جهة من نوع «${targetType ?? 'غير محدد'}»`,
+        );
+      }
+      return;
+    }
 
     if (sourceType !== 'university' && sourceType !== 'college') {
       throw new BadRequestException(
@@ -158,9 +167,11 @@ export class TrainingRequestsService {
       if (match) seq = parseInt(match[0], 10) + 1;
     }
     const requestNumber = `TR-${new Date().getFullYear()}-${seq.toString().padStart(4, '0')}`;
+    const isClusterReq = dto.requestType === 'cluster_request' || (user?.roles?.some((r) => r.includes('cluster')) ?? false);
+    const targetOrgId = isClusterReq && dto.targetHospitalId ? dto.targetHospitalId : dto.targetOrgId;
     const sourceOrgId = user?.organizationId || dto.targetOrgId;
 
-    await this.assertRequestDirection(sourceOrgId, dto.targetOrgId);
+    await this.assertRequestDirection(sourceOrgId, targetOrgId, dto.requestType);
 
     // Dates and the program/plan/version combination are validated together
     // before anything is written, so an incoherent request is never persisted.
@@ -197,11 +208,18 @@ export class TrainingRequestsService {
       versionId = composed.version.id;
     }
 
+    const notesPayload = JSON.stringify({
+      text: dto.notes || '',
+      requestType: dto.requestType || (isClusterReq ? 'cluster_request' : 'university_request'),
+      clusterLetterUrl: dto.clusterLetterUrl || null,
+      attachmentUrls: dto.attachmentUrls || [],
+    });
+
     const created = await this.prisma.trainingRequest.create({
       data: {
         requestNumber,
         sourceOrgId,
-        targetOrgId: dto.targetOrgId,
+        targetOrgId,
         programId: dto.programId,
         specialty: dto.specialty,
         trainingPlanId: planId,
@@ -212,8 +230,8 @@ export class TrainingRequestsService {
         academicIntakeId: dto.academicIntakeId,
         studentCount: dto.studentCount,
         priority: dto.priority || 'normal',
-        notes: dto.notes,
-        status: 'submitted',
+        notes: notesPayload,
+        status: isClusterReq ? 'hospital_review' : 'submitted',
         createdById: user?.accountId,
       },
       include: {

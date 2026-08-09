@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Building, LogOut, User, ChevronDown, Menu as MenuIcon } from 'lucide-react';
 import { Menu, MenuItem, IconButton, Avatar, Chip, useMediaQuery, useTheme } from '@mui/material';
@@ -10,6 +11,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
   const { user, switchOrganization, logout } = useAuth();
+  const navigate = useNavigate();
   const theme = useTheme();
   // Below `sm` the header only has room for the essentials: menu, org switcher
   // (name only) and the avatar. Labels and the email are dropped rather than
@@ -181,6 +183,16 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
             },
           }}
         >
+          <MenuItem
+            onClick={() => {
+              setUserAnchorEl(null);
+              navigate('/profile');
+            }}
+            style={{ fontSize: '13px', color: '#0F172A', display: 'flex', gap: '8px', fontWeight: 700 }}
+          >
+            <User size={16} color="#0F766E" />
+            <span>الملف الشخصي</span>
+          </MenuItem>
           <MenuItem onClick={logout} style={{ fontSize: '13px', color: '#DC2626', display: 'flex', gap: '8px', fontWeight: 700 }}>
             <LogOut size={16} />
             <span>تسجيل الخروج</span>

@@ -345,21 +345,59 @@ export const HospitalReview: React.FC = () => {
       <Dialog open={dialog === 'details'} onClose={() => setDialog(null)} maxWidth="sm" fullWidth>
         <DialogTitle style={{ fontWeight: 800 }}>تفاصيل طلب التدريب الوارد</DialogTitle>
         <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {selectedRow && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '14px' }}>
-              <div><strong>اسم المتدرب:</strong> {selectedRow.nameAr}</div>
-              <div><strong>الرقم الهوية / الوظيفي:</strong> {selectedRow.nationalId || '—'}</div>
-              <div><strong>التخصص التدريبي:</strong> {selectedRow.specialty || selectedRow.trainingRequest?.specialtyAr || '—'}</div>
-              <div><strong>الجهة / التجمع المرسل:</strong> {selectedRow.trainingRequest?.sourceOrg?.nameAr || '—'}</div>
-              <div><strong>رقم الطلب:</strong> {selectedRow.trainingRequest?.requestNumber || '—'}</div>
-              <div><strong>عدد المتدربين المطلوبين بالطلب:</strong> {selectedRow.trainingRequest?.totalTraineesRequested || 1}</div>
-              <div><strong>الفترة المطلوبة:</strong> {(selectedRow.startDate || selectedRow.trainingRequest?.trainingStartDate || selectedRow.trainingRequest?.startDate) ? `${String(selectedRow.startDate || selectedRow.trainingRequest?.trainingStartDate || selectedRow.trainingRequest?.startDate).slice(0, 10)} إلى ${String(selectedRow.endDate || selectedRow.trainingRequest?.trainingEndDate || selectedRow.trainingRequest?.endDate).slice(0, 10)}` : 'غير محددة'}</div>
-              <div><strong>تاريخ تقديم الطلب:</strong> {selectedRow.trainingRequest?.createdAt ? String(selectedRow.trainingRequest.createdAt).slice(0, 10) : '—'}</div>
-              <div><strong>القسم المحدد بالطلب:</strong> {selectedRow.assignedDepartment?.nameAr || 'لم يحدد بعد'}</div>
-              <div><strong>المدرب المحدد بالطلب:</strong> {selectedRow.assignedTrainer?.person?.nameAr || 'لم يحدد بعد'}</div>
-              <div><strong>الحالة الحالية:</strong> {STATUS_LABELS[selectedRow.status]?.label || selectedRow.status}</div>
-            </div>
-          )}
+          {selectedRow && (() => {
+            let parsedNotes: any = null;
+            try {
+              if (selectedRow.trainingRequest?.notes?.startsWith('{')) {
+                parsedNotes = JSON.parse(selectedRow.trainingRequest.notes);
+              }
+            } catch {
+              parsedNotes = null;
+            }
+
+            const reqTypeLabel = parsedNotes?.requestType === 'cluster_request' ? 'طلب تدريب مباشر من التجمع الصحي' : 'طلب تدريب من جامعة موفدة';
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '14px' }}>
+                <div><strong>نوع الطلب:</strong> <Chip label={reqTypeLabel} size="small" color={parsedNotes?.requestType === 'cluster_request' ? 'info' : 'default'} style={{ fontWeight: 700 }} /></div>
+                <div><strong>اسم المتدرب:</strong> {selectedRow.nameAr}</div>
+                <div><strong>الرقم الهوية / الوظيفي:</strong> {selectedRow.nationalId || '—'}</div>
+                <div><strong>التخصص التدريبي:</strong> {selectedRow.specialty || selectedRow.trainingRequest?.specialtyAr || '—'}</div>
+                <div><strong>الجهة / التجمع المرسل:</strong> {selectedRow.trainingRequest?.sourceOrg?.nameAr || '—'}</div>
+                <div><strong>رقم الطلب:</strong> {selectedRow.trainingRequest?.requestNumber || '—'}</div>
+                <div><strong>عدد المتدربين المطلوبين بالطلب:</strong> {selectedRow.trainingRequest?.totalTraineesRequested || 1}</div>
+                <div><strong>الفترة المطلوبة:</strong> {(selectedRow.startDate || selectedRow.trainingRequest?.trainingStartDate || selectedRow.trainingRequest?.startDate) ? `${String(selectedRow.startDate || selectedRow.trainingRequest?.trainingStartDate || selectedRow.trainingRequest?.startDate).slice(0, 10)} إلى ${String(selectedRow.endDate || selectedRow.trainingRequest?.trainingEndDate || selectedRow.trainingRequest?.endDate).slice(0, 10)}` : 'غير محددة'}</div>
+                <div><strong>تاريخ تقديم الطلب:</strong> {selectedRow.trainingRequest?.createdAt ? String(selectedRow.trainingRequest.createdAt).slice(0, 10) : '—'}</div>
+                <div><strong>القسم المحدد بالطلب:</strong> {selectedRow.assignedDepartment?.nameAr || 'لم يحدد بعد'}</div>
+                <div><strong>المدرب المحدد بالطلب:</strong> {selectedRow.assignedTrainer?.person?.nameAr || 'لم يحدد بعد'}</div>
+                <div><strong>الحالة الحالية:</strong> {STATUS_LABELS[selectedRow.status]?.label || selectedRow.status}</div>
+
+                {parsedNotes?.clusterLetterUrl && (
+                  <div style={{ marginTop: '8px', padding: '10px', background: '#F0FDFA', borderRadius: '8px', border: '1px solid #99F6E4' }}>
+                    <strong>📄 خطاب التجمع الرسمي المرفق:</strong>{' '}
+                    <a href={parsedNotes.clusterLetterUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#0F766E', fontWeight: 700 }}>
+                      عرض / تحميل الخطاب
+                    </a>
+                  </div>
+                )}
+
+                {parsedNotes?.attachmentUrls?.length > 0 && (
+                  <div style={{ marginTop: '4px', padding: '10px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    <strong>📎 المستندات المرفقة بالطلب ({parsedNotes.attachmentUrls.length}):</strong>
+                    <ul style={{ margin: '4px 0 0 0', paddingRight: '20px' }}>
+                      {parsedNotes.attachmentUrls.map((url: string, i: number) => (
+                        <li key={i}>
+                          <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#0284C7', fontWeight: 600 }}>
+                            مستند مرفق #{i + 1}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialog(null)}>إغلاق</Button>

@@ -65,7 +65,7 @@ async function main() {
   const rolesDefinition = [
     {
       code: 'platform_owner',
-      nameAr: 'مدير المنصة الوطنية',
+      nameAr: 'مدير المنصة الإلكترونية',
       nameEn: 'Platform Owner',
       descriptionAr: 'إدارة جميع الجهات، المستخدمين، الأدوار، الصلاحيات، التقارير والإعدادات',
       hierarchyLevel: 100,

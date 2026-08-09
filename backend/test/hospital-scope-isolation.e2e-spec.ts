@@ -421,5 +421,65 @@ describe('Independent Hospital & Hospital Training Admin Creation Workflow', () 
     const crossRes = await http.get('/trainees/incoming').set(auth(newAdminToken));
     expect(crossRes.status).toBe(200);
     expect(crossRes.body.data).toBeDefined();
+
+    // 6. Update user account details via PATCH /user-accounts/:id
+    const createdAccountId = createAdminRes.body.account?.id || createAdminRes.body.id;
+    const patchUserRes = await http
+      .patch(`/user-accounts/${createdAccountId}`)
+      .set(auth(platformToken))
+      .send({ nameAr: `مسؤول تدريب معدل ${stamp}` });
+    expect(patchUserRes.status).toBe(200);
+
+    // 7. Soft delete user account via DELETE /user-accounts/:id
+    const deleteUserRes = await http
+      .delete(`/user-accounts/${createdAccountId}`)
+      .set(auth(platformToken));
+    expect(deleteUserRes.status).toBe(200);
+    expect(deleteUserRes.body.isActive).toBe(false);
+  });
+
+  describe('Direct Cluster Training Request Workflow', () => {
+    it('cluster manager can submit a direct training request without university and attach cluster letter', async () => {
+      const clusterToken = await login(SCENARIO.accounts.clusterTrainingDirector);
+      const hospital1Token = await login(SCENARIO.accounts.hospital1TrainingAdmin);
+
+      // 1. Create a cluster request directly targeted to Hospital 1
+      const reqRes = await http
+        .post('/training-requests')
+        .set(auth(clusterToken))
+        .send({
+          requestType: 'cluster_request',
+          targetOrgId: s.hospital1.id,
+          targetHospitalId: s.hospital1.id,
+          programId: s.program.id,
+          specialty: 'internal_medicine',
+          trainingStartDate: '2026-09-01',
+          trainingEndDate: '2027-08-31',
+          studentCount: 1,
+          clusterLetterUrl: 'https://miran.health/docs/cluster-official-letter.pdf',
+          attachmentUrls: ['https://miran.health/docs/attach1.pdf'],
+          trainees: [
+            {
+              academicNumber: `CLM-${Date.now().toString().slice(-4)}`,
+              nationalId: `1099${Math.floor(100050 + Math.random() * 899900)}`,
+              nameAr: 'متدرب التجمع المباشر',
+              startDate: '2026-09-01',
+              endDate: '2027-08-31',
+            },
+          ],
+        });
+
+      expect(reqRes.status).toBe(201);
+      const reqData = reqRes.body.data || reqRes.body;
+      expect(reqData.targetOrgId).toBe(s.hospital1.id);
+      expect(reqData.status).toBe('hospital_review');
+
+      // 2. Hospital 1 training admin receives this request under Hospital Scope
+      const reviewQueueRes = await http.get('/training-requests/hospital-review').set(auth(hospital1Token));
+      expect(reviewQueueRes.status).toBe(200);
+      const rows = reviewQueueRes.body.data || reviewQueueRes.body || [];
+      const foundRow = rows.find((r: any) => r.trainingRequestId === reqData.id || r.trainingRequest?.id === reqData.id);
+      expect(foundRow).toBeDefined();
+    });
   });
 });

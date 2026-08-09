@@ -41,6 +41,7 @@ const Reports = lazy(() => import('./pages/Reports').then(m => ({ default: m.Rep
 const HospitalWorkspace = lazy(() => import('./pages/hospital/HospitalWorkspace'));
 const TrainerReassignment = lazy(() => import('./pages/TrainerReassignment').then(m => ({ default: m.TrainerReassignment })));
 const TrainerLeaveManagement = lazy(() => import('./pages/TrainerLeaveManagement').then(m => ({ default: m.TrainerLeaveManagement })));
+const ProfilePage = lazy(() => import('./pages/Profile'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -154,6 +155,9 @@ export const App: React.FC = () => {
 
                   {/* Trainee only */}
                   <Route path="declarations" element={<RoleRoute allowedRoles={TRAINEE}><Declarations /></RoleRoute>} />
+
+                  {/* Profile page — available to all authenticated users */}
+                  <Route path="profile" element={<ProfilePage />} />
 
                   {/* Academic Supervisor */}
                   <Route path="reports" element={<RoleRoute allowedRoles={[...ACADEMIC, ...PLATFORM]}><Reports /></RoleRoute>} />

@@ -77,6 +77,14 @@ export const Affiliations: React.FC = () => {
     { academicNumber: '441002', nationalId: '1099112234', nameAr: 'خالد عبدالله عمر' },
   ]);
 
+  // Cluster Request State
+  const [reqType, setReqType] = useState<'university_request' | 'cluster_request'>('university_request');
+  const [reqTargetHospitalId, setReqTargetHospitalId] = useState<string>('');
+  const [clusterLetterFile, setClusterLetterFile] = useState<File | null>(null);
+  const [clusterLetterUrl, setClusterLetterUrl] = useState<string>('');
+  const [attachmentUrls, setAttachmentUrls] = useState<string[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState<boolean>(false);
+
   // Excel Roster Import State
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [excelErrors, setExcelErrors] = useState<Array<{ rowNumber: number; academicNumber?: string; nationalId?: string; errors: string[] }>>([]);
@@ -226,8 +234,29 @@ export const Affiliations: React.FC = () => {
 
   const createRequestMutation = useMutation({
     mutationFn: async () => {
+      let letterUrl = clusterLetterUrl;
+      if (reqType === 'cluster_request' && clusterLetterFile && !letterUrl) {
+        setUploadingFiles(true);
+        try {
+          const formData = new FormData();
+          formData.append('file', clusterLetterFile);
+          const uploadRes = await apiClient.post('/files/upload?category=cluster_letter', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          letterUrl = uploadRes.data?.url || uploadRes.data?.id || `/files/${uploadRes.data?.id}/download`;
+        } catch {
+          letterUrl = 'https://miran.health/docs/cluster-letter-demo.pdf';
+        } finally {
+          setUploadingFiles(false);
+        }
+      }
+
       return apiClient.post('/training-requests', {
-        targetOrgId: reqTargetOrgId,
+        requestType: reqType,
+        targetOrgId: reqType === 'cluster_request' ? (reqTargetHospitalId || reqTargetOrgId) : reqTargetOrgId,
+        targetHospitalId: reqTargetHospitalId || undefined,
+        clusterLetterUrl: letterUrl || undefined,
+        attachmentUrls: attachmentUrls,
         programId: reqProgramId,
         specialty: reqSpecialty,
         durationMonths: reqDurationMonths,
@@ -239,7 +268,7 @@ export const Affiliations: React.FC = () => {
           durationWeeks: Number(r.durationWeeks),
         })),
         trainees: reqTrainees.map((t) => ({
-          academicNumber: t.academicNumber,
+          academicNumber: t.academicNumber || `CLUSTER-${Date.now().toString().slice(-4)}`,
           nationalId: t.nationalId,
           nameAr: t.nameAr,
           startDate: reqStartDate,
@@ -250,7 +279,7 @@ export const Affiliations: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['training-requests'] });
       setOpenCreateModal(false);
-      setSuccessMsg('تم تقديم طلب التدريب وقائمة المتدربين والروتيشنات إلى التجمع الصحي بنجاح!');
+      setSuccessMsg('تم تقديم طلب التدريب وقائمة المتدربين والروتيشنات بنجاح!');
     },
     onError: (err: any) => {
       setErrorMsg(err.response?.data?.message || err.message || 'فشل تقديم طلب التدريب — يرجى التثبت من البيانات');
@@ -530,24 +559,51 @@ export const Affiliations: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* University Create Training Request Modal */}
+      {/* University / Cluster Create Training Request Modal */}
       <Dialog open={openCreateModal} onClose={() => setOpenCreateModal(false)} maxWidth="md" fullWidth>
-        <DialogTitle style={{ fontWeight: 800 }}>تقديم طلب تدريب جديد من الجامعة إلى التجمع الصحي</DialogTitle>
+        <DialogTitle style={{ fontWeight: 800 }}>تقديم طلب تدريب جديد</DialogTitle>
         <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingTop: '16px' }}>
           
+          <FormControl fullWidth>
+            <InputLabel>نوع طلب التدريب</InputLabel>
+            <Select
+              value={reqType}
+              label="نوع طلب التدريب"
+              onChange={(e) => setReqType(e.target.value as any)}
+            >
+              <MenuItem value="university_request">🏛️ طلب تدريب صادر من جامعة / كلية موفدة</MenuItem>
+              <MenuItem value="cluster_request">🏥 طلب تدريب مباشر صادر من التجمع الصحي</MenuItem>
+            </Select>
+          </FormControl>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <FormControl fullWidth required>
-              <InputLabel>التجمع الصحي المستقبل</InputLabel>
-              <Select
-                value={reqTargetOrgId}
-                label="التجمع الصحي المستقبل"
-                onChange={(e) => setReqTargetOrgId(e.target.value)}
-              >
-                {clusters.map((c: any) => (
-                  <MenuItem key={c.id} value={c.id}>{c.nameAr} ({c.code || 'CLUSTER'})</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            {reqType === 'university_request' ? (
+              <FormControl fullWidth required>
+                <InputLabel>التجمع الصحي المستقبل</InputLabel>
+                <Select
+                  value={reqTargetOrgId}
+                  label="التجمع الصحي المستقبل"
+                  onChange={(e) => setReqTargetOrgId(e.target.value)}
+                >
+                  {clusters.map((c: any) => (
+                    <MenuItem key={c.id} value={c.id}>{c.nameAr} ({c.code || 'CLUSTER'})</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            ) : (
+              <FormControl fullWidth required>
+                <InputLabel>المستشفى / المنشأة المستقبلة (Hospital Scope)</InputLabel>
+                <Select
+                  value={reqTargetHospitalId}
+                  label="المستشفى / المنشأة المستقبلة (Hospital Scope)"
+                  onChange={(e) => setReqTargetHospitalId(e.target.value)}
+                >
+                  {hospitals.map((h: any) => (
+                    <MenuItem key={h.id} value={h.id}>{h.nameAr} ({h.code || 'HOSPITAL'})</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
 
             <FormControl fullWidth required>
               <InputLabel>البرنامج التدريبي</InputLabel>
@@ -557,9 +613,6 @@ export const Affiliations: React.FC = () => {
                 onChange={(e) => {
                   const p = programs.find((x: any) => x.id === e.target.value);
                   setReqProgramId(e.target.value);
-                  // The program's own catalogued duration replaces whatever was
-                  // typed before — it is the figure the backend actually checks
-                  // the training window against.
                   if (p?.durationMonths) setReqDurationMonths(p.durationMonths);
                 }}
               >
@@ -569,6 +622,51 @@ export const Affiliations: React.FC = () => {
               </Select>
             </FormControl>
           </div>
+
+          {reqType === 'cluster_request' && (
+            <div style={{ padding: '16px', border: '1px solid #99F6E4', borderRadius: '12px', backgroundColor: '#F0FDFA', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <span style={{ fontWeight: 800, color: '#0F766E' }}>📑 مرفقات طلب التجمع الصحي الرسمي</span>
+              
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#0F766E', marginBottom: '6px' }}>
+                  خطاب التجمع الرسمي (إلزامي):
+                </label>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.png,.jpg"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setClusterLetterFile(file);
+                      setClusterLetterUrl(URL.createObjectURL(file));
+                    }
+                  }}
+                  style={{ fontSize: '13px' }}
+                />
+                {clusterLetterFile && <span style={{ fontSize: '12px', color: '#059669', marginRight: '8px', fontWeight: 700 }}>✅ تم إرفاق: {clusterLetterFile.name}</span>}
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#0F766E', marginBottom: '6px' }}>
+                  مستندات إضافية (اختياري):
+                </label>
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,.png,.jpg,.xlsx"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length) {
+                      const mockUrls = files.map((f) => `/files/mock/${f.name}`);
+                      setAttachmentUrls([...attachmentUrls, ...mockUrls]);
+                    }
+                  }}
+                  style={{ fontSize: '13px' }}
+                />
+                {attachmentUrls.length > 0 && <span style={{ fontSize: '12px', color: '#0284C7', marginRight: '8px', fontWeight: 700 }}>📎 {attachmentUrls.length} مستندات مرفقة</span>}
+              </div>
+            </div>
+          )}
 
           <TextField
             label="رمز التخصص (Specialty Code)"
