@@ -512,18 +512,37 @@ export class CapacityService {
     });
     if (!org) return { capacity: 0, occupied: 0, available: 0, occupancyPercentage: 0 };
 
-    const [departments, allocations, rotations] = await Promise.all([
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [departments, allocations, rotations, stagingRows] = await Promise.all([
       db.department.findMany({
         where: { organizationId, isActive: true, deletedAt: null },
         select: { capacity: true },
       }),
       db.traineeAllocation.findMany({
-        where: { hospitalId: organizationId, status: 'open' },
+        where: {
+          hospitalId: organizationId,
+          status: 'open',
+          OR: [{ endDate: null }, { endDate: { gte: today } }],
+        },
         select: { traineeRowId: true },
       }),
       db.rotation.findMany({
-        where: { organizationId, status: 'active' },
+        where: {
+          organizationId,
+          status: 'active',
+          OR: [{ endDate: null }, { endDate: { gte: today } }],
+        },
         select: { traineeProfileId: true },
+      }),
+      db.trainingRequestTrainee.findMany({
+        where: {
+          assignedHospitalId: organizationId,
+          status: { in: OCCUPYING_ROW_STATUSES },
+          OR: [{ endDate: null }, { endDate: { gte: today } }],
+        },
+        select: { id: true },
       }),
     ]);
 
@@ -532,6 +551,7 @@ export class CapacityService {
     const occupants = new Set<string>([
       ...allocations.map((a) => `row:${a.traineeRowId}`),
       ...rotations.map((r) => `profile:${r.traineeProfileId}`),
+      ...stagingRows.map((s) => `row:${s.id}`),
     ]);
 
     return this.toExplicitResult(capacity, occupants.size);
@@ -539,7 +559,7 @@ export class CapacityService {
 
   /**
    * Department capacity is declared on the department itself; occupancy is the
-   * same union as above, narrowed to this department.
+   * same union as above, narrowed to active trainees in this department.
    */
   async getDepartmentOccupancy(departmentId: string, tx?: Prisma.TransactionClient): Promise<OccupancyResult> {
     const db = tx || this.prisma;
@@ -549,20 +569,40 @@ export class CapacityService {
     });
     if (!dept) return { capacity: 0, occupied: 0, available: 0, occupancyPercentage: 0 };
 
-    const [allocations, rotations] = await Promise.all([
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [allocations, rotations, stagingRows] = await Promise.all([
       db.traineeAllocation.findMany({
-        where: { departmentId, status: 'open' },
+        where: {
+          departmentId,
+          status: 'open',
+          OR: [{ endDate: null }, { endDate: { gte: today } }],
+        },
         select: { traineeRowId: true },
       }),
       db.rotation.findMany({
-        where: { departmentId, status: 'active' },
+        where: {
+          departmentId,
+          status: 'active',
+          OR: [{ endDate: null }, { endDate: { gte: today } }],
+        },
         select: { traineeProfileId: true },
+      }),
+      db.trainingRequestTrainee.findMany({
+        where: {
+          assignedDepartmentId: departmentId,
+          status: { in: OCCUPYING_ROW_STATUSES },
+          OR: [{ endDate: null }, { endDate: { gte: today } }],
+        },
+        select: { id: true },
       }),
     ]);
 
     const occupants = new Set<string>([
       ...allocations.map((a) => `row:${a.traineeRowId}`),
       ...rotations.map((r) => `profile:${r.traineeProfileId}`),
+      ...stagingRows.map((s) => `row:${s.id}`),
     ]);
 
     // An inactive department offers no training seats regardless of its number.
@@ -577,38 +617,54 @@ export class CapacityService {
     });
     if (!trainer) return { capacity: 0, occupied: 0, available: 0, occupancyPercentage: 0 };
 
-    const [allocations, rotations] = await Promise.all([
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [allocations, rotations, stagingRows] = await Promise.all([
       this.prisma.traineeAllocation.findMany({
-        where: { trainerProfileId, status: 'open' },
+        where: {
+          trainerProfileId,
+          status: 'open',
+          OR: [{ endDate: null }, { endDate: { gte: today } }],
+        },
         select: { traineeRowId: true },
       }),
       this.prisma.rotation.findMany({
-        where: { trainerProfileId, status: 'active' },
+        where: {
+          trainerProfileId,
+          status: 'active',
+          OR: [{ endDate: null }, { endDate: { gte: today } }],
+        },
         select: { traineeProfileId: true },
+      }),
+      this.prisma.trainingRequestTrainee.findMany({
+        where: {
+          assignedTrainerProfileId: trainerProfileId,
+          status: { in: OCCUPYING_ROW_STATUSES },
+          OR: [{ endDate: null }, { endDate: { gte: today } }],
+        },
+        select: { id: true },
       }),
     ]);
     const occupants = new Set<string>([
       ...allocations.map((a) => `row:${a.traineeRowId}`),
       ...rotations.map((r) => `profile:${r.traineeProfileId}`),
+      ...stagingRows.map((s) => `row:${s.id}`),
     ]);
     return this.toExplicitResult(trainer.maxTrainees, occupants.size);
   }
 
   /**
-   * Specialty (optionally further scoped by gender / training period)
-   * capacity, sourced from CapacityAllocation. '' sentinel means unrestricted
-   * on that dimension — mirrors the SQL trigger's matching logic exactly.
+   * Specialty (optionally further scoped by training period) capacity.
+   * Gender rules removed entirely.
    */
   async getSpecialtyOccupancy(
     organizationId: string,
-    filter: { specialtyCode?: string; gender?: string; trainingPeriod?: string },
+    filter: { specialtyCode?: string; trainingPeriod?: string },
   ): Promise<OccupancyResult> {
     const specialtyCode = filter.specialtyCode || '';
-    const gender = filter.gender || '';
     const trainingPeriod = filter.trainingPeriod || '';
 
-    // Specialty allocations are not program-scoped, so they carry the '' sentinel
-    // in program_id (the uniqueness key gained that column in Module 2).
     const allocation = await this.prisma.capacityAllocation.findFirst({
       where: {
         organizationId,
@@ -616,7 +672,7 @@ export class CapacityService {
         scopeId: '',
         programId: '',
         specialtyCode,
-        gender,
+        gender: '',
         trainingPeriod,
       },
     });
@@ -624,13 +680,12 @@ export class CapacityService {
 
     const rows = await this.prisma.traineeProfile.findMany({
       where: { organizationId, deletedAt: null },
-      select: { specialtyEn: true, specialtyAr: true, person: { select: { gender: true } }, academicIntake: { select: { academicYear: true } } },
+      select: { specialtyEn: true, specialtyAr: true, academicIntake: { select: { academicYear: true } } },
     });
     const occupied = rows.filter((r) => {
       const spec = r.specialtyEn || r.specialtyAr || '';
       return (
         (specialtyCode === '' || spec === specialtyCode) &&
-        (gender === '' || (r.person?.gender || '') === gender) &&
         (trainingPeriod === '' || (r.academicIntake?.academicYear || '') === trainingPeriod)
       );
     }).length;

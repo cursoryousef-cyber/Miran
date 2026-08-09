@@ -64,6 +64,7 @@ interface Department {
 interface Breakdown {
   hospital: Occupancy;
   departments: Department[];
+  departmentPeriods?: { allocation: Allocation; departmentName: string; occupancy: Occupancy }[];
   specialties: { allocation: Allocation; occupancy: Occupancy }[];
   trainerRules: Allocation[];
   supervisors: { allocation: Allocation; occupancy: Occupancy }[];
@@ -88,10 +89,9 @@ export const HospitalCapacity: React.FC = () => {
   });
   const [deptFormError, setDeptFormError] = useState<string | null>(null);
   const [allocForm, setAllocForm] = useState({
-    scopeType: 'specialty',
+    scopeType: 'department',
     scopeId: '',
     specialtyCode: '',
-    gender: '',
     trainingPeriod: '',
     totalCapacity: 10,
     notes: '',
@@ -183,7 +183,7 @@ export const HospitalCapacity: React.FC = () => {
     },
     onSuccess: (res) => {
       setSuccessMsg(res.message); setErrorMsg(null); setOpenAllocDialog(false);
-      setAllocForm({ scopeType: 'specialty', scopeId: '', specialtyCode: '', gender: '', trainingPeriod: '', totalCapacity: 10, notes: '' });
+      setAllocForm({ scopeType: 'department', scopeId: '', specialtyCode: '', trainingPeriod: '', totalCapacity: 10, notes: '' });
       invalidate();
     },
     onError: showError,
@@ -204,7 +204,7 @@ export const HospitalCapacity: React.FC = () => {
 
   const depts = data?.departments ?? [];
   const hospOcc = data?.hospital;
-  const programsList = (data as any)?.programs ?? [];
+  const deptPeriods = data?.departmentPeriods ?? [];
   const fullDepts = depts.filter((d: any) => (d.occupancy?.available ?? 1) <= 0).length;
   const deptCapacity = depts.reduce((s: number, d: any) => s + (d.occupancy?.capacity ?? 0), 0);
 
@@ -314,7 +314,7 @@ export const HospitalCapacity: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* الأقسام */}
+          {/* الأقسام والسعة المتاحة */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
             <Typography variant="subtitle1" fontWeight={700}>الطاقة لكل قسم</Typography>
             <Button
@@ -332,11 +332,11 @@ export const HospitalCapacity: React.FC = () => {
               <TableHead>
                 <TableRow>
                   <TableCell>القسم</TableCell>
-                  <TableCell>الإشغال</TableCell>
                   <TableCell>السعة</TableCell>
-                  <TableCell>حد المدربين</TableCell>
-                  <TableCell>حد المشرفين</TableCell>
-                  <TableCell>حد المتدربين النشطين</TableCell>
+                  <TableCell>المشغول</TableCell>
+                  <TableCell>المتاح</TableCell>
+                  <TableCell>نسبة الإشغال</TableCell>
+                  <TableCell>تحديث السعة</TableCell>
                   <TableCell>حفظ</TableCell>
                 </TableRow>
               </TableHead>
@@ -346,25 +346,19 @@ export const HospitalCapacity: React.FC = () => {
                   return (
                     <TableRow key={d.id} hover>
                       <TableCell>
-                        <Typography fontWeight={600}>{d.nameAr}</Typography>
+                        <Typography fontWeight={700}>{d.nameAr}</Typography>
+                      </TableCell>
+                      <TableCell style={{ fontWeight: 700 }}>{d.occupancy.capacity} مقعد</TableCell>
+                      <TableCell style={{ color: '#0284C7', fontWeight: 700 }}>{d.occupancy.occupied}</TableCell>
+                      <TableCell style={{ color: d.occupancy.available > 0 ? '#059669' : '#DC2626', fontWeight: 700 }}>
+                        {d.occupancy.available}
+                      </TableCell>
+                      <TableCell>
                         <Chip size="small" color={occupancyColor(d.occupancy.occupancyPercentage) as any} label={`${d.occupancy.occupancyPercentage}%`} />
                       </TableCell>
-                      <TableCell>{d.occupancy.occupied} / {d.occupancy.capacity}</TableCell>
                       <TableCell>
                         <TextField size="small" type="number" sx={{ width: 90 }} defaultValue={d.capacity}
                           onChange={(e) => setDeptEdits({ ...deptEdits, [d.id]: { ...edit, capacity: Number(e.target.value) } })} />
-                      </TableCell>
-                      <TableCell>
-                        <TextField size="small" type="number" sx={{ width: 90 }} defaultValue={d.maxTrainers ?? ''}
-                          onChange={(e) => setDeptEdits({ ...deptEdits, [d.id]: { ...edit, maxTrainers: Number(e.target.value) } })} />
-                      </TableCell>
-                      <TableCell>
-                        <TextField size="small" type="number" sx={{ width: 90 }} defaultValue={d.maxSupervisors ?? ''}
-                          onChange={(e) => setDeptEdits({ ...deptEdits, [d.id]: { ...edit, maxSupervisors: Number(e.target.value) } })} />
-                      </TableCell>
-                      <TableCell>
-                        <TextField size="small" type="number" sx={{ width: 90 }} defaultValue={d.maxActiveInterns ?? ''}
-                          onChange={(e) => setDeptEdits({ ...deptEdits, [d.id]: { ...edit, maxActiveInterns: Number(e.target.value) } })} />
                       </TableCell>
                       <TableCell>
                         <Button size="small" variant="outlined" disabled={!deptEdits[d.id] || updateDeptMutation.isPending}
@@ -379,36 +373,34 @@ export const HospitalCapacity: React.FC = () => {
             </Table>
           </TableContainer>
 
-          {/* التخصصات والجنس والفترة */}
+          {/* الطاقة حسب القسم / فترة التدريب */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="subtitle1" fontWeight={700}>الطاقة حسب التخصص / الجنس / فترة التدريب</Typography>
-            <Button size="small" startIcon={<Plus size={16} />} onClick={() => setOpenAllocDialog(true)}>إضافة قاعدة</Button>
+            <Typography variant="subtitle1" fontWeight={700}>الطاقة حسب القسم / فترة التدريب</Typography>
+            <Button size="small" startIcon={<Plus size={16} />} onClick={() => setOpenAllocDialog(true)}>إضافة سعة فترة</Button>
           </Box>
           <TableContainer component={Paper} sx={{ mb: 3 }}>
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>التخصص</TableCell>
-                  <TableCell>الجنس</TableCell>
+                  <TableCell>القسم</TableCell>
                   <TableCell>فترة التدريب</TableCell>
-                  <TableCell>الإشغال</TableCell>
                   <TableCell>السعة</TableCell>
-                  <TableCell></TableCell>
+                  <TableCell>المشغول</TableCell>
+                  <TableCell>المتاح</TableCell>
+                  <TableCell>الإجراءات</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {data.specialties.length === 0 && (
-                  <TableRow><TableCell colSpan={6}><Typography color="text.secondary" sx={{ py: 2 }}>لا توجد قواعد مخصّصة — التوزيع يعتمد على الطاقة الكلية فقط.</Typography></TableCell></TableRow>
+                {deptPeriods.length === 0 && (
+                  <TableRow><TableCell colSpan={6}><Typography color="text.secondary" sx={{ py: 2 }}>لا توجد فترات مخصصة — الأقسام تعتمد على سعتها العامة.</Typography></TableCell></TableRow>
                 )}
-                {data.specialties.map(({ allocation, occupancy }) => (
+                {deptPeriods.map(({ allocation, departmentName, occupancy }) => (
                   <TableRow key={allocation.id} hover>
-                    <TableCell>{allocation.specialtyCode || 'الكل'}</TableCell>
-                    <TableCell>{allocation.gender || 'الكل'}</TableCell>
-                    <TableCell>{allocation.trainingPeriod || 'الكل'}</TableCell>
-                    <TableCell>
-                      <Chip size="small" color={occupancyColor(occupancy.occupancyPercentage) as any} label={`${occupancy.occupied} / ${occupancy.capacity}`} />
-                    </TableCell>
-                    <TableCell>{allocation.totalCapacity}</TableCell>
+                    <TableCell style={{ fontWeight: 700 }}>{departmentName}</TableCell>
+                    <TableCell>{allocation.trainingPeriod || 'جميع الفترات'}</TableCell>
+                    <TableCell style={{ fontWeight: 700 }}>{occupancy.capacity}</TableCell>
+                    <TableCell style={{ color: '#0284C7', fontWeight: 700 }}>{occupancy.occupied}</TableCell>
+                    <TableCell style={{ color: occupancy.available > 0 ? '#059669' : '#DC2626', fontWeight: 700 }}>{occupancy.available}</TableCell>
                     <TableCell>
                       <IconButton size="small" color="error" onClick={() => deleteAllocMutation.mutate(allocation.id)}>
                         <Trash2 size={16} />
@@ -420,32 +412,32 @@ export const HospitalCapacity: React.FC = () => {
             </Table>
           </TableContainer>
 
-          {/* المشرفون */}
+          {/* المشرفون والمدربون */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
             <UserCog size={18} />
-            <Typography variant="subtitle1" fontWeight={700}>الطاقة لكل مشرف</Typography>
+            <Typography variant="subtitle1" fontWeight={700}>الطاقة لكل مشرف / مدرب</Typography>
           </Box>
           <TableContainer component={Paper}>
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>معرف حساب المشرف</TableCell>
-                  <TableCell>الإشغال</TableCell>
-                  <TableCell>السعة</TableCell>
+                  <TableCell>المشرف / المدرب</TableCell>
+                  <TableCell>المشغول</TableCell>
+                  <TableCell>السعة (الحد الأقصى)</TableCell>
+                  <TableCell>المتاح</TableCell>
                   <TableCell></TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {data.supervisors.length === 0 && (
-                  <TableRow><TableCell colSpan={4}><Typography color="text.secondary" sx={{ py: 2 }}>لا توجد قواعد مشرفين بعد.</Typography></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5}><Typography color="text.secondary" sx={{ py: 2 }}>لا توجد قواعد سعة منفصلة للمشرفين بعد.</Typography></TableCell></TableRow>
                 )}
                 {data.supervisors.map(({ allocation, occupancy }) => (
                   <TableRow key={allocation.id} hover>
-                    <TableCell><Typography variant="caption">{allocation.scopeId}</Typography></TableCell>
-                    <TableCell>
-                      <Chip size="small" color={occupancyColor(occupancy.occupancyPercentage) as any} label={`${occupancy.occupied} / ${occupancy.capacity}`} />
-                    </TableCell>
-                    <TableCell>{allocation.totalCapacity}</TableCell>
+                    <TableCell><Typography variant="body2" fontWeight={600}>{allocation.scopeId}</Typography></TableCell>
+                    <TableCell style={{ color: '#0284C7', fontWeight: 700 }}>{occupancy.occupied}</TableCell>
+                    <TableCell style={{ fontWeight: 700 }}>{occupancy.capacity}</TableCell>
+                    <TableCell style={{ color: occupancy.available > 0 ? '#059669' : '#DC2626', fontWeight: 700 }}>{occupancy.available}</TableCell>
                     <TableCell>
                       <IconButton size="small" color="error" onClick={() => deleteAllocMutation.mutate(allocation.id)}>
                         <Trash2 size={16} />
@@ -553,33 +545,21 @@ export const HospitalCapacity: React.FC = () => {
         </DialogActions>
       </Dialog>
 
+      {/* مودال ضبط سعة فترة للقسم */}
       <Dialog open={openAllocDialog} onClose={() => setOpenAllocDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>قاعدة طاقة جديدة</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700 }}>إضافة/تحديث سعة فترة تدريبية</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mt: 1 }}>
-            <TextField select label="النطاق" size="small" value={allocForm.scopeType}
-              onChange={(e) => setAllocForm({ ...allocForm, scopeType: e.target.value })}>
-              <MenuItem value="specialty">تخصص</MenuItem>
-              <MenuItem value="supervisor">مشرف</MenuItem>
-              <MenuItem value="trainer">مدرب</MenuItem>
+            <TextField select label="القسم السريري *" size="small" value={allocForm.scopeId}
+              onChange={(e) => setAllocForm({ ...allocForm, scopeType: 'department', scopeId: e.target.value })}>
+              <MenuItem value="">— اختر القسم —</MenuItem>
+              {depts.map((d) => (
+                <MenuItem key={d.id} value={d.id}>{d.nameAr}</MenuItem>
+              ))}
             </TextField>
-            {allocForm.scopeType !== 'specialty' && (
-              <TextField label="معرف الحساب (scopeId)" size="small" value={allocForm.scopeId}
-                onChange={(e) => setAllocForm({ ...allocForm, scopeId: e.target.value })} />
-            )}
-            {allocForm.scopeType === 'specialty' && (
-              <TextField label="رمز التخصص" size="small" value={allocForm.specialtyCode}
-                onChange={(e) => setAllocForm({ ...allocForm, specialtyCode: e.target.value })} placeholder="internal_medicine" />
-            )}
-            <TextField select label="الجنس" size="small" value={allocForm.gender}
-              onChange={(e) => setAllocForm({ ...allocForm, gender: e.target.value })}>
-              <MenuItem value="">الكل</MenuItem>
-              <MenuItem value="male">ذكور</MenuItem>
-              <MenuItem value="female">إناث</MenuItem>
-            </TextField>
-            <TextField label="فترة التدريب" size="small" value={allocForm.trainingPeriod}
-              onChange={(e) => setAllocForm({ ...allocForm, trainingPeriod: e.target.value })} placeholder="2026/2027" />
-            <TextField label="السعة" type="number" size="small" value={allocForm.totalCapacity}
+            <TextField label="فترة التدريب (السنة/الرمز)" size="small" value={allocForm.trainingPeriod}
+              onChange={(e) => setAllocForm({ ...allocForm, trainingPeriod: e.target.value })} placeholder="مثال: 2026" />
+            <TextField label="عدد المقاعد (السعة) *" type="number" size="small" value={allocForm.totalCapacity}
               onChange={(e) => setAllocForm({ ...allocForm, totalCapacity: Number(e.target.value) })} />
             <TextField label="ملاحظات" size="small" value={allocForm.notes}
               onChange={(e) => setAllocForm({ ...allocForm, notes: e.target.value })} sx={{ gridColumn: 'span 2' }} />
@@ -587,7 +567,7 @@ export const HospitalCapacity: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenAllocDialog(false)}>إلغاء</Button>
-          <Button variant="contained" onClick={() => upsertAllocMutation.mutate()} disabled={upsertAllocMutation.isPending}>
+          <Button variant="contained" onClick={() => upsertAllocMutation.mutate()} disabled={upsertAllocMutation.isPending || !allocForm.scopeId}>
             حفظ
           </Button>
         </DialogActions>

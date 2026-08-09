@@ -64,13 +64,30 @@ export class HospitalCapacityService {
       })),
     );
 
+    const departmentPeriodAllocations = allocations.filter((a) => a.scopeType === 'department' && a.scopeId !== '');
+    const departmentPeriodBreakdown = await Promise.all(
+      departmentPeriodAllocations.map(async (a) => {
+        const dept = departments.find((d) => d.id === a.scopeId);
+        const occ = await this.capacityService.getDepartmentOccupancy(a.scopeId);
+        return {
+          allocation: a,
+          departmentName: dept?.nameAr || 'القسم',
+          occupancy: {
+            capacity: a.totalCapacity,
+            occupied: occ.occupied,
+            available: Math.max(0, a.totalCapacity - occ.occupied),
+            occupancyPercentage: a.totalCapacity > 0 ? Math.min(100, Math.round((occ.occupied / a.totalCapacity) * 100)) : 0,
+          },
+        };
+      }),
+    );
+
     const specialtyAllocations = allocations.filter((a) => a.scopeType === 'specialty');
     const specialtyBreakdown = await Promise.all(
       specialtyAllocations.map(async (a) => ({
         allocation: a,
         occupancy: await this.capacityService.getSpecialtyOccupancy(hospitalId, {
           specialtyCode: a.specialtyCode,
-          gender: a.gender,
           trainingPeriod: a.trainingPeriod,
         }),
       })),
@@ -104,6 +121,7 @@ export class HospitalCapacityService {
     return {
       hospital: hospital,
       departments: departmentBreakdown,
+      departmentPeriods: departmentPeriodBreakdown,
       programs: programBreakdown,
       specialties: specialtyBreakdown,
       trainerRules: trainerAllocations,
@@ -146,7 +164,7 @@ export class HospitalCapacityService {
       const current = await this.capacityService.getDepartmentOccupancy(departmentId);
       if (dto.capacity < current.occupied) {
         throw new BadRequestException(
-          `لا يمكن تخفيض سعة القسم إلى ${dto.capacity} — يوجد حالياً ${current.occupied} روتيشن نشط في هذا القسم`,
+          `لا يمكن تخفيض سعة القسم إلى ${dto.capacity} — يوجد حالياً ${current.occupied} متدرب نشط في هذا القسم`,
         );
       }
     }
@@ -177,7 +195,7 @@ export class HospitalCapacityService {
     const scopeId = dto.scopeId || '';
     const programId = dto.programId || '';
     const specialtyCode = dto.specialtyCode || '';
-    const gender = dto.gender || '';
+    const gender = '';
     const trainingPeriod = dto.trainingPeriod || '';
 
     // A program allocation without a program would be indistinguishable from the
@@ -194,8 +212,15 @@ export class HospitalCapacityService {
     }
 
     // منع تخفيض السعة تحت الإشغال الحالي لنفس نطاق القيد بالضبط
-    if (dto.scopeType === 'specialty') {
-      const occ = await this.capacityService.getSpecialtyOccupancy(hospitalId, { specialtyCode, gender, trainingPeriod });
+    if (dto.scopeType === 'department' && scopeId) {
+      const occ = await this.capacityService.getDepartmentOccupancy(scopeId);
+      if (occ.occupied > dto.totalCapacity) {
+        throw new BadRequestException(
+          `لا يمكن ضبط سعة القسم على ${dto.totalCapacity} — يوجد حالياً ${occ.occupied} متدرب نشط في هذا القسم`,
+        );
+      }
+    } else if (dto.scopeType === 'specialty') {
+      const occ = await this.capacityService.getSpecialtyOccupancy(hospitalId, { specialtyCode, trainingPeriod });
       if (occ.occupied > dto.totalCapacity) {
         throw new BadRequestException(
           `لا يمكن ضبط السعة على ${dto.totalCapacity} — يوجد حالياً ${occ.occupied} متدرب ضمن هذا التصنيف`,
@@ -209,8 +234,6 @@ export class HospitalCapacityService {
         );
       }
     } else if (programId) {
-      // Program seats, and any department/trainer slice of them, may not be set
-      // below what is already occupied — that would strand placed trainees.
       const occ =
         dto.scopeType === 'department' && scopeId
           ? await this.capacityService.getDepartmentProgramOccupancy(hospitalId, scopeId, programId)
@@ -232,7 +255,7 @@ export class HospitalCapacityService {
           scopeId,
           programId,
           specialtyCode,
-          gender,
+          gender: '',
           trainingPeriod,
         },
       },
