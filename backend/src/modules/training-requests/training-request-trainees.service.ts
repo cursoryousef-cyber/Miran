@@ -1124,8 +1124,6 @@ export class TrainingRequestTraineesService {
             id: true,
             requestNumber: true,
             specialty: true,
-            specialtyAr: true,
-            specialtyEn: true,
             startDate: true,
             endDate: true,
             createdAt: true,
