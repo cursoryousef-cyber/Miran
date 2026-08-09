@@ -295,7 +295,14 @@ export class UserAccountsService implements OnModuleInit {
         });
       }
 
-      if (!person) {
+      if (person) {
+        const hasAccount = await this.prisma.userAccount.findFirst({
+          where: { personId: person.id, deletedAt: null },
+        });
+        if (hasAccount) {
+          throw new ConflictException('يوجد حساب دخول مفعّل مرتبط برقم الهوية أو الشخص مسبقاً');
+        }
+      } else {
         person = await this.prisma.person.create({
           data: {
             nationalId: dto.nationalId || null,

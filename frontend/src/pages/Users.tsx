@@ -178,14 +178,6 @@ export const UsersPage: React.FC = () => {
       if (orgId) cleanPayload.organizationId = orgId;
       if (hospId) cleanPayload.hospitalId = hospId;
 
-      if (payload.roleCode === 'hospital_training_admin') {
-        if (!cleanPayload.organizationId && cleanPayload.hospitalId) {
-          cleanPayload.organizationId = cleanPayload.hospitalId;
-        } else if (!cleanPayload.hospitalId && cleanPayload.organizationId) {
-          cleanPayload.hospitalId = cleanPayload.organizationId;
-        }
-      }
-
       const res = await apiClient.post('/user-accounts', cleanPayload);
       return res.data;
     },
@@ -531,6 +523,11 @@ export const UsersPage: React.FC = () => {
           إضافة مستخدم وحساب دخول جديد (New User Account)
         </DialogTitle>
         <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
+          {createMutation.error && (
+            <Alert severity="error" sx={{ borderRadius: 2 }}>
+              {(createMutation.error as any)?.response?.data?.message || 'تعذر إنشاء الحساب — يرجى مراجعة البيانات والإعادة'}
+            </Alert>
+          )}
           {/* Section 1: Personal Details */}
           <div>
             <div style={{ fontSize: font.cardTitle, fontWeight: 800, color: colour.primary, marginBottom: space.sm, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -658,6 +655,11 @@ export const UsersPage: React.FC = () => {
           تعديل بيانات الحساب والصلاحيات
         </DialogTitle>
         <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          {updateMutation.error && (
+            <Alert severity="error" sx={{ borderRadius: 2 }}>
+              {(updateMutation.error as any)?.response?.data?.message || 'تعذر تحديث بيانات الحساب'}
+            </Alert>
+          )}
 
           {/* Section 1: Account Info */}
           <Box>

@@ -209,7 +209,7 @@ export const ProfilePage: React.FC = () => {
             <Button
               size="small"
               variant="outlined"
-              startIcon={<Key size={14} />}
+              startIcon={<Key size={15} />}
               onClick={() => {
                 setPwdError(null);
                 setPwdSuccess(null);
@@ -218,14 +218,24 @@ export const ProfilePage: React.FC = () => {
                 setConfirmPassword('');
                 setOpenPassword(true);
               }}
-              sx={{ borderColor: colour.info, color: colour.info, fontWeight: 700 }}
+              sx={{
+                height: 36,
+                px: 2,
+                borderRadius: 2,
+                borderColor: colour.info,
+                color: colour.info,
+                fontWeight: 700,
+                fontSize: 13,
+                fontFamily: 'inherit',
+                '&:hover': { borderColor: colour.info, backgroundColor: '#F0F9FF' },
+              }}
             >
-              تغير كلمة المرور
+              تغيير كلمة المرور
             </Button>
             <Button
               size="small"
               variant="outlined"
-              startIcon={<Edit size={14} />}
+              startIcon={<Edit size={15} />}
               onClick={() => {
                 setNameAr(user.nameAr || '');
                 setEmail(user.email || '');
@@ -233,7 +243,17 @@ export const ProfilePage: React.FC = () => {
                 setNationalId(user.nationalId || '');
                 setOpenEdit(true);
               }}
-              sx={{ borderColor: colour.primary, color: colour.primary, fontWeight: 700 }}
+              sx={{
+                height: 36,
+                px: 2,
+                borderRadius: 2,
+                borderColor: colour.primary,
+                color: colour.primary,
+                fontWeight: 700,
+                fontSize: 13,
+                fontFamily: 'inherit',
+                '&:hover': { borderColor: colour.primary, backgroundColor: colour.primarySoft },
+              }}
             >
               تحديث البيانات الشخصية
             </Button>
@@ -245,8 +265,8 @@ export const ProfilePage: React.FC = () => {
 
         <Grid container spacing={2.5} sx={{ mb: 3 }}>
           <Grid item xs={12} sm={6}>
-            <Box sx={{ p: 2, borderRadius: 2, border: `1px solid ${colour.border}`, backgroundColor: '#F8FAFC' }}>
-              <Typography variant="caption" sx={{ color: colour.muted, display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+            <Box sx={{ p: 2, height: '100%', borderRadius: 2, border: `1px solid ${colour.border}`, backgroundColor: '#F8FAFC', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <Typography variant="caption" sx={{ color: colour.muted, display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
                 <User size={14} /> الاسم الكامل بالعربية
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 700, color: colour.text }}>
@@ -256,19 +276,19 @@ export const ProfilePage: React.FC = () => {
           </Grid>
 
           <Grid item xs={12} sm={6}>
-            <Box sx={{ p: 2, borderRadius: 2, border: `1px solid ${colour.border}`, backgroundColor: '#F8FAFC' }}>
-              <Typography variant="caption" sx={{ color: colour.muted, display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+            <Box sx={{ p: 2, height: '100%', borderRadius: 2, border: `1px solid ${colour.border}`, backgroundColor: '#F8FAFC', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <Typography variant="caption" sx={{ color: colour.muted, display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
                 <Mail size={14} /> البريد الإلكتروني
               </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: colour.text }}>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: colour.text, wordBreak: 'break-all' }}>
                 {user.email}
               </Typography>
             </Box>
           </Grid>
 
           <Grid item xs={12} sm={6}>
-            <Box sx={{ p: 2, borderRadius: 2, border: `1px solid ${colour.border}`, backgroundColor: '#F8FAFC' }}>
-              <Typography variant="caption" sx={{ color: colour.muted, display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+            <Box sx={{ p: 2, height: '100%', borderRadius: 2, border: `1px solid ${colour.border}`, backgroundColor: '#F8FAFC', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <Typography variant="caption" sx={{ color: colour.muted, display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
                 <CreditCard size={14} /> رقم الهوية الوطنية
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 700, color: colour.text }}>
@@ -278,8 +298,8 @@ export const ProfilePage: React.FC = () => {
           </Grid>
 
           <Grid item xs={12} sm={6}>
-            <Box sx={{ p: 2, borderRadius: 2, border: `1px solid ${colour.border}`, backgroundColor: '#F8FAFC' }}>
-              <Typography variant="caption" sx={{ color: colour.muted, display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+            <Box sx={{ p: 2, height: '100%', borderRadius: 2, border: `1px solid ${colour.border}`, backgroundColor: '#F8FAFC', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <Typography variant="caption" sx={{ color: colour.muted, display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
                 <Phone size={14} /> رقم الجوال
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 700, color: colour.text }}>
@@ -299,22 +319,22 @@ export const ProfilePage: React.FC = () => {
 
         <Grid container spacing={2.5} sx={{ mb: 3 }}>
           <Grid item xs={12} sm={6}>
-            <Box sx={{ p: 2, borderRadius: 2, border: `1px solid ${colour.primarySoft}`, backgroundColor: colour.primarySoft }}>
-              <Typography variant="caption" sx={{ color: colour.primary, fontWeight: 700, mb: 0.5, display: 'block' }}>
-                الدور المعتمد في الجلسة الحالية
+            <Box sx={{ p: 2, height: '100%', borderRadius: 2, border: `1px solid ${colour.border}`, backgroundColor: '#F8FAFC', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <Typography variant="caption" sx={{ color: colour.muted, fontWeight: 700, mb: 0.5, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <Shield size={14} /> الدور المعتمد في الجلسة الحالية
               </Typography>
               <Typography variant="body1" sx={{ fontWeight: 800, color: colour.primary }}>
                 {roleNameAr}
               </Typography>
-              <Typography variant="caption" sx={{ color: colour.primary, opacity: 0.85, mt: 0.5, display: 'block' }}>
-                Role Code: <code>{primaryRoleCode}</code>
+              <Typography variant="caption" sx={{ color: colour.muted, opacity: 0.85, mt: 0.5, display: 'block' }}>
+                Role Code: <code style={{ backgroundColor: '#E2E8F0', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>{primaryRoleCode}</code>
               </Typography>
             </Box>
           </Grid>
 
           <Grid item xs={12} sm={6}>
-            <Box sx={{ p: 2, borderRadius: 2, border: `1px solid ${colour.border}`, backgroundColor: '#F8FAFC' }}>
-              <Typography variant="caption" sx={{ color: colour.muted, display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+            <Box sx={{ p: 2, height: '100%', borderRadius: 2, border: `1px solid ${colour.border}`, backgroundColor: '#F8FAFC', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <Typography variant="caption" sx={{ color: colour.muted, display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
                 <Building size={14} /> المنشأة / المستشفى النشط
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 700, color: colour.text }}>

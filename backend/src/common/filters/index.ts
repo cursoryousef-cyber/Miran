@@ -38,10 +38,23 @@ export class AllExceptionsFilter implements ExceptionFilter {
       if (exception.constructor.name === 'PrismaClientKnownRequestError') {
         const prismaError = exception as unknown as { code: string; meta?: Record<string, unknown> };
         switch (prismaError.code) {
-          case 'P2002':
+          case 'P2002': {
             status = HttpStatus.CONFLICT;
-            message = 'السجل موجود مسبقاً';
+            const target = Array.isArray(prismaError.meta?.target)
+              ? (prismaError.meta?.target as string[]).join(', ')
+              : String(prismaError.meta?.target || '');
+
+            if (target.includes('email')) {
+              message = 'البريد الإلكتروني مسجل بحساب آخر مسبقاً';
+            } else if (target.includes('national_id') || target.includes('nationalId')) {
+              message = 'رقم الهوية الوطنية مسجل لشخص آخر مسبقاً';
+            } else if (target.includes('username')) {
+              message = 'اسم المستخدم مسجل مسبقاً';
+            } else {
+              message = 'بيانات الحساب متعارضة مع سجل آخر موجود مسبقاً';
+            }
             break;
+          }
           case 'P2025':
             status = HttpStatus.NOT_FOUND;
             message = 'السجل غير موجود';

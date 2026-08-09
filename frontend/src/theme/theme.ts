@@ -80,13 +80,14 @@ export const theme = createTheme({
     MuiDialog: {
       styleOverrides: {
         paper: {
+          borderRadius: 16,
           '@media (max-width:600px)': {
-            margin: 0,
-            width: '100%',
+            margin: 12,
+            width: 'calc(100% - 24px)',
             maxWidth: '100%',
-            maxHeight: '100%',
-            height: '100%',
-            borderRadius: 0,
+            maxHeight: 'calc(100% - 24px)',
+            height: 'auto',
+            borderRadius: 12,
           },
         },
       },
