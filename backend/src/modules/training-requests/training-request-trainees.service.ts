@@ -1127,7 +1127,7 @@ export class TrainingRequestTraineesService {
             trainingStartDate: true,
             trainingEndDate: true,
             createdAt: true,
-            totalTraineesRequested: true,
+            studentCount: true,
             status: true,
             sourceOrg: { select: { id: true, nameAr: true, nameEn: true } },
             targetOrg: { select: { id: true, nameAr: true, nameEn: true } },

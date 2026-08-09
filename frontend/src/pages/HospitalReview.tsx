@@ -210,7 +210,7 @@ export const HospitalReview: React.FC = () => {
                   badges={[
                     { label: st.label, tone: row.status === 'on_hold' ? 'warning' : row.status === 'rejected' ? 'danger' : 'info' },
                     { label: `التخصص: ${specialtyName}`, tone: 'success' as const },
-                    ...(req?.totalTraineesRequested ? [{ label: `عدد المطلوبين بالطلب: ${req.totalTraineesRequested}`, tone: 'violet' as const }] : []),
+                    ...(req?.studentCount || req?.totalTraineesRequested || 1 ? [{ label: `عدد المطلوبين بالطلب: ${req.totalTraineesRequested}`, tone: 'violet' as const }] : []),
                   ]}
                   metrics={[
                     { label: 'القسم السريري', value: row.assignedDepartment?.nameAr ?? 'غير محدد', tone: 'info' },
@@ -278,7 +278,7 @@ export const HospitalReview: React.FC = () => {
                     </TableCell>
                     <TableCell style={{ fontSize: '12px' }}>
                       <div style={{ fontFamily: 'monospace', color: '#0284C7', fontWeight: 700 }}>{req?.requestNumber || '—'}</div>
-                      <div style={{ fontSize: '11px', color: '#64748B' }}>المطلوب بالطلب: {req?.totalTraineesRequested || 1} متدرب</div>
+                      <div style={{ fontSize: '11px', color: '#64748B' }}>المطلوب بالطلب: {req?.studentCount || req?.totalTraineesRequested || 1 || 1} متدرب</div>
                     </TableCell>
                     <TableCell style={{ fontSize: '12px' }}>
                       <div style={{ color: '#0284C7', fontWeight: 700 }}>{row.assignedDepartment?.nameAr || 'غير محدد'}</div>
