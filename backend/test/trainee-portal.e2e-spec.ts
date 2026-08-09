@@ -56,6 +56,7 @@ async function makeTrainee(opts: {
   traineeNumber: string;
   cardUuid?: string;
   cardStatus?: string;
+  withRotation?: boolean;
 }) {
   const person = await prisma.person.create({
     data: {
@@ -91,6 +92,19 @@ async function makeTrainee(opts: {
   await prisma.userOrganization.create({
     data: { userAccountId: account.id, organizationId: opts.organizationId, isPrimary: true, isActive: true },
   });
+  if (opts.withRotation) {
+    await prisma.rotation.create({
+      data: {
+        organizationId: opts.organizationId,
+        traineeProfileId: profile.id,
+        departmentId: s.departments.h1Internal.id,
+        trainerProfileId: s.trainers.h1Internal.id,
+        startDate: new Date('2026-01-01'),
+        endDate: new Date('2026-12-31'),
+        status: 'active',
+      },
+    });
+  }
   return { person, profile, account };
 }
 
@@ -317,7 +331,7 @@ describe('Attendance check-in / check-out guards', () => {
   beforeAll(async () => {
     attTrainee = await makeTrainee({
       nationalId: '9910000301', nameAr: 'متدرب حضور', email: 'attendance_guard@miran.test',
-      organizationId: s.hospital1.id, traineeNumber: 'ATT-1',
+      organizationId: s.hospital1.id, traineeNumber: 'ATT-1', withRotation: true,
     });
     attToken = await login('attendance_guard@miran.test');
   });

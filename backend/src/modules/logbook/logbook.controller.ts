@@ -4,49 +4,75 @@ import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ScopeContextService } from '../../common/authz';
 
 @ApiTags('Clinical Logbook & Competencies (السجل السريري وحقيبة الكفاءات)')
 @Controller('logbook')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth('JWT-auth')
 export class LogbookController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private scopeContext: ScopeContextService,
+  ) {}
 
   /**
-   * A plain trainer may only act on trainees currently assigned to them —
-   * an open TraineeAllocation or an active/scheduled Rotation naming their
-   * own TrainerProfile. Supervisory/admin roles keep the broader org-scoped
-   * access they already had; this only tightens the trainer case, which had
-   * no check at all (any trainer could approve/reject/view any trainee's
-   * logbook or competencies by guessing/tampering with the id).
+   * Every role reaches this by a different rule, but none may be skipped —
+   * the previous version bypassed the check entirely for anyone holding a
+   * supervisory/admin role (including a user with BOTH 'trainer' and any of
+   * those roles), which meant no scoping at all for hospital_training_admin,
+   * cluster_administrator, training_director, training_supervisor and
+   * academic_supervisor.
+   *
+   *   trainer            → only a trainee currently assigned to them (open
+   *                         TraineeAllocation or active/scheduled Rotation).
+   *   trainee             → only themself.
+   *   everyone else        → ScopeContextService.visibleOrgIds — a hospital
+   *                         role sees only its own hospital, a cluster role
+   *                         sees its cluster and the hospitals beneath it,
+   *                         platform roles are unrestricted. This is the same
+   *                         resolver every other correctly-scoped endpoint in
+   *                         the codebase uses — nothing bespoke here.
    */
   private async assertTrainerScope(user: IAuthenticatedUser, traineeProfileId: string): Promise<void> {
-    const isPlainTrainer =
-      user.roles.includes('trainer') &&
-      !user.roles.includes('platform_owner') &&
-      !user.roles.includes('org_manager') &&
-      !user.roles.includes('academic_supervisor') &&
-      !user.roles.includes('training_supervisor') &&
-      !user.roles.includes('hospital_training_admin') &&
-      !user.roles.includes('cluster_administrator') &&
-      !user.roles.includes('training_director');
-    if (!isPlainTrainer) return;
+    if (user.roles.includes('platform_owner')) return;
 
-    const trainer = await this.prisma.trainerProfile.findFirst({
-      where: { person: { userAccounts: { some: { id: user.accountId } } } },
-    });
-    if (!trainer) throw new ForbiddenException('لا يوجد ملف مدرب مرتبط بهذا الحساب');
+    if (user.roles.includes('trainer')) {
+      const trainer = await this.prisma.trainerProfile.findFirst({
+        where: { person: { userAccounts: { some: { id: user.accountId } } } },
+      });
+      if (!trainer) throw new ForbiddenException('لا يوجد ملف مدرب مرتبط بهذا الحساب');
 
-    const assigned =
-      (await this.prisma.traineeAllocation.findFirst({
-        where: { traineeProfileId, trainerProfileId: trainer.id, status: 'open' },
-      })) ||
-      (await this.prisma.rotation.findFirst({
-        where: { traineeProfileId, trainerProfileId: trainer.id, status: { in: ['scheduled', 'active'] } },
-      }));
-    if (!assigned) {
-      throw new ForbiddenException('غير مصرح لك بالوصول لبيانات متدرب غير مسند إليك');
+      const assigned =
+        (await this.prisma.traineeAllocation.findFirst({
+          where: { traineeProfileId, trainerProfileId: trainer.id, status: 'open' },
+        })) ||
+        (await this.prisma.rotation.findFirst({
+          where: { traineeProfileId, trainerProfileId: trainer.id, status: { in: ['scheduled', 'active'] } },
+        }));
+      if (!assigned) {
+        throw new ForbiddenException('غير مصرح لك بالوصول لبيانات متدرب غير مسند إليك');
+      }
+      return;
     }
+
+    if (user.roles.includes('trainee')) {
+      const own = await this.prisma.traineeProfile.findFirst({
+        where: { person: { userAccounts: { some: { id: user.accountId } } } },
+      });
+      if (own?.id !== traineeProfileId) {
+        throw new ForbiddenException('غير مصرح بالوصول لبيانات متدرب آخر');
+      }
+      return;
+    }
+
+    const profile = await this.prisma.traineeProfile.findUnique({
+      where: { id: traineeProfileId },
+      select: { organizationId: true },
+    });
+    if (!profile) throw new BadRequestException('المتدرب غير موجود');
+    const scope = await this.scopeContext.resolve(user);
+    this.scopeContext.assertOrgInScope(scope, profile.organizationId);
   }
 
   // ─── 1. مكتبة الإجراءات الطبية (Procedures Catalog) ──────────────────────
@@ -178,7 +204,7 @@ export class LogbookController {
     traineeProfileId?: string;
     diagnosis: string;
     procedureId?: string;
-    patientAge?: number;
+    patientAge?: number | string;
     patientGender?: string;
     specialtyAr?: string;
     complexity?: string;
@@ -188,6 +214,10 @@ export class LogbookController {
   }) {
     if (user.roles.includes('hospital_administrator')) {
       throw new ForbiddenException('غير مصرح لمدير المستشفى الإداري بالوصول إلى العمليات التدريبية');
+    }
+
+    if (!dto.diagnosis?.trim()) {
+      throw new BadRequestException('التشخيص أو وصف الحالة إلزامي');
     }
 
     const isTrainee = user.roles.includes('trainee');
@@ -200,7 +230,7 @@ export class LogbookController {
       const profile = await this.prisma.traineeProfile.findFirst({
         where: { person: { userAccounts: { some: { id: user.accountId } } } },
       });
-      if (!profile) return { error: 'لا يوجد ملف متدرب مراد بالتسجيل عليه' };
+      if (!profile) throw new BadRequestException('لا يوجد ملف متدرب مراد بالتسجيل عليه');
       targetTraineeId = profile.id;
     } else if (isTrainer) {
       const trainer = await this.prisma.trainerProfile.findFirst({
@@ -238,27 +268,30 @@ export class LogbookController {
     const profile = await this.prisma.traineeProfile.findUnique({
       where: { id: targetTraineeId },
     });
-    if (!profile) return { error: 'ملف المتدرب غير موجود' };
+    if (!profile) throw new BadRequestException('ملف المتدرب غير موجود');
 
     const activeRotation = await this.prisma.rotation.findFirst({
       where: { traineeProfileId: profile.id, status: 'active' },
     });
 
+    const validProcedureId = dto.procedureId && dto.procedureId.trim() !== '' ? dto.procedureId : null;
+    const parsedAge = typeof dto.patientAge === 'string' ? parseInt(dto.patientAge, 10) : dto.patientAge;
+
     const entry = await this.prisma.clinicalCaseLog.create({
       data: {
         organizationId: profile.organizationId,
         traineeProfileId: profile.id,
-        trainerProfileId: activeRotation?.trainerProfileId,
-        rotationId: activeRotation?.id,
-        departmentId: activeRotation?.departmentId,
-        procedureId: dto.procedureId,
+        trainerProfileId: activeRotation?.trainerProfileId ?? trainerProfileId ?? null,
+        rotationId: activeRotation?.id ?? null,
+        departmentId: activeRotation?.departmentId ?? null,
+        procedureId: validProcedureId,
         diagnosis: dto.diagnosis,
-        patientAge: dto.patientAge,
-        patientGender: dto.patientGender,
-        specialtyAr: dto.specialtyAr,
+        patientAge: isNaN(parsedAge as any) ? null : parsedAge ?? null,
+        patientGender: dto.patientGender || null,
+        specialtyAr: dto.specialtyAr || null,
         complexity: dto.complexity || 'medium',
         participationLevel: dto.participationLevel || 'performed',
-        notes: dto.notes,
+        notes: dto.notes || null,
         evidenceUrls: dto.evidenceUrls || [],
         status: 'submitted',
         performedAt: new Date(),
@@ -266,9 +299,9 @@ export class LogbookController {
     });
 
     // تحديث نسبة الكفاءة والتقدم
-    if (dto.procedureId) {
+    if (validProcedureId) {
       const comp = await this.prisma.competencyProgress.findUnique({
-        where: { traineeProfileId_procedureId: { traineeProfileId: profile.id, procedureId: dto.procedureId } },
+        where: { traineeProfileId_procedureId: { traineeProfileId: profile.id, procedureId: validProcedureId } },
       });
       if (comp) {
         const newCount = comp.completedCount + 1;
@@ -281,11 +314,11 @@ export class LogbookController {
           },
         });
       } else {
-        const proc = await this.prisma.procedureCatalog.findUnique({ where: { id: dto.procedureId } });
+        const proc = await this.prisma.procedureCatalog.findUnique({ where: { id: validProcedureId } });
         await this.prisma.competencyProgress.create({
           data: {
             traineeProfileId: profile.id,
-            procedureId: dto.procedureId,
+            procedureId: validProcedureId,
             requiredCount: proc?.minRequired || 5,
             completedCount: 1,
             status: 1 >= (proc?.minRequired || 5) ? 'completed' : 'in_progress',
@@ -377,6 +410,27 @@ export class LogbookController {
       },
     });
 
+    const trainee = await this.prisma.traineeProfile.findUnique({
+      where: { id: previous.traineeProfileId },
+      include: { person: { include: { userAccounts: { select: { id: true }, take: 1 } } } },
+    });
+    const traineeAccountId = trainee?.person?.userAccounts[0]?.id;
+    if (traineeAccountId) {
+      await this.prisma.notification.create({
+        data: {
+          organizationId: previous.organizationId,
+          userId: traineeAccountId,
+          titleAr: 'اعتماد سجل الحالة السريرية',
+          titleEn: 'Clinical Case Log Approved',
+          bodyAr: `تم اعتماد سجل الحالة السريرية (${previous.diagnosis})`,
+          type: 'logbook_approved',
+          referenceType: 'ClinicalCaseLog',
+          referenceId: logId,
+          sentVia: 'in_app',
+        },
+      }).catch(() => null);
+    }
+
     return { success: true, log: updatedLog };
   }
 
@@ -460,6 +514,26 @@ export class LogbookController {
       await this.prisma.logbookSignoff.create({
         data: { caseLogId: id, signerId: user.accountId, signerRole: user.roles[0] || 'reviewer', feedback: dto.feedback },
       });
+      const trainee = await this.prisma.traineeProfile.findUnique({
+        where: { id: target.traineeProfileId },
+        include: { person: { include: { userAccounts: { select: { id: true }, take: 1 } } } },
+      });
+      const traineeAccountId = trainee?.person?.userAccounts[0]?.id;
+      if (traineeAccountId) {
+        await this.prisma.notification.create({
+          data: {
+            organizationId: target.organizationId,
+            userId: traineeAccountId,
+            titleAr: 'رفض سجل الحالة السريرية',
+            titleEn: 'Clinical Case Log Rejected',
+            bodyAr: `تم رفض سجل الحالة السريرية (${target.diagnosis}). السبب: ${dto.feedback}`,
+            type: 'logbook_rejected',
+            referenceType: 'ClinicalCaseLog',
+            referenceId: id,
+            sentVia: 'in_app',
+          },
+        }).catch(() => null);
+      }
     }
     return result;
   }
@@ -492,12 +566,6 @@ export class LogbookController {
 
     if (!targetTraineeId) return { data: [], overallPercentage: 0 };
     if (traineeId) {
-      if (user.roles.includes('trainee') && !user.roles.includes('platform_owner') && !user.roles.includes('org_manager')) {
-        const own = await this.prisma.traineeProfile.findFirst({
-          where: { person: { userAccounts: { some: { id: user.accountId } } } },
-        });
-        if (own?.id !== targetTraineeId) throw new ForbiddenException('غير مصرح بالوصول لبيانات متدرب آخر');
-      }
       await this.assertTrainerScope(user, targetTraineeId);
     }
 

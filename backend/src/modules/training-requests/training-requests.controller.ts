@@ -9,6 +9,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TrainingRequestsService } from './training-requests.service';
@@ -116,12 +117,19 @@ export class TrainingRequestsController {
   @RequireRoles(...HOSPITAL_ROLES, ...CLUSTER_ROLES)
   @ApiOperation({ summary: 'قائمة المتدربين الموزَّعين على المستشفى لمراجعتها' })
   async findForHospitalReview(
+    @Scope() scope: ScopeContext,
     @OrgContext() orgId: string,
     @Query('hospitalId') hospitalIdQuery?: string,
     @CurrentUser() user?: IAuthenticatedUser,
   ) {
     const targetOrgId = hospitalIdQuery || orgId || user?.organizationId;
     if (!targetOrgId) return { data: [] };
+    // hospitalId is client-supplied — never trust it outright. A cluster
+    // session may legitimately pick one of its own hospitals; anyone else may
+    // only ever land on their own active organisation.
+    if (scope.visibleOrgIds !== null && !scope.visibleOrgIds.includes(targetOrgId)) {
+      throw new ForbiddenException('هذا المستشفى خارج نطاق صلاحياتك التنظيمية');
+    }
     return this.traineesService.findForHospitalReview(targetOrgId);
   }
 
@@ -189,6 +197,7 @@ export class TrainingRequestsController {
 
   @Post(':id/reject')
   @RequireRoles(...CLUSTER_ROLES, ...HOSPITAL_ROLES, 'trainer', 'training_supervisor')
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'رفض طلب التدريب — من التجمع (نهائي) أو من سلسلة القبول' })
   async reject(
     @Param('id') id: string,
@@ -230,6 +239,7 @@ export class TrainingRequestsController {
 
   @Post(':id/accept-hospital-director')
   @RequireRoles('hospital_administrator', 'platform_owner')
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'قبول مدير المستشفى وإحالة الطلب للمشرف التدريبي' })
   async acceptByHospitalDirector(
     @Param('id') id: string,
@@ -241,6 +251,7 @@ export class TrainingRequestsController {
 
   @Post(':id/accept-supervisor')
   @RequireRoles('training_supervisor', 'academic_supervisor', 'platform_owner')
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'قبول المشرف التدريبي وإحالة الطلب للمدرب السريري' })
   async acceptBySupervisor(
     @Param('id') id: string,
@@ -252,6 +263,7 @@ export class TrainingRequestsController {
 
   @Post(':id/accept-trainer')
   @RequireRoles('trainer', 'platform_owner')
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'قبول المدرب السريري وتفعيل مقعد التدريب' })
   async acceptByTrainer(
     @Param('id') id: string,
@@ -263,6 +275,7 @@ export class TrainingRequestsController {
 
   @Post(':id/accept-intern')
   @RequireRoles('trainee', 'platform_owner')
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'موافقة طبيب الامتياز وتفعيل الخطة التدريبية' })
   async acceptByIntern(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
     return this.trainingRequestsService.acceptByIntern(id, user);
@@ -410,6 +423,7 @@ export class TrainingRequestsController {
 
   @Post('trainees/:rowId/hospital-review/start')
   @RequireRoles(...HOSPITAL_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'بدء مراجعة المستشفى للمتدرب (allocated → hospital_review)' })
   async startHospitalReview(@Param('rowId') rowId: string, @CurrentUser() user: IAuthenticatedUser) {
     return this.traineesService.startHospitalReview(rowId, user);
@@ -417,6 +431,7 @@ export class TrainingRequestsController {
 
   @Post('trainees/:rowId/hospital-review/reject')
   @RequireRoles(...HOSPITAL_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'رفض المتدرب نهائياً من قِبَل المستشفى' })
   async hospitalRejectIntern(
     @Param('rowId') rowId: string,
@@ -428,6 +443,7 @@ export class TrainingRequestsController {
 
   @Post('trainees/:rowId/hospital-review/return-to-cluster')
   @RequireRoles(...HOSPITAL_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'إعادة المتدرب للتجمع لإعادة التوزيع' })
   async hospitalReturnToCluster(
     @Param('rowId') rowId: string,
@@ -439,6 +455,7 @@ export class TrainingRequestsController {
 
   @Post('trainees/:rowId/hospital-review/request-documents')
   @RequireRoles(...HOSPITAL_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'طلب مستندات ناقصة من الجامعة للمتدرب' })
   async requestMissingDocuments(
     @Param('rowId') rowId: string,
@@ -450,6 +467,7 @@ export class TrainingRequestsController {
 
   @Post('trainees/:rowId/hospital-review/request-correction')
   @RequireRoles(...HOSPITAL_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'طلب تصحيح بيانات المتدرب من الجامعة' })
   async requestDataCorrection(
     @Param('rowId') rowId: string,
@@ -477,6 +495,7 @@ export class TrainingRequestsController {
 
   @Post('trainees/:rowId/hospital-review/hold')
   @RequireRoles(...HOSPITAL_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'إيقاف مراجعة المتدرب مؤقتاً (allocated/hospital_review → on_hold)' })
   async putOnHold(
     @Param('rowId') rowId: string,
@@ -488,6 +507,7 @@ export class TrainingRequestsController {
 
   @Post('trainees/:rowId/hospital-review/resume')
   @RequireRoles(...HOSPITAL_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'استئناف مراجعة المتدرب من الإيقاف المؤقت (on_hold → hospital_review)' })
   async resumeFromHold(@Param('rowId') rowId: string, @CurrentUser() user: IAuthenticatedUser) {
     return this.traineesService.resumeFromHold(rowId, user);
@@ -496,6 +516,7 @@ export class TrainingRequestsController {
   // ─── Phase 5: Multi-level acceptance chain (TrainingRequest level) ────────
   @Post(':id/accept')
   @RequireRoles(...HOSPITAL_ROLES, 'trainer', 'training_supervisor')
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'الموافقة على الطلب — تقدم سلسلة القبول للخطوة التالية' })
   async acceptRequest(
     @Param('id') id: string,
@@ -507,6 +528,7 @@ export class TrainingRequestsController {
 
   @Post(':id/return-to-cluster')
   @RequireRoles(...HOSPITAL_ROLES, 'trainer', 'training_supervisor')
+  @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'إعادة الطلب للتجمع الصحي من مرحلة القبول الحالية' })
   async returnToCluster(
     @Param('id') id: string,

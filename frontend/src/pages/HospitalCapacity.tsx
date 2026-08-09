@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { BedDouble, Building2, GraduationCap, Plus, Trash2, UserCog, Users, CheckCircle2, Gauge, Layers, AlertTriangle } from 'lucide-react';
+import { BedDouble, Building2, GraduationCap, Plus, Minus, Trash2, UserCog, Users, CheckCircle2, Gauge, Layers, AlertTriangle } from 'lucide-react';
 import {
   Alert,
   Box,
@@ -57,6 +57,7 @@ interface Department {
   maxTrainers?: number | null;
   maxSupervisors?: number | null;
   maxActiveInterns?: number | null;
+  settings?: any;
   occupancy: Occupancy;
 }
 
@@ -78,6 +79,14 @@ export const HospitalCapacity: React.FC = () => {
   const [hospitalTotalInput, setHospitalTotalInput] = useState<number | null>(null);
   const [deptEdits, setDeptEdits] = useState<Record<string, { capacity?: number; maxTrainers?: number; maxSupervisors?: number; maxActiveInterns?: number }>>({});
   const [openAllocDialog, setOpenAllocDialog] = useState(false);
+  const [openAddDeptDialog, setOpenAddDeptDialog] = useState(false);
+  const [addDeptForm, setAddDeptForm] = useState({
+    nameAr: '',
+    capacity: 10,
+    startDate: '',
+    endDate: '',
+  });
+  const [deptFormError, setDeptFormError] = useState<string | null>(null);
   const [allocForm, setAllocForm] = useState({
     scopeType: 'specialty',
     scopeId: '',
@@ -103,6 +112,7 @@ export const HospitalCapacity: React.FC = () => {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['hospital-capacity', hospitalId] });
     queryClient.invalidateQueries({ queryKey: ['hospitals-cards'] });
+    queryClient.invalidateQueries({ queryKey: ['rotations-departments'] });
   };
 
   const showError = (err: any) => setErrorMsg(err?.response?.data?.message || 'حدث خطأ غير متوقع');
@@ -124,6 +134,47 @@ export const HospitalCapacity: React.FC = () => {
     onSuccess: (res) => { setSuccessMsg(res.message); setErrorMsg(null); invalidate(); },
     onError: showError,
   });
+
+  const createDeptMutation = useMutation({
+    mutationFn: async (payload: { nameAr: string; capacity: number; startDate?: string; endDate?: string }) => {
+      const res = await apiClient.post('/rotations/departments', payload);
+      return res.data;
+    },
+    onSuccess: (res) => {
+      setSuccessMsg(res.message || 'تمت إضافة القسم الجديد بنجاح');
+      setErrorMsg(null);
+      setOpenAddDeptDialog(false);
+      setAddDeptForm({ nameAr: '', capacity: 10, startDate: '', endDate: '' });
+      setDeptFormError(null);
+      invalidate();
+    },
+    onError: (err: any) => {
+      setDeptFormError(err?.response?.data?.message || 'حدث خطأ أثناء حفظ القسم');
+    },
+  });
+
+  const handleSaveDepartment = () => {
+    setDeptFormError(null);
+    if (!addDeptForm.nameAr.trim()) {
+      setDeptFormError('اسم القسم مطلوب');
+      return;
+    }
+    if (addDeptForm.capacity < 1) {
+      setDeptFormError('عدد المقاعد يجب أن يكون 1 على الأقل');
+      return;
+    }
+    if (addDeptForm.startDate && addDeptForm.endDate && addDeptForm.startDate > addDeptForm.endDate) {
+      setDeptFormError('تاريخ البداية يجب أن يكون قبل أو يساوي تاريخ النهاية');
+      return;
+    }
+
+    createDeptMutation.mutate({
+      nameAr: addDeptForm.nameAr.trim(),
+      capacity: addDeptForm.capacity,
+      startDate: addDeptForm.startDate || undefined,
+      endDate: addDeptForm.endDate || undefined,
+    });
+  };
 
   const upsertAllocMutation = useMutation({
     mutationFn: async () => {
@@ -226,7 +277,18 @@ export const HospitalCapacity: React.FC = () => {
           </Card>
 
           {/* الأقسام */}
-          <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>الطاقة لكل قسم</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+            <Typography variant="subtitle1" fontWeight={700}>الطاقة لكل قسم</Typography>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<Plus size={16} />}
+              onClick={() => setOpenAddDeptDialog(true)}
+              sx={{ backgroundColor: '#0F766E', '&:hover': { backgroundColor: '#0D655E' } }}
+            >
+              إضافة قسم جديد
+            </Button>
+          </Box>
           <TableContainer component={Paper} sx={{ mb: 3 }}>
             <Table size="small">
               <TableHead>
@@ -358,6 +420,100 @@ export const HospitalCapacity: React.FC = () => {
           </TableContainer>
         </>
       )}
+
+      {/* مودال إضافة قسم جديد */}
+      <Dialog open={openAddDeptDialog} onClose={() => setOpenAddDeptDialog(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, borderBottom: '1px solid #E2E8F0', pb: 1.5 }}>
+          إضافة قسم جديد
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2.5 }}>
+          {deptFormError && <Alert severity="error" sx={{ mb: 2 }}>{deptFormError}</Alert>}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
+            <TextField
+              label="اسم القسم"
+              placeholder="مثال: الباطنة، العناية المركزة، الطوارئ"
+              size="small"
+              fullWidth
+              required
+              value={addDeptForm.nameAr}
+              onChange={(e) => setAddDeptForm({ ...addDeptForm, nameAr: e.target.value })}
+            />
+
+            <Box>
+              <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
+                عدد المقاعد *
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <IconButton
+                  size="small"
+                  onClick={() => setAddDeptForm((prev) => ({ ...prev, capacity: Math.max(1, prev.capacity - 1) }))}
+                  sx={{ border: '1px solid #CBD5E1', borderRadius: 1.5 }}
+                >
+                  <Minus size={18} />
+                </IconButton>
+                <TextField
+                  type="number"
+                  size="small"
+                  value={addDeptForm.capacity}
+                  onChange={(e) => setAddDeptForm({ ...addDeptForm, capacity: Math.max(1, parseInt(e.target.value) || 1) })}
+                  inputProps={{ min: 1, style: { textAlign: 'center', fontWeight: 700 } }}
+                  sx={{ width: 90 }}
+                />
+                <IconButton
+                  size="small"
+                  onClick={() => setAddDeptForm((prev) => ({ ...prev, capacity: prev.capacity + 1 }))}
+                  sx={{ border: '1px solid #CBD5E1', borderRadius: 1.5 }}
+                >
+                  <Plus size={18} />
+                </IconButton>
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
+                الفترة التدريبية
+              </Typography>
+              <Grid container spacing={1.5}>
+                <Grid item xs={6}>
+                  <TextField
+                    label="من تاريخ"
+                    type="date"
+                    size="small"
+                    fullWidth
+                    InputLabelProps={{ shrink: true }}
+                    value={addDeptForm.startDate}
+                    onChange={(e) => setAddDeptForm({ ...addDeptForm, startDate: e.target.value })}
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField
+                    label="إلى تاريخ"
+                    type="date"
+                    size="small"
+                    fullWidth
+                    InputLabelProps={{ shrink: true }}
+                    value={addDeptForm.endDate}
+                    onChange={(e) => setAddDeptForm({ ...addDeptForm, endDate: e.target.value })}
+                  />
+                </Grid>
+              </Grid>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, borderTop: '1px solid #E2E8F0', pt: 1.5 }}>
+          <Button onClick={() => setOpenAddDeptDialog(false)} color="inherit">
+            إلغاء
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => handleSaveDepartment()}
+            disabled={createDeptMutation.isPending}
+            sx={{ backgroundColor: '#0F766E', '&:hover': { backgroundColor: '#0D655E' } }}
+          >
+            {createDeptMutation.isPending ? <CircularProgress size={20} color="inherit" /> : 'حفظ'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={openAllocDialog} onClose={() => setOpenAllocDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>قاعدة طاقة جديدة</DialogTitle>

@@ -25,6 +25,7 @@ import {
   RequireCapability,
   Scope,
   ScopeContext,
+  ScopeContextService,
 } from '../../common/authz';
 
 @ApiTags('Trainees (المتدربون)')
@@ -38,6 +39,7 @@ export class TraineesController {
     private capacityService: CapacityService,
     private allocationService: TraineeAllocationService,
     private cardJwt: JwtService,
+    private scopeContext: ScopeContextService,
   ) {}
 
   // ─── بيانات المتدرب الخاصة ────────────────────────────────────────────────
@@ -525,7 +527,9 @@ export class TraineesController {
   )
   @ApiOperation({ summary: 'قائمة متدربي الامتياز الواردين للتجمع الصحي' })
   async getIncomingTrainees(@CurrentUser() user: IAuthenticatedUser) {
+    const scope = await this.scopeContext.resolve(user);
     const trainees = await this.prisma.traineeProfile.findMany({
+      where: this.scopeContext.orgFilter(scope),
       include: {
         person: true,
         organization: true,

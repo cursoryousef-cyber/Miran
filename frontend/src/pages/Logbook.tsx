@@ -54,6 +54,7 @@ export const LogbookPage: React.FC = () => {
   const [participationLevel, setParticipationLevel] = useState('performed');
   const [complexity, setComplexity] = useState('medium');
   const [notes, setNotes] = useState('');
+  const [selectedTraineeId, setSelectedTraineeId] = useState('');
 
   // Evaluation state — trainer submits eval
   const [evalSubmitting, setEvalSubmitting] = useState(false);
@@ -80,6 +81,19 @@ export const LogbookPage: React.FC = () => {
       return res.data;
     },
   });
+
+  // Trainer's own assigned trainees — needed to pick who a log entry is for
+  // (trainee role resolves itself server-side, everyone else must specify).
+  const isTrainerRole = primaryRole === 'trainer' || primaryRole === 'training_supervisor';
+  const { data: trainerGroupsData } = useQuery({
+    queryKey: ['trainer-groups-for-logbook'],
+    enabled: isTrainerRole,
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/trainer/groups').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+  const assignedTrainees = (trainerGroupsData ?? []).flatMap((g: any) => g.trainees ?? []);
 
   const { data: competenciesData } = useQuery({
     queryKey: ['competencies-portfolio'],
@@ -125,10 +139,14 @@ export const LogbookPage: React.FC = () => {
   });
 
   const handleCreateLog = async () => {
+    if (isTrainerRole && !selectedTraineeId) {
+      return;
+    }
     try {
       await apiClient.post('/logbook/entries', {
+        traineeProfileId: isTrainerRole ? selectedTraineeId : undefined,
         diagnosis,
-        procedureId,
+        procedureId: procedureId ? procedureId : undefined,
         participationLevel,
         complexity,
         notes,
@@ -137,6 +155,7 @@ export const LogbookPage: React.FC = () => {
       setDiagnosis('');
       setProcedureId('');
       setNotes('');
+      setSelectedTraineeId('');
       refetchLogs();
     } catch (err) {
       console.error('Error creating log entry:', err);
@@ -154,6 +173,21 @@ export const LogbookPage: React.FC = () => {
     }
   };
 
+  const handleReject = async (logId: string, feedback: string) => {
+    if (!feedback?.trim()) {
+      alert('سبب الرفض إلزامي');
+      return;
+    }
+    try {
+      await apiClient.patch(`/logbook/entries/${logId}/reject`, {
+        feedback,
+      });
+      refetchLogs();
+    } catch (err) {
+      console.error('Error rejecting log entry:', err);
+    }
+  };
+
   const levelMap: Record<string, { label: string; color: string }> = {
     observation: { label: 'ملاحظة ومراقبة (Observation)', color: '#6366f1' },
     assisted: { label: 'مساعدة مدرب (Assisted)', color: '#0891B2' },
@@ -165,6 +199,7 @@ export const LogbookPage: React.FC = () => {
     draft: { label: 'مسودة', color: 'default' },
     submitted: { label: 'بانتظار المدرب', color: 'warning' },
     trainer_approved: { label: 'معتمد من المدرب', color: 'info' },
+    rejected: { label: 'مرفوض', color: 'default' },
     completed: { label: 'معتمد نهائياً', color: 'success' },
   };
 
@@ -266,18 +301,34 @@ export const LogbookPage: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     {log.status === 'submitted' && (user?.roles?.includes('trainer') || user?.roles?.includes('platform_owner') || user?.roles?.includes('org_manager')) && (
-                      <Button
-                        size="small"
-                        variant="contained"
-                        startIcon={<Check size={14} />}
-                        onClick={() => handleApprove(log.id)}
-                        style={{ backgroundColor: '#059669', color: '#fff', fontWeight: 700 }}
-                      >
-                        اعتماد المدرب
-                      </Button>
+                      <Box style={{ display: 'flex', gap: '8px' }}>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          startIcon={<Check size={14} />}
+                          onClick={() => handleApprove(log.id)}
+                          style={{ backgroundColor: '#059669', color: '#fff', fontWeight: 700 }}
+                        >
+                          اعتماد المدرب
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => {
+                            const reason = prompt('سبب الرفض إلزامي:');
+                            if (reason?.trim()) handleReject(log.id, reason);
+                          }}
+                          style={{ borderColor: '#DC2626', color: '#DC2626', fontWeight: 700 }}
+                        >
+                          رفض
+                        </Button>
+                      </Box>
                     )}
                     {log.status === 'trainer_approved' && (
                       <Chip label="موقع رقمياً ✓" size="small" style={{ backgroundColor: 'rgba(16,185,129,0.2)', color: '#059669', fontWeight: 700 }} />
+                    )}
+                    {log.status === 'rejected' && (
+                      <Chip label="مرفوض" size="small" style={{ backgroundColor: '#FEE2E2', color: '#DC2626', fontWeight: 700 }} />
                     )}
                   </TableCell>
                 </TableRow>
@@ -580,6 +631,24 @@ export const LogbookPage: React.FC = () => {
           تسجيل حالة أو إجراء سريري جديد
         </DialogTitle>
         <DialogContent style={{ backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '20px' }}>
+          {isTrainerRole && (
+            <FormControl size="small" fullWidth required error={!selectedTraineeId}>
+              <InputLabel id="trainee-select-label">المتدرب</InputLabel>
+              <Select
+                labelId="trainee-select-label"
+                value={selectedTraineeId}
+                label="المتدرب"
+                onChange={(e) => setSelectedTraineeId(e.target.value)}
+              >
+                {assignedTrainees.map((t: any) => (
+                  <MenuItem key={t.id} value={t.id}>
+                    {t.nameAr} {t.traineeNumber ? `(${t.traineeNumber})` : ''}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+
           <TextField
             label="التشخيص أو وصف الحالة (Diagnosis)"
             variant="outlined"
@@ -647,8 +716,13 @@ export const LogbookPage: React.FC = () => {
           />
         </DialogContent>
         <DialogActions style={{ backgroundColor: '#FFFFFF', padding: '16px 24px', borderTop: '1px solid #E2E8F0' }}>
-          <Button onClick={() => setOpenModal(false)} style={{ color: '#64748B' }}>إلغاء</Button>
-          <Button onClick={handleCreateLog} variant="contained" style={{ background: '#0F766E', fontWeight: 700, borderRadius: '10px' }}>
+          <Button onClick={() => { setOpenModal(false); setSelectedTraineeId(''); }} style={{ color: '#64748B' }}>إلغاء</Button>
+          <Button
+            onClick={handleCreateLog}
+            variant="contained"
+            disabled={isTrainerRole && !selectedTraineeId}
+            style={{ background: '#0F766E', fontWeight: 700, borderRadius: '10px' }}
+          >
             تسجيل وتوثيق الحالة
           </Button>
         </DialogActions>

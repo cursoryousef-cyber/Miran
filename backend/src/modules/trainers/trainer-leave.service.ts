@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationService } from '../notifications/notification.service';
 import { TrainerReassignmentService } from './trainer-reassignment.service';
@@ -147,6 +147,7 @@ export class TrainerLeaveService {
       include: { trainerProfile: { include: { person: true } } },
     });
     if (!leave) throw new NotFoundException('الإجازة غير موجودة');
+    if (leave.organizationId !== organizationId) throw new ForbiddenException('هذه الإجازة خارج نطاق صلاحياتك التنظيمية');
     if (leave.status !== 'pending') throw new BadRequestException('لا يمكن الموافقة إلا على الإجازات المعلقة');
 
     const updated = await this.prisma.trainerLeave.update({
@@ -214,12 +215,13 @@ export class TrainerLeaveService {
   /**
    * Cancel a leave.
    */
-  async cancelLeave(leaveId: string, actorId: string) {
+  async cancelLeave(leaveId: string, actorId: string, organizationId: string) {
     const leave = await this.prisma.trainerLeave.findUnique({
       where: { id: leaveId },
       include: { trainerProfile: { include: { person: true } } },
     });
     if (!leave) throw new NotFoundException('الإجازة غير موجودة');
+    if (leave.organizationId !== organizationId) throw new ForbiddenException('هذه الإجازة خارج نطاق صلاحياتك التنظيمية');
     if (leave.status === 'completed' || leave.status === 'cancelled') {
       throw new BadRequestException('لا يمكن إلغاء هذه الإجازة');
     }

@@ -15,10 +15,11 @@ import { CreateAffiliationDto, UpdateAffiliationDto } from './dto/affiliation.dt
 import { CurrentUser, RequirePermissions } from '../../common/decorators';
 import { JwtAuthGuard, PermissionsGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
+import { CapabilityGuard, Scope, ScopeContext } from '../../common/authz';
 
 @ApiTags('Organization Affiliations (الاتفاقيات بين الجهات)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, CapabilityGuard)
 @Controller('organization-affiliations')
 export class OrganizationAffiliationsController {
   constructor(private affiliationsService: OrganizationAffiliationsService) {}
@@ -33,8 +34,9 @@ export class OrganizationAffiliationsController {
     @Query('orgId') orgId?: string,
     @Query('page') page = 1,
     @Query('limit') limit = 20,
+    @Scope() scope?: ScopeContext,
   ) {
-    return this.affiliationsService.findAll(orgId, +page, +limit);
+    return this.affiliationsService.findAll(orgId, +page, +limit, scope?.visibleOrgIds ?? null);
   }
 
   @Post()

@@ -18,11 +18,12 @@ import { JwtAuthGuard, PermissionsGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import {
   CAPABILITIES, CapabilityGuard, RequireCapability,
+  Scope, ScopeContext, ScopeGuard, ScopedResource,
 } from '../../common/authz';
 
 @ApiTags('Organizations (إدارة الجهات والشجرة التنظيمية)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, CapabilityGuard)
+@UseGuards(JwtAuthGuard, CapabilityGuard, ScopeGuard)
 @Controller('organizations')
 export class OrganizationsController {
   constructor(
@@ -44,8 +45,9 @@ export class OrganizationsController {
     @Query('search') search?: string,
     @Query('typeId') typeId?: string,
     @Query('parentId') parentId?: string,
+    @Scope() scope?: ScopeContext,
   ) {
-    return this.organizationsService.findAll(+page, +limit, search, typeId, parentId);
+    return this.organizationsService.findAll(+page, +limit, search, typeId, parentId, scope?.visibleOrgIds ?? null);
   }
 
   // Reference data — the catalogue of organisation types, not any organisation's
@@ -95,6 +97,7 @@ export class OrganizationsController {
   @Get(':id')
   @ApiOperation({ summary: 'تفاصيل جهة محددة والتراخيص والميزات والجهات التابعة' })
   @RequirePermissions('view_organizations')
+  @ScopedResource('organization', 'id')
   async findOne(@Param('id') id: string) {
     return this.organizationsService.findOne(id);
   }
@@ -122,6 +125,7 @@ export class OrganizationsController {
   @Patch(':id')
   @ApiOperation({ summary: 'تحديث بيانات جهة' })
   @RequirePermissions('manage_organizations')
+  @ScopedResource('organization', 'id')
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateOrganizationDto,
@@ -133,6 +137,7 @@ export class OrganizationsController {
   @Delete(':id')
   @ApiOperation({ summary: 'حذف جهة (Soft Delete)' })
   @RequirePermissions('manage_organizations')
+  @ScopedResource('organization', 'id')
   async remove(
     @Param('id') id: string,
     @CurrentUser() user: IAuthenticatedUser,

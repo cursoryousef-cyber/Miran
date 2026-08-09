@@ -15,10 +15,14 @@ export class OrganizationsService {
     private orgAssignments: OrganizationAssignmentService,
   ) {}
 
-  async findAll(page = 1, limit = 20, search?: string, typeId?: string, parentId?: string) {
+  async findAll(page = 1, limit = 20, search?: string, typeId?: string, parentId?: string, visibleOrgIds?: string[] | null) {
     const skip = (page - 1) * limit;
     const where: Record<string, unknown> = { deletedAt: null };
 
+    // null means unrestricted (platform-level session); everyone else is
+    // confined to their own organisation and, for a cluster, its children —
+    // never a sibling hospital or an unrelated organisation.
+    if (visibleOrgIds) where.id = { in: visibleOrgIds };
     if (typeId) where.organizationTypeId = typeId;
     if (parentId) where.parentId = parentId;
 

@@ -12,11 +12,12 @@ export class EvaluationService {
 
   // ─── 1. Midpoint-meeting status ──────────────────────────────────────────
 
-  async midpointStatus(rotationId: string) {
+  async midpointStatus(rotationId: string, organizationId: string) {
     const rotation = await this.prisma.rotation.findUniqueOrThrow({
       where: { id: rotationId },
       select: {
         id: true,
+        organizationId: true,
         midpointMeetingDone: true,
         midpointMeetingDate: true,
         midpointMeetingNotes: true,
@@ -25,6 +26,9 @@ export class EvaluationService {
         traineeProfile: { select: { person: { select: { nameAr: true } } } },
       },
     });
+    if (rotation.organizationId !== organizationId) {
+      throw new ForbiddenException('هذا الروتيشن خارج نطاق صلاحياتك التنظيمية');
+    }
     return { data: rotation };
   }
 
@@ -33,6 +37,10 @@ export class EvaluationService {
     notes: string | undefined,
     user: IAuthenticatedUser,
   ) {
+    const existing = await this.prisma.rotation.findUniqueOrThrow({ where: { id: rotationId }, select: { organizationId: true } });
+    if (existing.organizationId !== user.organizationId) {
+      throw new ForbiddenException('هذا الروتيشن خارج نطاق صلاحياتك التنظيمية');
+    }
     const rotation = await this.prisma.rotation.update({
       where: { id: rotationId },
       data: {

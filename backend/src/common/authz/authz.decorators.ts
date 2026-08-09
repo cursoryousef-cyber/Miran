@@ -45,7 +45,11 @@ export type ScopedResourceKind =
   | 'organization'
   | 'department'
   | 'academicIntake'
-  | 'traineeAllocation';
+  | 'traineeAllocation'
+  | 'trainerProfile'
+  | 'rotation'
+  | 'attendance'
+  | 'task';
 
 export interface ScopedResourceSpec {
   kind: ScopedResourceKind;

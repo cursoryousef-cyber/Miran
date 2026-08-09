@@ -24,6 +24,14 @@ export interface RoleScopeRule {
   /** A hospital must be supplied, and must sit under the organisation. */
   requiresHospital: boolean;
   labelAr: string;
+  /**
+   * When set, the supplied organisation must be of this OrganizationType code.
+   * Hospital-scoped roles already get this via requiresHospital; this covers
+   * the university/cluster half of the same rule — a university_administrator
+   * account created against a hospital (or vice versa) was previously accepted
+   * outright, since only the hospital branch validated organisation type.
+   */
+  expectedOrgTypeCode?: string;
 }
 
 const PLATFORM: Omit<RoleScopeRule, 'labelAr'> = {
@@ -44,10 +52,10 @@ export const ROLE_SCOPES: Record<string, RoleScopeRule> = {
 
   // ── Organisation ──────────────────────────────────────────────────────────
   org_manager: { ...ORGANIZATION, labelAr: 'جهة واحدة' },
-  cluster_administrator: { ...ORGANIZATION, labelAr: 'تجمع صحي واحد' },
-  cluster_manager: { ...ORGANIZATION, labelAr: 'تجمع صحي واحد' },
-  training_director: { ...ORGANIZATION, labelAr: 'تجمع صحي واحد' },
-  university_administrator: { ...ORGANIZATION, labelAr: 'جامعة واحدة' },
+  cluster_administrator: { ...ORGANIZATION, labelAr: 'تجمع صحي واحد', expectedOrgTypeCode: 'cluster' },
+  cluster_manager: { ...ORGANIZATION, labelAr: 'تجمع صحي واحد', expectedOrgTypeCode: 'cluster' },
+  training_director: { ...ORGANIZATION, labelAr: 'تجمع صحي واحد', expectedOrgTypeCode: 'cluster' },
+  university_administrator: { ...ORGANIZATION, labelAr: 'جامعة واحدة', expectedOrgTypeCode: 'university' },
   academic_affairs: { ...ORGANIZATION, labelAr: 'جامعة واحدة' },
   academic_supervisor: { ...ORGANIZATION, labelAr: 'جهة أكاديمية واحدة' },
 

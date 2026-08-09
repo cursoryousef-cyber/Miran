@@ -51,25 +51,29 @@ struct UserProfileResponse: Codable, Identifiable {
     let availableOrganizations: [UserOrgResponse]
 
     // ── وصول سريع للأدوار ──────────────────────────────────────
-    var isTrainee:           Bool { roles.contains("trainee") }
-    var isTrainer:           Bool { roles.contains("trainer") }
-    var isAcademicSupervisor: Bool { roles.contains("academic_supervisor") }
-    var isOrgManager:        Bool { roles.contains("org_manager") }
-    var isPlatformOwner:     Bool { roles.contains("platform_owner") }
+    var isPlatformOwner:            Bool { roles.contains("platform_owner") || roles.contains("system_admin") || roles.contains("holding_administrator") }
+    var isUniversityAdmin:          Bool { roles.contains("university_administrator") || roles.contains("university_admin") || roles.contains("academic_affairs") }
+    var isTrainingDirector:         Bool { roles.contains("training_director") || roles.contains("cluster_administrator") || roles.contains("cluster_manager") || roles.contains("org_manager") }
+    var isHospitalTrainingAdmin:    Bool { roles.contains("hospital_training_admin") || roles.contains("hospital_administrator") || roles.contains("hospital_supervisor") || roles.contains("training_supervisor") || roles.contains("department_head") }
+    var isAcademicSupervisor:       Bool { roles.contains("academic_supervisor") }
+    var isTrainer:                  Bool { roles.contains("trainer") }
+    var isTrainee:                  Bool { roles.contains("trainee") }
 
-    var canLaunchCalls:      Bool { roles.contains("trainer") || roles.contains("org_manager") }
-    var canManageAccounts:   Bool { roles.contains("org_manager") || roles.contains("platform_owner") }
-    var canViewActiveCalls:  Bool { roles.contains("trainer") || roles.contains("org_manager") }
-    var canRespondToCalls:   Bool { roles.contains("trainee") }
+    var canLaunchCalls:      Bool { isTrainer || isTrainingDirector || isHospitalTrainingAdmin }
+    var canManageAccounts:   Bool { isPlatformOwner || isTrainingDirector || isHospitalTrainingAdmin || isUniversityAdmin }
+    var canViewActiveCalls:  Bool { isTrainer || isTrainingDirector || isHospitalTrainingAdmin }
+    var canRespondToCalls:   Bool { isTrainee }
 
     /// أعلى دور للمستخدم (لتحديد التبويبة الرئيسية)
     var primaryRole: String {
-        if isPlatformOwner  { return "platform_owner" }
-        if isOrgManager     { return "org_manager" }
-        if isAcademicSupervisor { return "academic_supervisor" }
-        if isTrainer        { return "trainer" }
-        if isTrainee        { return "trainee" }
-        return "unknown"
+        if isPlatformOwner           { return "platform_owner" }
+        if isUniversityAdmin         { return "university_administrator" }
+        if isTrainingDirector        { return "training_director" }
+        if isHospitalTrainingAdmin   { return "hospital_training_admin" }
+        if isAcademicSupervisor      { return "academic_supervisor" }
+        if isTrainer                 { return "trainer" }
+        if isTrainee                 { return "trainee" }
+        return roles.first ?? "unknown"
     }
 }
 

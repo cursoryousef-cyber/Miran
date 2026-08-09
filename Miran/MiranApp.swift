@@ -59,19 +59,19 @@ struct RBACMainView: View {
         ZStack {
             if let user = user {
                 switch user.primaryRole {
-                case "platform_owner", "system_admin":
-                    // 1. مدير المنصة / مدير النظام: مركز التحكم الوطني (Control Center) محجوب منه التشغيل اليومي
+                case "platform_owner", "system_admin", "holding_administrator":
+                    // 1. مدير المنصة / مدير النظام: مركز التحكم الوطني (Control Center)
                     SystemAdminTabView()
 
-                case "university_admin":
+                case "university_administrator", "university_admin", "academic_affairs":
                     // 2. إدارة الجامعة: رفع الطلاب والبرامج والخطط وتقديم الطلبات للتجمع
                     UniversityAdminTabView()
 
-                case "cluster_manager", "training_manager", "org_manager":
+                case "training_director", "cluster_administrator", "cluster_manager", "training_manager", "org_manager":
                     // 3. إدارة التدريب بالتجمع الصحي: مراجعة طلبات الجامعات وتوزيع السعة على المستشفيات
                     ClusterTrainingAdminTabView()
 
-                case "hospital_supervisor", "training_supervisor":
+                case "hospital_training_admin", "hospital_administrator", "hospital_supervisor", "training_supervisor", "department_head":
                     // 4. مشرف امتياز المستشفى: قبول الطلاب، تحديد التواريخ، توزيع الأقسام وإسناد المدرب
                     HospitalSupervisorTabView()
 
@@ -84,7 +84,7 @@ struct RBACMainView: View {
                     TraineeTabView()
 
                 case "academic_supervisor":
-                    // 7. المشرف الأكاديمي (MVP): لا يشارك بالتشغيل اليومي — اعتماد النتيجة وإكمال البرنامج النهائي فقط
+                    // 7. المشرف الأكاديمي (MVP): اعتماد النتيجة وإكمال البرنامج النهائي فقط
                     AcademicSupervisorTabView()
 
                 default:

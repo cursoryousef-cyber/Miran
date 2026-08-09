@@ -33,6 +33,18 @@ export class NotificationService {
   ) {}
 
   async create(payload: CreateNotificationPayload) {
+    if (payload.referenceId && payload.referenceType) {
+      const existing = await this.prisma.notification.findFirst({
+        where: {
+          userId: payload.userId,
+          type: payload.type,
+          referenceType: payload.referenceType,
+          referenceId: payload.referenceId,
+        },
+      });
+      if (existing) return existing;
+    }
+
     const notification = await this.prisma.notification.create({
       data: {
         organizationId: payload.organizationId,

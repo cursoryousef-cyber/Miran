@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationService } from '../notifications/notification.service';
 import { CapacityService } from '../organizations/capacity.service';
@@ -70,6 +70,9 @@ export class TrainerReassignmentService {
     });
 
     if (!rotation) throw new NotFoundException('الروتيشن غير موجود');
+    if (rotation.organizationId !== organizationId) {
+      throw new ForbiddenException('هذا الروتيشن خارج نطاق صلاحياتك التنظيمية');
+    }
     if (rotation.status !== 'active') throw new BadRequestException('لا يمكن إعادة إسناد إلا للروتيشنات النشطة');
     if (new Date(rotation.endDate) <= new Date()) throw new BadRequestException('الروتيشن منتهي الصلاحية');
 

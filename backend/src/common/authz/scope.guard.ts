@@ -75,13 +75,29 @@ export class ScopeGuard implements CanActivate {
     kind: ScopedResourceSpec['kind'],
     id: string,
   ): Promise<string[] | null> {
+    if (!id || typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return null;
+    }
     switch (kind) {
       case 'trainingRequest': {
         const r = await this.prisma.trainingRequest.findUnique({
           where: { id },
-          select: { sourceOrgId: true, targetOrgId: true },
+          select: {
+            sourceOrgId: true,
+            targetOrgId: true,
+            // The legacy per-hospital acceptance chain (accept-hospital-director,
+            // accept-supervisor, accept-trainer, reject, return-to-cluster) is
+            // reachable by hospital/trainer/supervisor roles, whose visibility
+            // is the hospital itself — never the sending university or the
+            // owning cluster. Without also owning the hospital(s) actually
+            // assigned on this request's rows, every one of those callers would
+            // 403 on their own request.
+            trainees: { select: { assignedHospitalId: true }, distinct: ['assignedHospitalId'] },
+          },
         });
-        return r ? [r.sourceOrgId, r.targetOrgId] : null;
+        if (!r) return null;
+        const hospitalIds = r.trainees.map((t) => t.assignedHospitalId).filter((o): o is string => !!o);
+        return [r.sourceOrgId, r.targetOrgId, ...hospitalIds];
       }
       case 'trainingRequestTrainee': {
         const r = await this.prisma.trainingRequestTrainee.findUnique({
@@ -131,6 +147,34 @@ export class ScopeGuard implements CanActivate {
         return r
           ? [r.clusterOrgId, r.hospitalId].filter((o): o is string => !!o)
           : null;
+      }
+      case 'trainerProfile': {
+        const r = await this.prisma.trainerProfile.findUnique({
+          where: { id },
+          select: { organizationId: true },
+        });
+        return r ? [r.organizationId] : null;
+      }
+      case 'rotation': {
+        const r = await this.prisma.rotation.findUnique({
+          where: { id },
+          select: { organizationId: true },
+        });
+        return r ? [r.organizationId] : null;
+      }
+      case 'attendance': {
+        const r = await this.prisma.attendance.findUnique({
+          where: { id },
+          select: { organizationId: true },
+        });
+        return r ? [r.organizationId] : null;
+      }
+      case 'task': {
+        const r = await this.prisma.task.findUnique({
+          where: { id },
+          select: { organizationId: true },
+        });
+        return r ? [r.organizationId] : null;
       }
       default:
         return null;

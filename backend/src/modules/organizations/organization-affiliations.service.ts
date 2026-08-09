@@ -7,13 +7,20 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 export class OrganizationAffiliationsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(orgId?: string, page = 1, limit = 20) {
+  async findAll(orgId?: string, page = 1, limit = 20, visibleOrgIds?: string[] | null) {
     const skip = (page - 1) * limit;
-    const where: Record<string, unknown> = {};
+    const conditions: Record<string, unknown>[] = [];
 
     if (orgId) {
-      where.OR = [{ sourceOrgId: orgId }, { targetOrgId: orgId }];
+      conditions.push({ OR: [{ sourceOrgId: orgId }, { targetOrgId: orgId }] });
     }
+    // null means unrestricted (platform-level session). Everyone else only
+    // sees affiliations where one side is an organisation they can see —
+    // never an unrelated pair.
+    if (visibleOrgIds) {
+      conditions.push({ OR: [{ sourceOrgId: { in: visibleOrgIds } }, { targetOrgId: { in: visibleOrgIds } }] });
+    }
+    const where: Record<string, unknown> = conditions.length ? { AND: conditions } : {};
 
     const [total, data] = await Promise.all([
       this.prisma.organizationAffiliation.count({ where }),

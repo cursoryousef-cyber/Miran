@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
@@ -362,9 +362,57 @@ export class OperationsController {
     CAPABILITIES.SELF_VIEW,
   )
   async attendance(@CurrentUser() user: IAuthenticatedUser, @Query('traineeId') traineeId?: string) {
-    const profile = traineeId ? null : await this.myTrainee(user);
+    if (user.roles.includes('hospital_administrator')) {
+      throw new ForbiddenException('مدير المستشفى لا يملك صلاحية على سجلات الحضور');
+    }
+
+    if (user.roles.includes('trainee')) {
+      const myProfile = await this.myTrainee(user);
+      if (!myProfile) return { data: [] };
+      if (traineeId && traineeId !== myProfile.id) {
+        throw new ForbiddenException('لا يمكنك الاطلاع على سجلات حضور متدرب آخر');
+      }
+      const data = await this.prisma.attendance.findMany({
+        where: { traineeProfileId: myProfile.id },
+        include: { traineeProfile: { include: { person: true } }, shift: true, approvedBy: { include: { person: true } } },
+        orderBy: { date: 'desc' },
+        take: 100,
+      });
+      return { data };
+    }
+
+    if (user.roles.includes('trainer')) {
+      const trainer = await this.myTrainer(user);
+      if (!trainer) return { data: [] };
+      const assignedRotations = await this.prisma.rotation.findMany({
+        where: { trainerProfileId: trainer.id, status: 'active' },
+        select: { traineeProfileId: true },
+      });
+      const assignedTraineeIds = assignedRotations.map((r) => r.traineeProfileId);
+
+      if (traineeId && !assignedTraineeIds.includes(traineeId)) {
+        throw new ForbiddenException('المتدرب المحدد غير مسند إليك');
+      }
+
+      const targetTraineeIds = traineeId ? [traineeId] : assignedTraineeIds;
+      if (targetTraineeIds.length === 0) return { data: [] };
+
+      const data = await this.prisma.attendance.findMany({
+        where: { traineeProfileId: { in: targetTraineeIds } },
+        include: { traineeProfile: { include: { person: true } }, shift: true, approvedBy: { include: { person: true } } },
+        orderBy: { date: 'desc' },
+        take: 100,
+      });
+      return { data };
+    }
+
+    const scopeFilter: Prisma.AttendanceWhereInput = {
+      ...(traineeId ? { traineeProfileId: traineeId } : {}),
+      organizationId: user.organizationId,
+    };
+
     const data = await this.prisma.attendance.findMany({
-      where: { organizationId: user.organizationId, ...(traineeId || profile ? { traineeProfileId: traineeId || profile?.id } : {}) },
+      where: scopeFilter,
       include: { traineeProfile: { include: { person: true } }, shift: true, approvedBy: { include: { person: true } } },
       orderBy: { date: 'desc' },
       take: 100,
@@ -415,8 +463,12 @@ export class OperationsController {
   @RequireRoles('trainee')
   async checkOut(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
     const profile = await this.myTrainee(user);
-    const existing = await this.prisma.attendance.findFirst({ where: { id, traineeProfileId: profile?.id } });
+    if (!profile) throw new BadRequestException('لا يوجد ملف متدرب');
+    const existing = await this.prisma.attendance.findFirst({ where: { id } });
     if (!existing) throw new BadRequestException('سجل الحضور غير موجود');
+    if (existing.traineeProfileId !== profile.id) {
+      throw new ForbiddenException('سجل الحضور غير تابع لك');
+    }
     if (!existing.checkIn) throw new BadRequestException('لا يمكن تسجيل الانصراف قبل تسجيل الحضور');
     if (existing.checkOut) throw new BadRequestException('تم تسجيل الانصراف مسبقاً لهذا اليوم');
     const data = await this.prisma.attendance.update({ where: { id }, data: { checkOut: new Date() } });
@@ -426,6 +478,7 @@ export class OperationsController {
   @Patch('attendance/:id/approve')
   @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
   async approveAttendance(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
+    await this.assertAttendanceInScope(id, user);
     const data = await this.prisma.attendance.update({ where: { id }, data: { status: 'present', approvedById: user.accountId } });
     await this.audit(user, 'attendance.approve', 'Attendance', id, data);
     return { success: true, data };
@@ -434,6 +487,7 @@ export class OperationsController {
   @Patch('attendance/:id/reject')
   @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
   async rejectAttendance(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser, @Body() dto: { reason?: string }) {
+    await this.assertAttendanceInScope(id, user);
     const data = await this.prisma.attendance.update({ where: { id }, data: { status: 'rejected', excuseReason: dto.reason, approvedById: user.accountId } });
     await this.audit(user, 'attendance.reject', 'Attendance', id, data);
     return { success: true, data };
@@ -442,6 +496,9 @@ export class OperationsController {
   @Post('attendance/:id/correction-request')
   @RequireRoles('trainee')
   async correctionRequest(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser, @Body() dto: { reason: string }) {
+    const profile = await this.myTrainee(user);
+    const own = await this.prisma.attendance.findFirst({ where: { id, traineeProfileId: profile?.id } });
+    if (!own) throw new BadRequestException('سجل الحضور غير موجود أو ليس ملكك');
     const data = await this.prisma.attendance.update({ where: { id }, data: { status: 'correction_requested', excuseReason: dto.reason } });
     await this.audit(user, 'attendance.correction_request', 'Attendance', id, data);
     return { success: true, data };
@@ -488,8 +545,8 @@ export class OperationsController {
   @Get('evaluations/midpoint/:rotationId')
   @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner', 'trainee')
   @ApiOperation({ summary: 'حالة اجتماع منتصف الدورة للروتيشن' })
-  async midpointStatus(@Param('rotationId') rotationId: string) {
-    return this.evaluationService.midpointStatus(rotationId);
+  async midpointStatus(@Param('rotationId') rotationId: string, @CurrentUser() user: IAuthenticatedUser) {
+    return this.evaluationService.midpointStatus(rotationId, user.organizationId);
   }
 
   // ── PATCH /operations/evaluations/midpoint/:rotationId/complete  — record meeting ──
@@ -589,6 +646,10 @@ export class OperationsController {
 
   @Patch('tasks/:id/complete')
   async completeTask(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
+    // Only the assignee may mark their own task complete — matches the
+    // ownership boundary GET /tasks already reads by (assignedToId).
+    const own = await this.prisma.task.findFirst({ where: { id, assignedToId: user.accountId } });
+    if (!own) throw new BadRequestException('المهمة غير موجودة أو ليست مسندة إليك');
     const data = await this.prisma.task.update({ where: { id }, data: { status: 'completed', completedAt: new Date() } });
     await this.audit(user, 'task.complete', 'Task', id, data);
     return { success: true, data };
@@ -636,16 +697,42 @@ export class OperationsController {
 
   private async createAttendance(user: IAuthenticatedUser, data: any) {
     const profile = await this.myTrainee(user);
-    if (!profile) return { success: false, message: 'لا يوجد ملف متدرب' };
+    if (!profile) throw new BadRequestException('لا يوجد ملف متدرب للمستخدم الحالي');
+
+    const activeRotation = await this.prisma.rotation.findFirst({
+      where: { traineeProfileId: profile.id, status: 'active' },
+    });
+
+    if (!activeRotation) {
+      throw new BadRequestException('لا يوجد روتيشن نشط متاح لتسجيل الحضور');
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
     const existing = await this.prisma.attendance.findFirst({ where: { traineeProfileId: profile.id, date: today } });
+
+    if (existing?.checkIn && existing?.checkOut) {
+      throw new BadRequestException('تم تسجيل الحضور والانصراف لهذا اليوم بالفعل');
+    }
+
     if (existing?.checkIn && !existing.checkOut) {
       throw new BadRequestException('تم تسجيل حضورك اليوم بالفعل — لا يمكن تسجيل الحضور مرتين');
     }
+
+    const attendanceData = {
+      organizationId: activeRotation.organizationId,
+      departmentId: activeRotation.departmentId,
+      traineeProfileId: profile.id,
+      date: today,
+      checkIn: new Date(),
+      status: 'present',
+      ...data,
+    };
+
     const attendance = existing
       ? await this.prisma.attendance.update({ where: { id: existing.id }, data: { checkIn: new Date(), status: 'present', ...data } })
-      : await this.prisma.attendance.create({ data: { organizationId: user.organizationId, traineeProfileId: profile.id, date: today, checkIn: new Date(), status: 'present', ...data } });
+      : await this.prisma.attendance.create({ data: attendanceData });
     await this.audit(user, `attendance.${data.method}`, 'Attendance', attendance.id, attendance);
     return { success: true, data: attendance };
   }
@@ -662,6 +749,38 @@ export class OperationsController {
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
       include: { person: true, department: true },
     });
+  }
+
+  private async assertAttendanceInScope(id: string, user: IAuthenticatedUser) {
+    if (user.roles.includes('hospital_administrator')) {
+      throw new ForbiddenException('مدير المستشفى لا يملك صلاحية على سجلات الحضور');
+    }
+
+    const record = await this.prisma.attendance.findUnique({
+      where: { id },
+      include: { traineeProfile: true },
+    });
+    if (!record) throw new NotFoundException('سجل الحضور غير موجود');
+
+    if (user.roles.includes('trainer')) {
+      const trainer = await this.myTrainer(user);
+      if (!trainer) throw new ForbiddenException('ملف المدرب غير موجود');
+      const activeRotation = await this.prisma.rotation.findFirst({
+        where: {
+          traineeProfileId: record.traineeProfileId,
+          trainerProfileId: trainer.id,
+          status: 'active',
+        },
+      });
+      if (!activeRotation) {
+        throw new ForbiddenException('لا يمكنك اتخاذ إجراء على سجل حضور لمتدرب غير مسند إليك');
+      }
+    } else {
+      if (record.organizationId !== user.organizationId) {
+        throw new ForbiddenException('سجل الحضور خارج نطاق مستشفاك التنظيمي');
+      }
+    }
+    return record;
   }
 
   private audit(user: IAuthenticatedUser, action: string, entityType: string, entityId: string, data: unknown) {

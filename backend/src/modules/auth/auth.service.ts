@@ -54,13 +54,27 @@ export class AuthService {
       for (const rp of source.role.rolePermissions) permissionsSet.add(rp.permission.code);
     }
 
-    // إضافة الصلاحيات المباشرة للمستخدم
+    // الصلاحيات المباشرة للمستخدم — منح وسحب.
+    //
+    // `granted` is a tri-state in effect: a row with `true` adds a permission the
+    // role does not carry, and a row with `false` withdraws one the role does.
+    // Only the additive half used to be read, so a deny row was stored, shown in
+    // the UI and audited, yet authorised anyway — the permission still arrived
+    // from the role and nothing ever subtracted it. Both halves are applied here,
+    // in the single resolver every session (login, org switch, refresh) already
+    // goes through, so a deny takes effect everywhere at once rather than needing
+    // each guard to learn about it.
+    //
+    // Denies are applied after grants so an explicit deny always wins.
     const directPermissions = await this.prisma.userPermission.findMany({
-      where: { userAccountId: accountId, organizationId: orgId, granted: true },
+      where: { userAccountId: accountId, organizationId: orgId },
       include: { permission: true },
     });
     for (const dp of directPermissions) {
-      permissionsSet.add(dp.permission.code);
+      if (dp.granted) permissionsSet.add(dp.permission.code);
+    }
+    for (const dp of directPermissions) {
+      if (!dp.granted) permissionsSet.delete(dp.permission.code);
     }
 
     const roles = Array.from(roleSet);

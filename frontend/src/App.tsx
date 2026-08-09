@@ -32,6 +32,7 @@ import { HospitalReview } from './pages/HospitalReview';
 import { AcceptanceChain } from './pages/AcceptanceChain';
 import { Incidents } from './pages/Incidents';
 import { Graduation } from './pages/Graduation';
+import { Notifications } from './pages/Notifications';
 
 // ─── Code-Split Major Pages via React.lazy ────────────────────────────────
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -149,6 +150,7 @@ export const App: React.FC = () => {
 
                   {/* Trainer + Trainee */}
                   <Route path="logbook" element={<RoleRoute allowedRoles={[...TRAINER, ...TRAINEE, ...HOSPITAL]}><LogbookPage /></RoleRoute>} />
+                  <Route path="notifications" element={<RoleRoute allowedRoles={[...TRAINER, ...TRAINEE]}><Notifications /></RoleRoute>} />
 
                   {/* Trainee only */}
                   <Route path="declarations" element={<RoleRoute allowedRoles={TRAINEE}><Declarations /></RoleRoute>} />

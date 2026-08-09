@@ -259,6 +259,7 @@ const TRAINER_NAV: NavSection[] = [
       { name: 'لوحة المدرب', path: '/', icon: UserCog },
       { name: 'متدربيّ', path: '/org-members', icon: UsersRound },
       { name: 'سلسلة القبول', path: '/acceptance-chain', icon: CheckSquare },
+      { name: 'النداءات والإشعارات', path: '/notifications', icon: BellRing },
     ],
   },
   {
@@ -276,6 +277,7 @@ const TRAINEE_NAV: NavSection[] = [
     items: [
       { name: 'لوحتي', path: '/', icon: Route },
       { name: 'السجل السريري', path: '/logbook', icon: BookOpen },
+      { name: 'النداءات والإشعارات', path: '/notifications', icon: BellRing },
     ],
   },
   {

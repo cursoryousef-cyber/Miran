@@ -202,6 +202,27 @@ describe('Clinical logbook — approval, rejection and competency scope', () => 
     const res = await http.get('/logbook/competencies').query({ traineeId: traineeC.profile.id }).set(auth(trainerAToken));
     expect(res.status).toBe(403);
   });
+
+  it('POST /logbook/entries with empty procedureId handles gracefully without 400 DB error', async () => {
+    const traineeToken = await login('scope_a@miran.test');
+    const res = await http.post('/logbook/entries').set(auth(traineeToken)).send({
+      diagnosis: 'اختبار حالة سريرية',
+      procedureId: '',
+      participationLevel: 'performed',
+      complexity: 'medium',
+    });
+    expect([200, 201]).toContain(res.status);
+    expect(res.body.entry.diagnosis).toBe('اختبار حالة سريرية');
+    expect(res.body.entry.procedureId).toBeNull();
+  });
+
+  it('POST /logbook/entries rejects missing diagnosis with 400 Bad Request', async () => {
+    const traineeToken = await login('scope_a@miran.test');
+    const res = await http.post('/logbook/entries').set(auth(traineeToken)).send({
+      diagnosis: '   ',
+    });
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('Unauthorized access', () => {

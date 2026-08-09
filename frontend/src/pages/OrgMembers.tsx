@@ -1,4 +1,4 @@
-import { UsersRound, CheckCircle2, UserCog, GraduationCap, AlertTriangle, Edit, ShieldAlert } from 'lucide-react';
+import { UsersRound, CheckCircle2, UserCog, GraduationCap, AlertTriangle, Edit, ShieldAlert, KeyRound } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Badge, CardGrid, DataPageShell, EmptyState, EntityCard, Surface, TableCard, ViewToggle } from '../components/ui';
 import { colour, font, radius, space } from '../components/ui/tokens';
@@ -88,6 +88,7 @@ export const OrgMembersPage: React.FC = () => {
   });
 
   const [editMember, setEditMember] = useState<OrgMember | null>(null);
+  const [permissionsMember, setPermissionsMember] = useState<OrgMember | null>(null);
 
   const handleDeactivate = async (id: string) => {
     if (!window.confirm('هل تريد تعطيل هذا الحساب؟')) return;
@@ -222,6 +223,7 @@ export const OrgMembersPage: React.FC = () => {
                 ]}
                 actions={[
                   { label: 'تعديل', icon: Edit, tone: 'warning', onClick: () => setEditMember(member) },
+                  { label: 'إدارة الصلاحيات', icon: KeyRound, tone: 'primary', onClick: () => setPermissionsMember(member) },
                   {
                     label: member.isActive ? 'تعطيل' : 'تفعيل',
                     icon: member.isActive ? ShieldAlert : CheckCircle2,
@@ -285,6 +287,15 @@ export const OrgMembersPage: React.FC = () => {
                       <Button size="small" variant="outlined" onClick={() => setEditMember(member)} sx={{ borderColor: colour.warning, color: colour.warning, fontWeight: 700 }}>
                         تعديل
                       </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<KeyRound size={14} />}
+                        onClick={() => setPermissionsMember(member)}
+                        sx={{ borderColor: colour.primary, color: colour.primary, fontWeight: 700 }}
+                      >
+                        إدارة الصلاحيات
+                      </Button>
                       {member.isActive ? (
                         <Button size="small" variant="outlined" onClick={() => handleDeactivate(member.id)} sx={{ borderColor: colour.danger, color: colour.danger, fontWeight: 700 }}>
                           تعطيل
@@ -322,7 +333,174 @@ export const OrgMembersPage: React.FC = () => {
           onSuccess={() => { setEditMember(null); setSuccessMsg('تم تعديل بيانات العضو بنجاح'); loadData(); }}
         />
       )}
+
+      {/* Permissions Modal */}
+      {permissionsMember && (
+        <MemberPermissionsModal
+          member={permissionsMember}
+          onClose={() => setPermissionsMember(null)}
+        />
+      )}
     </DataPageShell>
+  );
+};
+
+// ── Member Permissions Modal ───────────────────────────────────────────────────
+/**
+ * Reads and writes GET/PATCH /org-members/:id/permissions. Every value shown —
+ * including which of role / grant / deny a permission comes from — is computed
+ * by the backend with the same rule that mints tokens, so this screen reports
+ * authorisation rather than re-deriving it. Each toggle re-fetches, so the
+ * effective set on screen is always the server's answer.
+ */
+interface MemberPermissionsModalProps {
+  member: OrgMember;
+  onClose: () => void;
+}
+
+interface PermissionRow {
+  code: string;
+  nameAr: string;
+  nameEn: string;
+  module: string;
+  inherited: boolean;
+  granted: boolean;
+  denied: boolean;
+  effective: boolean;
+  source: 'role' | 'user_grant' | 'user_deny' | 'none';
+}
+
+const SOURCE_LABEL: Record<PermissionRow['source'], { label: string; tone: 'success' | 'info' | 'danger' | 'neutral' }> = {
+  role: { label: 'موروثة من الدور', tone: 'success' },
+  user_grant: { label: 'منح خاص', tone: 'info' },
+  user_deny: { label: 'مسحوبة', tone: 'danger' },
+  none: { label: 'غير ممنوحة', tone: 'neutral' },
+};
+
+const MemberPermissionsModal: React.FC<MemberPermissionsModalProps> = ({ member, onClose }) => {
+  const [data, setData] = useState<{ member: any; permissions: PermissionRow[]; effectiveCount: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [savingCode, setSavingCode] = useState<string | null>(null);
+  const [onlyEffective, setOnlyEffective] = useState(false);
+
+  const load = async () => {
+    try {
+      const res = await apiClient.get(`/org-members/${member.id}/permissions`);
+      setData(res.data?.data ?? null);
+      setError(null);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'تعذّر تحميل الصلاحيات');
+    }
+  };
+
+  useEffect(() => { load(); }, [member.id]);
+
+  const setMode = async (permissionCode: string, mode: 'grant' | 'deny' | 'inherit') => {
+    setSavingCode(permissionCode);
+    try {
+      await apiClient.patch(`/org-members/${member.id}/permissions`, { permissionCode, mode });
+      await load();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'تعذّر حفظ التغيير');
+    } finally {
+      setSavingCode(null);
+    }
+  };
+
+  const rows = (data?.permissions ?? []).filter((p) => (onlyEffective ? p.effective : true));
+  const grouped = rows.reduce<Record<string, PermissionRow[]>>((acc, p) => {
+    (acc[p.module] ||= []).push(p);
+    return acc;
+  }, {});
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)',
+      display: 'grid', placeItems: 'center', zIndex: 1300, padding: space.lg,
+    }}>
+      <div style={{
+        background: '#FFFFFF', borderRadius: 14, width: 'min(920px, 100%)',
+        maxHeight: '88vh', display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ padding: `${space.lg}px ${space.xl}px`, borderBottom: `1px solid ${colour.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+            <KeyRound size={18} color={colour.primary} />
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#0F172A' }}>
+              إدارة صلاحيات — {data?.member?.nameAr || member.nameAr || member.email}
+            </h2>
+          </div>
+          <div style={{ marginTop: space.sm, display: 'flex', gap: space.sm, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: font.caption, color: colour.muted }}>{data?.member?.email}</span>
+            {(data?.member?.roles ?? []).map((r: any) => (
+              <Badge key={r.code} label={`${ROLE_LABELS[r.code] || r.nameAr} · ${r.code}`} tone="info" />
+            ))}
+            <Badge label={`الصلاحيات الفعلية: ${data?.effectiveCount ?? 0}`} tone="success" />
+          </div>
+          <label style={{ marginTop: space.md, display: 'flex', gap: 6, alignItems: 'center', fontSize: font.caption, color: colour.muted }}>
+            <input type="checkbox" checked={onlyEffective} onChange={(e) => setOnlyEffective(e.target.checked)} />
+            عرض الصلاحيات الفعلية فقط
+          </label>
+        </div>
+
+        <div style={{ padding: `${space.md}px ${space.xl}px`, overflowY: 'auto', flex: 1 }}>
+          {error && (
+            <div style={{ marginBottom: space.md, color: colour.danger, fontSize: font.body, fontWeight: 700 }}>{error}</div>
+          )}
+          {!data ? (
+            <div style={{ color: colour.muted, fontSize: font.body }}>جارٍ التحميل…</div>
+          ) : (
+            Object.entries(grouped).map(([module, perms]) => (
+              <div key={module} style={{ marginBottom: space.lg }}>
+                <div style={{ fontSize: font.caption, fontWeight: 700, color: colour.muted, marginBottom: space.sm }}>
+                  {module}
+                </div>
+                {perms.map((p) => (
+                  <div key={p.code} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: space.md, padding: `${space.sm}px 0`, borderBottom: `1px solid ${colour.border}`,
+                  }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, color: colour.text, fontSize: font.body }}>{p.nameAr}</div>
+                      <div style={{ fontSize: font.caption, color: colour.muted, fontFamily: 'monospace' }}>{p.code}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexShrink: 0 }}>
+                      <Badge label={SOURCE_LABEL[p.source].label} tone={SOURCE_LABEL[p.source].tone} />
+                      {p.inherited ? (
+                        p.denied ? (
+                          <Button size="small" disabled={savingCode === p.code} onClick={() => setMode(p.code, 'inherit')}
+                            sx={{ color: colour.success, fontWeight: 700 }}>
+                            استعادة
+                          </Button>
+                        ) : (
+                          <Button size="small" disabled={savingCode === p.code} onClick={() => setMode(p.code, 'deny')}
+                            sx={{ color: colour.danger, fontWeight: 700 }}>
+                            سحب
+                          </Button>
+                        )
+                      ) : p.granted ? (
+                        <Button size="small" disabled={savingCode === p.code} onClick={() => setMode(p.code, 'inherit')}
+                          sx={{ color: colour.danger, fontWeight: 700 }}>
+                          إلغاء المنح
+                        </Button>
+                      ) : (
+                        <Button size="small" disabled={savingCode === p.code} onClick={() => setMode(p.code, 'grant')}
+                          sx={{ color: colour.primary, fontWeight: 700 }}>
+                          منح
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div style={{ padding: `${space.md}px ${space.xl}px`, borderTop: `1px solid ${colour.border}`, display: 'flex', justifyContent: 'flex-end' }}>
+          <Button onClick={onClose} sx={{ color: colour.muted, fontWeight: 700 }}>إغلاق</Button>
+        </div>
+      </div>
+    </div>
   );
 };
 

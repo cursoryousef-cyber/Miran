@@ -81,7 +81,7 @@ export class TrainerQualificationService {
     const trainers = await this.prisma.trainerProfile.findMany({
       where: { organizationId, isActive: true },
       include: {
-        person: { select: { nameAr: true, nameEn: true, phone: true, email: true } },
+        person: { select: { nameAr: true, nameEn: true, phone: true, email: true, nationalId: true } },
         department: { select: { id: true, nameAr: true, code: true } },
         qualifiedPrograms: {
           where: { isActive: true },
@@ -136,6 +136,7 @@ export class TrainerQualificationService {
 
       return {
         id: t.id,
+        nationalId: t.person.nationalId,
         nameAr: t.person.nameAr,
         nameEn: t.person.nameEn,
         titleAr: t.titleAr,

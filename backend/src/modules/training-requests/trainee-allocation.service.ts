@@ -544,6 +544,40 @@ export class TraineeAllocationService {
       data: { organizationId: toHospitalId },
     });
 
+    // The account's role/membership must follow the profile to the hospital
+    // it is actually allocated to. Left at the previous organisation (the
+    // cluster, on first allocation — promoteToTrainee grants the trainee role
+    // at request.targetOrgId, the cluster, since the hospital isn't known
+    // until this call), the trainee's active session would resolve scope
+    // against the cluster instead of their own hospital.
+    const previousOrgId = profile.organizationId;
+    const traineeRole = await tx.role.findFirst({ where: { code: 'trainee' } });
+    const accounts = await tx.userAccount.findMany({
+      where: { personId: profile.personId },
+      select: { id: true },
+    });
+    for (const account of accounts) {
+      if (traineeRole) {
+        await tx.userRole.deleteMany({
+          where: { userAccountId: account.id, roleId: traineeRole.id, organizationId: previousOrgId },
+        });
+        await tx.userRole.upsert({
+          where: { userAccountId_roleId_organizationId: { userAccountId: account.id, roleId: traineeRole.id, organizationId: toHospitalId } },
+          create: { userAccountId: account.id, roleId: traineeRole.id, organizationId: toHospitalId },
+          update: {},
+        });
+      }
+      await tx.userOrganization.updateMany({
+        where: { userAccountId: account.id, organizationId: previousOrgId },
+        data: { isActive: false, isPrimary: false },
+      });
+      await tx.userOrganization.upsert({
+        where: { userAccountId_organizationId: { userAccountId: account.id, organizationId: toHospitalId } },
+        create: { userAccountId: account.id, organizationId: toHospitalId, isPrimary: true, isActive: true },
+        update: { isPrimary: true, isActive: true },
+      });
+    }
+
     const activeRotations = await tx.rotation.findMany({
       where: { traineeProfileId, status: 'active' },
       select: { id: true, departmentId: true, trainerProfileId: true },

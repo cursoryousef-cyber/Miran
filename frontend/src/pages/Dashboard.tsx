@@ -24,6 +24,8 @@ export const Dashboard: React.FC = () => {
   switch (roleIdentity(primaryRole).key) {
     case 'platform': return <PlatformDashboard />;
     case 'cluster': return <ClusterDashboard />;
+    case 'hospitalTraining':
+    case 'hospitalAdmin':
     case 'hospital': return <HospitalDashboard />;
     case 'supervisor': return <SupervisorDashboard />;
     case 'university': return <UniversityDashboard />;

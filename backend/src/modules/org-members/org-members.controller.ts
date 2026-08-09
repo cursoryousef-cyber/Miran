@@ -77,7 +77,7 @@ export class OrgMembersController {
 
   // ─── إضافة عضو جديد ──────────────────────────────────────────────────────
   @Post()
-  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'university_administrator')
+  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'hospital_training_admin', 'university_administrator')
   @ApiOperation({ summary: 'إضافة عضو جديد للجهة' })
   async create(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
     if (dto.roleCode === 'trainee' || (Array.isArray(dto.roleCodes) && dto.roleCodes.includes('trainee'))) {
@@ -116,9 +116,37 @@ export class OrgMembersController {
       ) {
         throw new BadRequestException('المستشفى المحدد لا يتبع جهتك');
       }
+    } else if (scopeRule.expectedOrgTypeCode && targetOrg.organizationType?.code !== scopeRule.expectedOrgTypeCode) {
+      // The hospital branch above already refuses a hospital role pointed at a
+      // non-hospital organisation; this is the same rule for the
+      // university/cluster roles, which previously accepted any organisation
+      // at all — a university_administrator could be created against a
+      // hospital, or a training_director against a university.
+      throw new BadRequestException(
+        `الدور "${dto.roleCode}" يتطلب جهة من نوع "${scopeRule.expectedOrgTypeCode}" — الجهة المختارة من نوع آخر`,
+      );
     }
 
     const memberOrgId = targetOrg.id;
+
+    if (dto.roleCode === 'trainer' && dto.nationalId) {
+      const existingPerson = await this.prisma.person.findUnique({
+        where: { nationalId: dto.nationalId },
+        select: { id: true },
+      });
+      if (existingPerson) {
+        const existingTrainer = await this.prisma.trainerProfile.findFirst({
+          where: {
+            personId: existingPerson.id,
+            organizationId: memberOrgId,
+            isActive: true,
+          },
+        });
+        if (existingTrainer) {
+          throw new BadRequestException('الرقم الوظيفي (رقم الهوية/الإقامة) مُدخل مسبقاً لمدرب آخر في هذا المستشفى');
+        }
+      }
+    }
 
     const passwordHash = await bcrypt.hash(dto.password || 'Miran@Admin2024!', 10);
 
@@ -209,9 +237,18 @@ export class OrgMembersController {
 
   // ─── تعديل عضو ───────────────────────────────────────────────────────────
   @Patch(':id')
-  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'university_administrator')
+  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'hospital_training_admin', 'university_administrator')
   @ApiOperation({ summary: 'تعديل بيانات عضو' })
   async update(@Param('id') accountId: string, @CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
+    // The account must be a member of the caller's own organization — the same
+    // boundary deactivate/activate already enforce via this compound key —
+    // otherwise a caller could edit or grant a role to a member of another
+    // organization purely by knowing their account id.
+    const membership = await this.prisma.userOrganization.findUnique({
+      where: { userAccountId_organizationId: { userAccountId: accountId, organizationId: user.organizationId } },
+    });
+    if (!membership) return { message: 'هذا الحساب ليس عضواً في جهتك' };
+
     const account = await this.prisma.userAccount.findUnique({
       where: { id: accountId },
       include: { person: true },
@@ -243,9 +280,190 @@ export class OrgMembersController {
     return { success: true, message: 'تم تعديل البيانات بنجاح' };
   }
 
+  // ─── صلاحيات عضو ─────────────────────────────────────────────────────────
+  /**
+   * The three layers that make up what a member may actually do, kept separate
+   * so the caller can see *why* a permission is or is not in force:
+   *
+   *   role   — inherited from the member's role(s) via RolePermission
+   *   grant  — UserPermission(granted: true), an addition the role lacks
+   *   deny   — UserPermission(granted: false), a withdrawal of an inherited one
+   *
+   * `effective` is computed with exactly the rule AuthService.getRolesAndPermissions
+   * applies when it mints a token, so this screen can never disagree with what
+   * authorisation actually does.
+   */
+  @Get(':id/permissions')
+  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_training_admin', 'university_administrator')
+  @ApiOperation({ summary: 'صلاحيات العضو — الموروثة والإضافية والمسحوبة والفعلية' })
+  async getMemberPermissions(@Param('id') accountId: string, @CurrentUser() user: IAuthenticatedUser) {
+    const account = await this.requireMemberOfMyOrg(accountId, user);
+
+    const [userRoles, assignments, overrides, catalogue] = await Promise.all([
+      this.prisma.userRole.findMany({
+        where: { userAccountId: accountId, organizationId: user.organizationId },
+        include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
+      }),
+      this.prisma.organizationAssignment.findMany({
+        where: { userAccountId: accountId, organizationId: user.organizationId, isActive: true, roleId: { not: null } },
+        include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
+      }),
+      this.prisma.userPermission.findMany({
+        where: { userAccountId: accountId, organizationId: user.organizationId },
+        include: { permission: true },
+      }),
+      this.prisma.permission.findMany({ orderBy: [{ module: 'asc' }, { code: 'asc' }] }),
+    ]);
+
+    const roles: Array<{ code: string; nameAr: string }> = [];
+    const inherited = new Set<string>();
+    for (const source of [...userRoles, ...assignments]) {
+      if (!source.role) continue;
+      roles.push({ code: source.role.code, nameAr: source.role.nameAr });
+      for (const rp of source.role.rolePermissions) inherited.add(rp.permission.code);
+    }
+
+    const grants = new Set(overrides.filter((o) => o.granted).map((o) => o.permission.code));
+    const denies = new Set(overrides.filter((o) => !o.granted).map((o) => o.permission.code));
+
+    // Same order of operations as the token resolver: role ∪ grants, minus denies.
+    const effective = new Set([...inherited, ...grants]);
+    for (const code of denies) effective.delete(code);
+
+    return {
+      data: {
+        member: {
+          id: account.id,
+          email: account.email,
+          isActive: account.isActive,
+          nameAr: account.person?.nameAr,
+          organizationId: user.organizationId,
+          roles,
+        },
+        permissions: catalogue.map((p) => ({
+          code: p.code,
+          nameAr: p.nameAr,
+          nameEn: p.nameEn,
+          module: p.module,
+          inherited: inherited.has(p.code),
+          granted: grants.has(p.code),
+          denied: denies.has(p.code),
+          effective: effective.has(p.code),
+          // What the UI labels the row with, resolved server-side so the two
+          // never drift: an override always outranks the role.
+          source: denies.has(p.code)
+            ? 'user_deny'
+            : grants.has(p.code)
+              ? 'user_grant'
+              : inherited.has(p.code)
+                ? 'role'
+                : 'none',
+        })),
+        effectiveCount: effective.size,
+      },
+    };
+  }
+
+  /**
+   * Sets one permission override for one member. `mode` mirrors the three states
+   * the screen offers: 'grant' and 'deny' write a UserPermission row, 'inherit'
+   * removes it so the role decides again — there is no fourth state, and no way
+   * to edit RolePermission from here, which keeps role definitions the single
+   * source of the baseline.
+   */
+  @Patch(':id/permissions')
+  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_training_admin', 'university_administrator')
+  @ApiOperation({ summary: 'منح أو سحب صلاحية لعضو (لا يعدّل صلاحيات الدور)' })
+  async setMemberPermission(
+    @Param('id') accountId: string,
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body() dto: { permissionCode: string; mode: 'grant' | 'deny' | 'inherit' },
+  ) {
+    await this.requireMemberOfMyOrg(accountId, user);
+
+    if (!dto?.permissionCode?.trim()) {
+      throw new BadRequestException('رمز الصلاحية مطلوب');
+    }
+    if (!['grant', 'deny', 'inherit'].includes(dto.mode)) {
+      throw new BadRequestException('القيمة المسموحة لـ mode هي grant أو deny أو inherit');
+    }
+
+    // Only codes already in the catalogue — this endpoint never invents a
+    // permission, so the vocabulary stays exactly what RolePermission uses.
+    const permission = await this.prisma.permission.findUnique({ where: { code: dto.permissionCode.trim() } });
+    if (!permission) throw new BadRequestException('رمز الصلاحية غير موجود في جدول الصلاحيات');
+
+    const key = {
+      userAccountId_permissionId_organizationId: {
+        userAccountId: accountId,
+        permissionId: permission.id,
+        organizationId: user.organizationId,
+      },
+    };
+
+    const previous = await this.prisma.userPermission.findUnique({ where: key });
+
+    if (dto.mode === 'inherit') {
+      if (previous) await this.prisma.userPermission.delete({ where: key });
+    } else {
+      const granted = dto.mode === 'grant';
+      await this.prisma.userPermission.upsert({
+        where: key,
+        create: {
+          userAccountId: accountId,
+          permissionId: permission.id,
+          organizationId: user.organizationId,
+          granted,
+          grantedById: user.accountId,
+        },
+        update: { granted, grantedById: user.accountId },
+      });
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: user.organizationId,
+        actorId: user.accountId,
+        action: 'org_member.permission_override',
+        entityType: 'UserPermission',
+        entityId: accountId,
+        oldValues: previous ? { permission: permission.code, granted: previous.granted } : undefined,
+        newValues: { permission: permission.code, mode: dto.mode },
+      },
+    });
+
+    return {
+      success: true,
+      message:
+        dto.mode === 'inherit'
+          ? 'تمت إعادة الصلاحية إلى ما يقرره الدور'
+          : dto.mode === 'grant'
+            ? 'تم منح الصلاحية للعضو'
+            : 'تم سحب الصلاحية من العضو',
+    };
+  }
+
+  /**
+   * Every member-scoped route resolves the target through the caller's own
+   * organisation, so knowing an account id from another org is never enough.
+   */
+  private async requireMemberOfMyOrg(accountId: string, user: IAuthenticatedUser) {
+    const membership = await this.prisma.userOrganization.findUnique({
+      where: { userAccountId_organizationId: { userAccountId: accountId, organizationId: user.organizationId } },
+    });
+    if (!membership) throw new BadRequestException('هذا الحساب ليس عضواً في جهتك');
+
+    const account = await this.prisma.userAccount.findUnique({
+      where: { id: accountId },
+      include: { person: true },
+    });
+    if (!account) throw new BadRequestException('الحساب غير موجود');
+    return account;
+  }
+
   // ─── تعطيل عضو ───────────────────────────────────────────────────────────
   @Delete(':id')
-  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'hospital_administrator')
+  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'hospital_administrator', 'hospital_training_admin')
   @ApiOperation({ summary: 'تعطيل حساب عضو' })
   async deactivate(@Param('id') accountId: string, @CurrentUser() user: IAuthenticatedUser) {
     await this.prisma.userOrganization.update({
@@ -258,7 +476,7 @@ export class OrgMembersController {
 
   // ─── تفعيل عضو ───────────────────────────────────────────────────────────
   @Patch(':id/activate')
-  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'hospital_administrator')
+  @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'hospital_administrator', 'hospital_training_admin')
   @ApiOperation({ summary: 'تفعيل حساب عضو' })
   async activate(@Param('id') accountId: string, @CurrentUser() user: IAuthenticatedUser) {
     await this.prisma.userOrganization.update({

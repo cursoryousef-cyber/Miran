@@ -1,16 +1,16 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
-import { CurrentUser, RequireRoles } from '../../common/decorators';
+import { CurrentUser } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
-  CAPABILITIES, CapabilityGuard, RequireCapability,
+  CAPABILITIES, CapabilityGuard, RequireCapability, ScopeGuard, ScopedResource,
 } from '../../common/authz';
 
 @ApiTags('Rotations & Departments (الروتيشنات والأقسام السريرية)')
 @Controller('rotations')
-@UseGuards(JwtAuthGuard, RolesGuard, CapabilityGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CapabilityGuard, ScopeGuard)
 @ApiBearerAuth('JWT-auth')
 export class RotationsController {
   constructor(private prisma: PrismaService) {}
@@ -37,6 +37,40 @@ export class RotationsController {
     CAPABILITIES.TRAINEE_VIEW_ASSIGNED,
   )
   async findAll(@CurrentUser() user: IAuthenticatedUser) {
+    if (user.roles.includes('hospital_administrator')) {
+      throw new ForbiddenException('مدير المستشفى لا يملك صلاحية على الروتيشنات التدريبية');
+    }
+
+    if (user.roles.includes('trainee')) {
+      const traineeProfile = await this.prisma.traineeProfile.findFirst({
+        where: { person: { userAccounts: { some: { id: user.accountId } } } },
+      });
+      if (!traineeProfile) return { data: [] };
+      const rotations = await this.prisma.rotation.findMany({
+        where: { traineeProfileId: traineeProfile.id },
+        include: { department: true, trainerProfile: { include: { person: true } } },
+        orderBy: { startDate: 'asc' },
+      });
+      return { data: rotations };
+    }
+
+    if (user.roles.includes('trainer')) {
+      const trainer = await this.prisma.trainerProfile.findFirst({
+        where: { person: { userAccounts: { some: { id: user.accountId } } } },
+      });
+      if (!trainer) return { data: [] };
+      const rotations = await this.prisma.rotation.findMany({
+        where: { trainerProfileId: trainer.id, status: 'active' },
+        include: {
+          department: true,
+          traineeProfile: { include: { person: true } },
+          trainerProfile: { include: { person: true } },
+        },
+        orderBy: { startDate: 'asc' },
+      });
+      return { data: rotations };
+    }
+
     const rotations = await this.prisma.rotation.findMany({
       where: { organizationId: user.organizationId },
       include: {
@@ -49,8 +83,17 @@ export class RotationsController {
     return { data: rotations };
   }
 
+  // Rotation writes are hospital *training* management, so they are gated on the
+  // capability that means exactly that, not on a role list. The previous list
+  // admitted `hospital_administrator` — the role that holds no training
+  // capability at all by construction — while excluding
+  // `hospital_training_admin`, the role that owns hospital training. See
+  // capabilities.ts for the two role definitions this contradicted.
   @Post()
-  @RequireRoles('org_manager', 'hospital_administrator', 'training_supervisor', 'platform_owner')
+  @RequireCapability(
+    CAPABILITIES.ALLOCATION_HOSPITAL_ASSIGN,
+    CAPABILITIES.ALLOCATION_HOSPITAL_REASSIGN,
+  )
   @ApiOperation({ summary: 'إنشاء روتيشن جديد وتعيين المتدرب والمدرب والقسم' })
   async createRotation(
     @CurrentUser() user: IAuthenticatedUser,
@@ -83,7 +126,11 @@ export class RotationsController {
   }
 
   @Patch(':id')
-  @RequireRoles('org_manager', 'hospital_administrator', 'training_supervisor', 'platform_owner')
+  @RequireCapability(
+    CAPABILITIES.ALLOCATION_HOSPITAL_ASSIGN,
+    CAPABILITIES.ALLOCATION_HOSPITAL_REASSIGN,
+  )
+  @ScopedResource('rotation', 'id')
   @ApiOperation({ summary: 'تعديل بيانات روتيشن (القسم / المدرب / التواريخ / الحالة)' })
   async updateRotation(
     @Param('id') id: string,
@@ -114,7 +161,11 @@ export class RotationsController {
   }
 
   @Delete(':id')
-  @RequireRoles('org_manager', 'hospital_administrator', 'training_supervisor', 'platform_owner')
+  @RequireCapability(
+    CAPABILITIES.ALLOCATION_HOSPITAL_ASSIGN,
+    CAPABILITIES.ALLOCATION_HOSPITAL_REASSIGN,
+  )
+  @ScopedResource('rotation', 'id')
   @ApiOperation({ summary: 'حذف روتيشن' })
   async deleteRotation(@Param('id') id: string) {
     await this.prisma.rotation.delete({ where: { id } });
@@ -141,26 +192,52 @@ export class RotationsController {
   }
 
   @Post('departments')
-  @RequireRoles('org_manager', 'hospital_administrator', 'platform_owner')
+  @RequireCapability(CAPABILITIES.DEPARTMENT_MANAGE, CAPABILITIES.CAPACITY_MANAGE)
   @ApiOperation({ summary: 'إنشاء قسم سريري جديد' })
   async createDepartment(
     @CurrentUser() user: IAuthenticatedUser,
-    @Body() dto: { nameAr: string; nameEn?: string; code?: string; capacity?: number },
+    @Body()
+    dto: {
+      nameAr: string;
+      nameEn?: string;
+      code?: string;
+      capacity?: number;
+      startDate?: string;
+      endDate?: string;
+      trainingPeriod?: string;
+    },
   ) {
+    if (!dto.nameAr || !dto.nameAr.trim()) {
+      throw new BadRequestException('اسم القسم مطلوب');
+    }
+    if (dto.capacity !== undefined && dto.capacity < 1) {
+      throw new BadRequestException('عدد المقاعد يجب أن يكون 1 على الأقل');
+    }
+    if (dto.startDate && dto.endDate && dto.startDate > dto.endDate) {
+      throw new BadRequestException('تاريخ البداية يجب أن يكون قبل أو يساوي تاريخ النهاية');
+    }
+
+    const settings: Record<string, any> = {};
+    if (dto.startDate) settings.startDate = dto.startDate;
+    if (dto.endDate) settings.endDate = dto.endDate;
+    if (dto.trainingPeriod) settings.trainingPeriod = dto.trainingPeriod;
+
     const dept = await this.prisma.department.create({
       data: {
         organizationId: user.organizationId,
-        nameAr: dto.nameAr,
+        nameAr: dto.nameAr.trim(),
         nameEn: dto.nameEn,
-        code: dto.code || dto.nameAr.toUpperCase().slice(0, 10),
-        capacity: dto.capacity || 20,
+        code: dto.code || dto.nameAr.trim().toUpperCase().slice(0, 10),
+        capacity: dto.capacity ?? 10,
+        settings,
       },
     });
     return { success: true, data: dept };
   }
 
   @Patch('departments/:id')
-  @RequireRoles('org_manager', 'hospital_administrator', 'platform_owner')
+  @RequireCapability(CAPABILITIES.DEPARTMENT_MANAGE)
+  @ScopedResource('department', 'id')
   @ApiOperation({ summary: 'تحديث بيانات القسم والطاقة الاستيعابية' })
   async updateDepartment(
     @Param('id') id: string,
@@ -174,7 +251,8 @@ export class RotationsController {
   }
 
   @Delete('departments/:id')
-  @RequireRoles('org_manager', 'hospital_administrator', 'platform_owner')
+  @RequireCapability(CAPABILITIES.DEPARTMENT_MANAGE)
+  @ScopedResource('department', 'id')
   @ApiOperation({ summary: 'حذف قسم سريري' })
   async deleteDepartment(@Param('id') id: string) {
     await this.prisma.department.delete({ where: { id } });

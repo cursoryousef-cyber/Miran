@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../api/client';
-import { CircularProgress, Collapse, Dialog, DialogContent, DialogTitle, MenuItem, TextField } from '@mui/material';
+import {
+  Alert, Box, Button, CircularProgress, Collapse, Dialog, DialogActions,
+  DialogContent, DialogTitle, MenuItem, TextField,
+} from '@mui/material';
 import { CardGrid, DataPageShell, EmptyState, EntityCard } from '../../components/ui';
 import { colour, font, radius, space } from '../../components/ui/tokens';
 import {
@@ -23,10 +26,20 @@ const LEAVE_LABELS: Record<string, string> = {
 };
 
 export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ onNavigate }) => {
+  const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
   const [profile, setProfile] = useState<any | null>(null);
+
+  const [openAddTrainerDialog, setOpenAddTrainerDialog] = useState(false);
+  const [addTrainerForm, setAddTrainerForm] = useState({
+    nationalId: '',
+    nameAr: '',
+    titleAr: '',
+    departmentId: '',
+  });
+  const [trainerFormError, setTrainerFormError] = useState<string | null>(null);
 
   const { data: trainers, isLoading } = useQuery({
     queryKey: ['trainer-cards'],
@@ -36,20 +49,95 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
     },
   });
 
-  const departments = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const t of trainers ?? []) if (t.department) map.set(t.department.id, t.department.nameAr);
-    return [...map.entries()];
-  }, [trainers]);
+  const { data: deptResponse } = useQuery({
+    queryKey: ['rotations-departments'],
+    queryFn: async () => {
+      const res = await apiClient.get('/rotations/departments').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const allDepartments = useMemo(() => {
+    const map = new Map<string, { id: string; nameAr: string }>();
+    for (const d of deptResponse ?? []) {
+      if (d.id && d.nameAr) map.set(d.id, { id: d.id, nameAr: d.nameAr });
+    }
+    for (const t of trainers ?? []) {
+      if (t.department?.id && t.department?.nameAr) {
+        map.set(t.department.id, { id: t.department.id, nameAr: t.department.nameAr });
+      }
+    }
+    return [...map.values()];
+  }, [deptResponse, trainers]);
 
   const visible = useMemo(() => {
     const needle = search.trim();
     return (trainers ?? []).filter((t: any) => {
       const matchesDept = deptFilter === 'all' || t.department?.id === deptFilter;
-      const matchesName = !needle || `${t.nameAr ?? ''} ${t.nameEn ?? ''}`.includes(needle);
+      const matchesName = !needle || `${t.nameAr ?? ''} ${t.nameEn ?? ''} ${t.nationalId ?? ''}`.includes(needle);
       return matchesDept && matchesName;
     });
   }, [trainers, search, deptFilter]);
+
+  const createTrainerMutation = useMutation({
+    mutationFn: async (payload: { nationalId: string; nameAr: string; titleAr: string; departmentId: string; roleCode: string; email: string }) => {
+      const res = await apiClient.post('/org-members', payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trainer-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['org-members'] });
+      setOpenAddTrainerDialog(false);
+      setAddTrainerForm({ nationalId: '', nameAr: '', titleAr: '', departmentId: '' });
+      setTrainerFormError(null);
+    },
+    onError: (err: any) => {
+      setTrainerFormError(err?.response?.data?.message || 'حدث خطأ أثناء حفظ بيانات المدرب');
+    },
+  });
+
+  const handleSaveTrainer = () => {
+    setTrainerFormError(null);
+    const nationalId = addTrainerForm.nationalId.trim();
+    const nameAr = addTrainerForm.nameAr.trim();
+    const titleAr = addTrainerForm.titleAr.trim();
+    const departmentId = addTrainerForm.departmentId;
+
+    if (!nationalId) {
+      setTrainerFormError('الرقم الوظيفي مطلوب');
+      return;
+    }
+    if (!nameAr) {
+      setTrainerFormError('اسم المدرب مطلوب');
+      return;
+    }
+    if (!titleAr) {
+      setTrainerFormError('المسمى الوظيفي مطلوب');
+      return;
+    }
+    if (!departmentId) {
+      setTrainerFormError('يرجى اختيار القسم السريري');
+      return;
+    }
+
+    // Check duplicate employee ID locally
+    const duplicate = (trainers ?? []).some(
+      (t: any) => (t.nationalId && t.nationalId === nationalId) || (t.person?.nationalId && t.person?.nationalId === nationalId)
+    );
+    if (duplicate) {
+      setTrainerFormError('الرقم الوظيفي (رقم الهوية/الإقامة) مُدخل مسبقاً لمدرب آخر');
+      return;
+    }
+
+    createTrainerMutation.mutate({
+      nationalId,
+      nameAr,
+      titleAr,
+      departmentId,
+      roleCode: 'trainer',
+      email: `trainer.${nationalId}@miran.sa`,
+    });
+  };
 
   const totalTrainers = (trainers ?? []).length;
   const onLeaveCount = (trainers ?? []).filter((t: any) => t.onLeave).length;
@@ -76,7 +164,7 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
       toolbar={
         <>
           <TextField
-            size="small" placeholder="بحث باسم المدرب..." value={search}
+            size="small" placeholder="بحث باسم المدرب أو الرقم الوظيفي..." value={search}
             onChange={(e) => setSearch(e.target.value)}
             InputProps={{ startAdornment: <Search size={16} style={{ marginLeft: 8, color: colour.muted }} /> }}
             sx={{ minWidth: 240 }}
@@ -86,8 +174,17 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
             onChange={(e) => setDeptFilter(e.target.value)} sx={{ minWidth: 200 }}
           >
             <MenuItem value="all">كل الأقسام</MenuItem>
-            {departments.map(([id, name]) => <MenuItem key={id} value={id}>{name}</MenuItem>)}
+            {allDepartments.map((d: any) => <MenuItem key={d.id} value={d.id}>{d.nameAr}</MenuItem>)}
           </TextField>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<UserPlus size={16} />}
+            onClick={() => setOpenAddTrainerDialog(true)}
+            sx={{ backgroundColor: '#0F766E', '&:hover': { backgroundColor: '#0D655E' }, whiteSpace: 'nowrap' }}
+          >
+            إضافة مدرب جديد
+          </Button>
           <div style={{ marginRight: 'auto', fontSize: font.caption, color: colour.muted, fontWeight: 700 }}>
             {visible.length} مدرب متاح
           </div>
@@ -105,7 +202,7 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
             icon={UserCog}
             tone={t.onLeave ? 'warning' : 'violet'}
             title={t.nameAr}
-            subtitle={`${t.department?.nameAr ?? 'بدون قسم'}${t.titleAr ? ` — ${t.titleAr}` : ''}`}
+            subtitle={`${t.department?.nameAr ?? 'بدون قسم'}${t.titleAr ? ` — ${t.titleAr}` : ''}${t.nationalId ? ` (${t.nationalId})` : ''}`}
             badges={[
               ...(t.onLeave ? [{ label: 'في إجازة', tone: 'warning' as const }] : []),
               ...(t.qualifiedPrograms.length === 0
@@ -153,6 +250,7 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
         <DialogContent dividers>
           {profile && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: space.sm, fontSize: font.body }}>
+              {profile.nationalId && <div><strong>الرقم الوظيفي:</strong> {profile.nationalId}</div>}
               <div><strong>القسم:</strong> {profile.department?.nameAr ?? '—'}</div>
               <div><strong>المسمى:</strong> {profile.titleAr ?? '—'}</div>
               <div><strong>الجوال:</strong> {profile.phone ?? '—'}</div>
@@ -176,6 +274,75 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
             </div>
           )}
         </DialogContent>
+      </Dialog>
+
+      {/* دايالوج إضافة مدرب جديد */}
+      <Dialog open={openAddTrainerDialog} onClose={() => setOpenAddTrainerDialog(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, borderBottom: '1px solid #E2E8F0', pb: 1.5 }}>
+          إضافة مدرب جديد
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2.5 }}>
+          {trainerFormError && <Alert severity="error" sx={{ mb: 2 }}>{trainerFormError}</Alert>}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="الرقم الوظيفي"
+              placeholder="مثال: 1029384756"
+              size="small"
+              fullWidth
+              required
+              value={addTrainerForm.nationalId}
+              onChange={(e) => setAddTrainerForm({ ...addTrainerForm, nationalId: e.target.value })}
+            />
+
+            <TextField
+              label="اسم المدرب"
+              placeholder="مثال: د. محمد العتيبي"
+              size="small"
+              fullWidth
+              required
+              value={addTrainerForm.nameAr}
+              onChange={(e) => setAddTrainerForm({ ...addTrainerForm, nameAr: e.target.value })}
+            />
+
+            <TextField
+              label="المسمى الوظيفي"
+              placeholder="مثال: استشاري طب باطني / مدرب سريري"
+              size="small"
+              fullWidth
+              required
+              value={addTrainerForm.titleAr}
+              onChange={(e) => setAddTrainerForm({ ...addTrainerForm, titleAr: e.target.value })}
+            />
+
+            <TextField
+              select
+              label="القسم السريري"
+              size="small"
+              fullWidth
+              required
+              value={addTrainerForm.departmentId}
+              onChange={(e) => setAddTrainerForm({ ...addTrainerForm, departmentId: e.target.value })}
+            >
+              <MenuItem value="" disabled>-- اختر القسم --</MenuItem>
+              {allDepartments.map((d: any) => (
+                <MenuItem key={d.id} value={d.id}>{d.nameAr}</MenuItem>
+              ))}
+            </TextField>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, borderTop: '1px solid #E2E8F0', pt: 1.5 }}>
+          <Button onClick={() => setOpenAddTrainerDialog(false)} color="inherit">
+            إلغاء
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => handleSaveTrainer()}
+            disabled={createTrainerMutation.isPending}
+            sx={{ backgroundColor: '#0F766E', '&:hover': { backgroundColor: '#0D655E' } }}
+          >
+            {createTrainerMutation.isPending ? <CircularProgress size={20} color="inherit" /> : 'حفظ'}
+          </Button>
+        </DialogActions>
       </Dialog>
     </DataPageShell>
   );

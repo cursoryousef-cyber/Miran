@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards';
@@ -16,7 +17,10 @@ import {
   CAPABILITIES,
   CapabilityGuard,
   RequireCapability,
+  Scope,
+  ScopeContext,
   ScopeGuard,
+  ScopedResource,
 } from '../../common/authz';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -57,10 +61,13 @@ export class TrainersController {
   async workspaceCards(
     @CurrentUser() user: IAuthenticatedUser,
     @Query('organizationId') organizationId?: string,
+    @Scope() scope?: ScopeContext,
   ) {
-    return this.qualificationService.listWorkspaceCards(
-      organizationId || user.organizationId,
-    );
+    const targetOrgId = organizationId || user.organizationId;
+    if (scope && scope.visibleOrgIds !== null && !scope.visibleOrgIds.includes(targetOrgId)) {
+      throw new ForbiddenException('هذه الجهة خارج نطاق صلاحياتك التنظيمية');
+    }
+    return this.qualificationService.listWorkspaceCards(targetOrgId);
   }
 
   @Get('qualified')
@@ -74,9 +81,14 @@ export class TrainersController {
     @Query('programId') programId: string,
     @CurrentUser() user: IAuthenticatedUser,
     @Query('organizationId') organizationId?: string,
+    @Scope() scope?: ScopeContext,
   ) {
+    const targetOrgId = organizationId || user.organizationId;
+    if (scope && scope.visibleOrgIds !== null && !scope.visibleOrgIds.includes(targetOrgId)) {
+      throw new ForbiddenException('هذه الجهة خارج نطاق صلاحياتك التنظيمية');
+    }
     return this.qualificationService.listQualifiedTrainers(
-      organizationId || user.organizationId,
+      targetOrgId,
       programId,
     );
   }
@@ -87,6 +99,7 @@ export class TrainersController {
     CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
     CAPABILITIES.TRAINEE_VIEW_DEPARTMENT,
   )
+  @ScopedResource('trainerProfile', 'id')
   @ApiOperation({ summary: 'برامج المدرب المؤهل لها مع السعة والإشغال' })
   async listQualifications(@Param('id') trainerProfileId: string) {
     return this.qualificationService.listForTrainer(trainerProfileId);
@@ -94,6 +107,7 @@ export class TrainersController {
 
   @Post(':id/qualifications')
   @RequireCapability(CAPABILITIES.TRAINER_MANAGE)
+  @ScopedResource('trainerProfile', 'id')
   @ApiOperation({ summary: 'تأهيل مدرب لبرنامج تدريبي' })
   async addQualification(
     @Param('id') trainerProfileId: string,
@@ -263,6 +277,7 @@ export class TrainersController {
     CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
     CAPABILITIES.TRAINEE_VIEW_DEPARTMENT,
   )
+  @ScopedResource('trainerProfile', 'id')
   @ApiOperation({
     summary: 'اقتراح مدربين بدلاء مؤهلين (مرتبين حسب السعة المتاحة)',
   })
@@ -370,6 +385,6 @@ export class TrainersController {
     @Param('id') id: string,
     @CurrentUser() user: IAuthenticatedUser,
   ) {
-    return this.leaveService.cancelLeave(id, user.accountId);
+    return this.leaveService.cancelLeave(id, user.accountId, user.organizationId);
   }
 }
