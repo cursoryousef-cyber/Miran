@@ -520,9 +520,11 @@ export class TraineesController {
   @Get('incoming')
   @RequireRoles(
     'cluster_administrator',
+    'cluster_manager',
     'training_director',
     'platform_owner',
     'hospital_administrator',
+    'hospital_training_admin',
     'training_supervisor',
   )
   @ApiOperation({ summary: 'قائمة متدربي الامتياز الواردين للتجمع الصحي' })

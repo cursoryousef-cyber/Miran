@@ -196,10 +196,19 @@ export const Organizations: React.FC = () => {
   // Mutations
   const createMutation = useMutation({
     mutationFn: async (payload: any) => {
-      const res = await apiClient.post('/organizations', {
-        ...payload,
-        parentId: payload.parentId || null,
-      });
+      const cleanBody: any = {
+        code: payload.code.trim().toUpperCase(),
+        nameAr: payload.nameAr.trim(),
+        nameEn: payload.nameEn?.trim() || payload.nameAr.trim(),
+        organizationTypeId: payload.organizationTypeId,
+        cityAr: payload.cityAr || 'عرعر',
+        regionAr: payload.regionAr || 'الحدود الشمالية',
+        status: payload.status || 'active',
+      };
+      if (payload.parentId && payload.parentId.trim() !== '') {
+        cleanBody.parentId = payload.parentId;
+      }
+      const res = await apiClient.post('/organizations', cleanBody);
       return res.data;
     },
     onSuccess: () => {
@@ -212,10 +221,19 @@ export const Organizations: React.FC = () => {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
-      const res = await apiClient.patch(`/organizations/${id}`, {
-        ...payload,
-        parentId: payload.parentId || null,
-      });
+      const cleanBody: any = {
+        nameAr: payload.nameAr.trim(),
+        nameEn: payload.nameEn?.trim() || payload.nameAr.trim(),
+        cityAr: payload.cityAr || 'عرعر',
+        regionAr: payload.regionAr || 'الحدود الشمالية',
+        status: payload.status || 'active',
+      };
+      if (payload.code) cleanBody.code = payload.code.trim().toUpperCase();
+      if (payload.organizationTypeId) cleanBody.organizationTypeId = payload.organizationTypeId;
+      if (payload.parentId && payload.parentId.trim() !== '') {
+        cleanBody.parentId = payload.parentId;
+      }
+      const res = await apiClient.patch(`/organizations/${id}`, cleanBody);
       return res.data;
     },
     onSuccess: () => {

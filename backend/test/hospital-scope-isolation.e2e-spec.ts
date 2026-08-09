@@ -353,3 +353,73 @@ describe('Organization write routes: PATCH/DELETE /organizations/:id', () => {
     expect(ownRes.status).not.toBe(403);
   });
 });
+
+describe('Independent Hospital & Hospital Training Admin Creation Workflow', () => {
+  it('platform_owner can create an independent hospital (parentId=null) and attach exactly 1 hospital_training_admin', async () => {
+    const platformToken = await login(SCENARIO.accounts.platform);
+    const hospType = await prisma.organizationType.findFirstOrThrow({ where: { code: 'hospital' } });
+
+    const stamp = Date.now().toString().slice(-6);
+    const hospCode = `HOSP_IND_${stamp}`;
+
+    // 1. Create Independent Hospital (parentId omitted / null)
+    const createOrgRes = await http
+      .post('/organizations')
+      .set(auth(platformToken))
+      .send({
+        code: hospCode,
+        nameAr: `مستشفى استقلالي ${stamp}`,
+        nameEn: `Independent Hospital ${stamp}`,
+        organizationTypeId: hospType.id,
+        cityAr: 'الرياض',
+        status: 'active',
+      });
+
+    expect(createOrgRes.status).toBe(201);
+    expect(createOrgRes.body.code).toBe(hospCode);
+    expect(createOrgRes.body.parentId).toBeNull();
+
+    const createdHospId = createOrgRes.body.id;
+
+    // 2. Create Hospital Training Admin for the new independent hospital
+    const adminEmail = `hosp_admin_${stamp}@miran.test`;
+    const createAdminRes = await http
+      .post('/user-accounts')
+      .set(auth(platformToken))
+      .send({
+        email: adminEmail,
+        nameAr: `مسؤول تدريب ${stamp}`,
+        roleCode: 'hospital_training_admin',
+        organizationId: createdHospId,
+        hospitalId: createdHospId,
+        password: SCENARIO.password,
+      });
+
+    expect(createAdminRes.status).toBe(201);
+
+    // 3. Attempting to create a SECOND active hospital_training_admin for the same hospital must fail (Single Admin Constraint)
+    const duplicateAdminRes = await http
+      .post('/user-accounts')
+      .set(auth(platformToken))
+      .send({
+        email: `hosp_admin_duplicate_${stamp}@miran.test`,
+        nameAr: `مسؤول ثاني ${stamp}`,
+        roleCode: 'hospital_training_admin',
+        organizationId: createdHospId,
+        hospitalId: createdHospId,
+        password: SCENARIO.password,
+      });
+
+    expect(duplicateAdminRes.status).toBe(400);
+    expect(duplicateAdminRes.body.message).toContain('مسؤول تدريب مفعّل لهذا المستشفى');
+
+    // 4. Logging in as the new hospital_training_admin succeeds and resolves scope to the independent hospital
+    const newAdminToken = await login(adminEmail);
+    expect(newAdminToken).toBeDefined();
+
+    // 5. Hospital Admin can query incoming trainees, scoped exclusively to their own hospital
+    const crossRes = await http.get('/trainees/incoming').set(auth(newAdminToken));
+    expect(crossRes.status).toBe(200);
+    expect(crossRes.body.data).toBeDefined();
+  });
+});

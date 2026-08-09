@@ -29,10 +29,10 @@ export class CreateOrganizationDto {
   @IsNotEmpty({ message: 'اسم الجهة بالعربية مطلوب' })
   nameAr!: string;
 
-  @ApiProperty({ description: 'اسم الجهة بالإنجليزية' })
+  @ApiPropertyOptional({ description: 'اسم الجهة بالإنجليزية' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'اسم الجهة بالإنجليزية مطلوب' })
-  nameEn!: string;
+  nameEn?: string;
 
   @ApiPropertyOptional({ description: 'حالة دورت الحياة', enum: OrgLifecycleStatus })
   @IsOptional()

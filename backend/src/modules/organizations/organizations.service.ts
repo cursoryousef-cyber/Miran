@@ -125,6 +125,7 @@ export class OrganizationsService {
     const org = await this.prisma.organization.create({
       data: {
         ...dto,
+        nameEn: dto.nameEn || dto.nameAr,
         code: dto.code.toUpperCase(),
         createdById: user?.accountId,
       },

@@ -40,7 +40,7 @@ export class OrganizationProvisioningService {
           parentId: orgDto.parentId || null,
           code: orgDto.code.toUpperCase(),
           nameAr: orgDto.nameAr,
-          nameEn: orgDto.nameEn,
+          nameEn: orgDto.nameEn || orgDto.nameAr,
           status: orgDto.status || 'active',
           cityAr: orgDto.cityAr,
           cityEn: orgDto.cityEn,
