@@ -65,10 +65,23 @@ const DEPARTMENT_ROLES = ['department_head'];
 const HOSPITAL_ROLES = [
   'hospital_training_admin',
   'hospital_administrator',
+  'hospitalAdmin',
   'training_supervisor',
   'department_head',
   'trainer',
   'trainee',
+];
+
+const KNOWN_ROLES = [
+  ...PLATFORM_ROLES,
+  ...HOSPITAL_ROLES,
+  'cluster_manager',
+  'cluster_administrator',
+  'training_director',
+  'university_administrator',
+  'academic_supervisor',
+  'academic_affairs',
+  'org_manager',
 ];
 
 @Injectable()
@@ -77,6 +90,11 @@ export class ScopeContextService {
 
   async resolve(user: IAuthenticatedUser): Promise<ScopeContext> {
     const roles = user.roles ?? [];
+    const hasValidRole = roles.some((r) => KNOWN_ROLES.includes(r));
+    if (!hasValidRole) {
+      throw new ForbiddenException('الدور الوظيفي للمستخدم غير معروف أو غير معتمد في المنصة');
+    }
+
     const capabilities = new Set<Capability>(capabilitiesForRoles(roles));
     const isPlatform = roles.some((r) => PLATFORM_ROLES.includes(r));
 

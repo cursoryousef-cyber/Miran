@@ -163,22 +163,44 @@ export class OrganizationsService {
   }
 
   async getTree() {
-    // Get top-level organizations (parentId === null)
+    const orgInclude = {
+      organizationType: true,
+      userRoles: {
+        where: { userAccount: { deletedAt: null } },
+        include: {
+          role: true,
+          userAccount: {
+            select: { id: true, email: true, username: true, isActive: true, person: { select: { nameAr: true, nameEn: true, nationalId: true } } },
+          },
+        },
+      },
+      departments: {
+        where: { isActive: true },
+        select: { id: true, nameAr: true, nameEn: true, capacity: true, code: true },
+      },
+      _count: {
+        select: { traineeProfiles: true, trainerProfiles: true, departments: true },
+      },
+    };
+
     const roots = await this.prisma.organization.findMany({
       where: { parentId: null, deletedAt: null },
       include: {
-        organizationType: true,
+        ...orgInclude,
         children: {
           where: { deletedAt: null },
           include: {
-            organizationType: true,
+            ...orgInclude,
             children: {
               where: { deletedAt: null },
-              include: { organizationType: true },
+              include: {
+                ...orgInclude,
+              },
             },
           },
         },
       },
+      orderBy: { createdAt: 'asc' },
     });
 
     return roots;

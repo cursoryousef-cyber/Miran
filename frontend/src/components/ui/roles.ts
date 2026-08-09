@@ -368,9 +368,9 @@ export function roleIdentity(role?: string | null): RoleIdentity {
     case 'training_director':
       return IDENTITIES.cluster;
     case 'hospital_training_admin':
-      return IDENTITIES.hospitalTraining;
     case 'hospital_administrator':
-      return IDENTITIES.hospitalAdmin;
+    case 'hospitalAdmin':
+      return IDENTITIES.hospitalTraining;
     case 'department_head':
       return IDENTITIES.department;
     case 'training_supervisor':

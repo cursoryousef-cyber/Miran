@@ -5,16 +5,115 @@ import { useAuth } from '../context/AuthContext';
 import { hasPermission } from '../utils/rbac';
 import {
   Building2, Plus, Search, CheckCircle2, AlertCircle, Archive, Clock, RefreshCw, Edit, Trash2, Eye,
-  LayoutGrid, List, BedDouble, Users, Gauge,
+  BedDouble, Users, Gauge, ChevronDown, ChevronRight, Network, Layers, ClipboardList, Shield,
 } from 'lucide-react';
 import {
   Button, TextField, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tabs, Tab,
-  TablePagination, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip, Skeleton
+  Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip, Skeleton, Box, Typography,
 } from '@mui/material';
 import {
-  DataPageShell, EmptyState, KpiCard, KpiGrid, Metric, MetricRow, PageHeader, StatBar, Surface, ViewToggle,
+  DataPageShell, EmptyState, Metric, MetricRow, StatBar, Surface, ViewToggle,
   colour, radius, space,
 } from '../components/ui';
+
+const OrganizationTreeNode: React.FC<{
+  org: any;
+  level: number;
+  canUpdate: boolean;
+  canDelete: boolean;
+  onEdit: (org: any) => void;
+  onDetails: (org: any) => void;
+  onDelete: (id: string) => void;
+}> = ({ org, level, canUpdate, canDelete, onEdit, onDetails, onDelete }) => {
+  const [expanded, setExpanded] = useState(true);
+  const children = org.children || [];
+  const roles = org.userRoles || [];
+  const departments = org.departments || [];
+  const isCluster = org.organizationType?.code === 'cluster';
+  const isHospital = org.organizationType?.code === 'hospital';
+
+  return (
+    <Box sx={{ ml: level * 2.5, my: 1.5, p: 2, borderRadius: 2, border: '1px solid #E2E8F0', backgroundColor: level === 0 ? '#F8FAFC' : '#FFFFFF' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          {children.length > 0 ? (
+            <IconButton size="small" onClick={() => setExpanded(!expanded)}>
+              {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+            </IconButton>
+          ) : (
+            <Box sx={{ width: 28 }} />
+          )}
+          <Box sx={{ width: 38, height: 38, borderRadius: 2, backgroundColor: isCluster ? '#E0F2FE' : isHospital ? '#F3E8FF' : '#F1F5F9', display: 'grid', placeItems: 'center' }}>
+            {isCluster ? <Network size={19} color="#0284C7" /> : isHospital ? <Building2 size={19} color="#7C3AED" /> : <Layers size={19} color="#475569" />}
+          </Box>
+          <Box>
+            <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: 15 }}>{org.nameAr}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {org.code} · {org.organizationType?.nameAr || (isCluster ? 'تجمع صحي' : 'مستشفى')} · {org.cityAr || 'عرعر'}
+            </Typography>
+          </Box>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Chip label={org.status === 'active' ? 'نشط' : org.status} color={org.status === 'active' ? 'success' : 'default'} size="small" sx={{ fontWeight: 700 }} />
+          <Tooltip title="معاينة التفاصيل والحسابات">
+            <IconButton size="small" onClick={() => onDetails(org)} sx={{ color: '#0284C7' }}><Eye size={16} /></IconButton>
+          </Tooltip>
+          {canUpdate && (
+            <Tooltip title="تعديل البيانات">
+              <IconButton size="small" onClick={() => onEdit(org)} sx={{ color: '#D97706' }}><Edit size={16} /></IconButton>
+            </Tooltip>
+          )}
+          {canDelete && (
+            <Tooltip title="حذف">
+              <IconButton size="small" onClick={() => onDelete(org.id)} sx={{ color: '#DC2626' }}><Trash2 size={16} /></IconButton>
+            </Tooltip>
+          )}
+        </Box>
+      </Box>
+
+      {/* Sub-node Accounts & Departments Summary */}
+      <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid #F1F5F9', display: 'flex', gap: 2.5, flexWrap: 'wrap', fontSize: 12 }}>
+        {roles.length > 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+            <Shield size={14} color="#0284C7" />
+            <span>الحسابات الإدارية: <strong>{roles.map((r: any) => `${r.role?.nameAr ?? r.role?.code}: ${r.userAccount?.person?.nameAr ?? r.userAccount?.email}`).join(' | ')}</strong></span>
+          </Box>
+        )}
+        {departments.length > 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+            <ClipboardList size={14} color="#7C3AED" />
+            <span>الأقسام السريرية: <strong>{departments.map((d: any) => d.nameAr).join(', ')}</strong></span>
+          </Box>
+        )}
+        {org._count && (
+          <Box sx={{ display: 'flex', gap: 2, color: '#64748B' }}>
+            <span>السعة: <strong>{org.capacity || 0}</strong></span>
+            <span>المدربون: <strong>{org._count.trainerProfiles}</strong></span>
+            <span>المتدربون: <strong>{org._count.traineeProfiles}</strong></span>
+          </Box>
+        )}
+      </Box>
+
+      {/* Render Nested Children */}
+      {expanded && children.length > 0 && (
+        <Box sx={{ mt: 1, pr: 2, borderRight: '2px solid #E2E8F0' }}>
+          {children.map((child: any) => (
+            <OrganizationTreeNode
+              key={child.id}
+              org={child}
+              level={level + 1}
+              canUpdate={canUpdate}
+              canDelete={canDelete}
+              onEdit={onEdit}
+              onDetails={onDetails}
+              onDelete={onDelete}
+            />
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+};
 
 export const Organizations: React.FC = () => {
   const { user } = useAuth();
@@ -26,6 +125,7 @@ export const Organizations: React.FC = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(12);
   const [view, setView] = useState<'cards' | 'table'>('cards');
+  const [treeMode, setTreeMode] = useState<boolean>(true);
 
   // Modal States
   const [openCreate, setOpenCreate] = useState(false);
@@ -48,7 +148,7 @@ export const Organizations: React.FC = () => {
   const canUpdate = hasPermission(user, 'update', 'organizations');
   const canDelete = hasPermission(user, 'delete', 'organizations');
 
-  // Query
+  // Directory Query
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['organizations', search, tabValue, typeFilter, page, rowsPerPage],
     queryFn: async () => {
@@ -65,7 +165,16 @@ export const Organizations: React.FC = () => {
     },
   });
 
-  // Canonical KPI source, shared with the dashboards.
+  // Tree Query
+  const { data: treeData, isLoading: treeLoading } = useQuery({
+    queryKey: ['organizations-tree'],
+    queryFn: async () => {
+      const res = await apiClient.get('/organizations/tree');
+      return res.data || [];
+    },
+  });
+
+  // Canonical KPI statistics
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['organization-statistics'],
     queryFn: async () => {
@@ -91,6 +200,7 @@ export const Organizations: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organizations'] });
+      queryClient.invalidateQueries({ queryKey: ['organizations-tree'] });
       setOpenCreate(false);
       resetForm();
     },
@@ -103,6 +213,7 @@ export const Organizations: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organizations'] });
+      queryClient.invalidateQueries({ queryKey: ['organizations-tree'] });
       setOpenEdit(null);
       resetForm();
     },
@@ -115,6 +226,7 @@ export const Organizations: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organizations'] });
+      queryClient.invalidateQueries({ queryKey: ['organizations-tree'] });
       setDeleteId(null);
     },
   });
@@ -156,18 +268,16 @@ export const Organizations: React.FC = () => {
   };
 
   const rows = data?.data ?? [];
-  // KPIs read the shared statistics endpoint rather than the current page —
-  // summing `rows` made every total change as you paged, and disagree with the
-  // dashboard which fetched a different page size.
+  const treeRoots = treeData ?? [];
   const orgStats = stats ?? null;
 
   return (
     <DataPageShell
-      eyebrow="ORGANISATION DIRECTORY"
+      eyebrow="ORGANISATION DIRECTORY & HIERARCHY"
       icon={Building2}
-      title="الجهات والتجمعات الصحية"
-      subtitle="استعراض الجهات وسعتها ونسب إشغالها قبل الدخول إلى التفاصيل"
-      loading={isLoading || statsLoading}
+      title="الجهات والتجمعات الصحية والهيكل التنظيمي"
+      subtitle="استعراض الهيكل الشجري المتكامل (National Platform → Cluster → Hospital → Accounts/Departments)"
+      loading={isLoading || statsLoading || treeLoading}
       stats={[
         { label: 'إجمالي الجهات', value: orgStats?.totalOrganizations ?? 0, icon: Building2, tone: 'primary' },
         { label: 'جهات نشطة', value: orgStats?.activeOrganizations ?? 0, icon: CheckCircle2, tone: 'success' },
@@ -182,6 +292,15 @@ export const Organizations: React.FC = () => {
       ]}
       actions={
         <>
+          <Button
+            size="small"
+            variant={treeMode ? 'contained' : 'outlined'}
+            onClick={() => setTreeMode(!treeMode)}
+            startIcon={<Network size={16} />}
+            sx={{ fontWeight: 700 }}
+          >
+            {treeMode ? 'عرض القائمة المسطحة' : 'عرض الهيكل الشجري'}
+          </Button>
           <Tooltip title="تحديث البيانات">
             <IconButton onClick={() => refetch()} sx={{ border: `1px solid ${colour.border}`, borderRadius: 2 }}>
               <RefreshCw size={17} color={colour.primary} />
@@ -229,8 +348,29 @@ export const Organizations: React.FC = () => {
         </>
       }
     >
-
-      {isLoading ? (
+      {treeMode ? (
+        <Paper className="glass-card" sx={{ p: 3 }}>
+          <Typography variant="h6" fontWeight={800} color="primary" sx={{ mb: 2 }}>
+            الشجرة التنظيمية الموحدة للتجمعات والمستشفيات
+          </Typography>
+          {treeRoots.length === 0 ? (
+            <EmptyState icon={Network} title="لا توجد جهات في الشجرة التنظيمية" hint="قم بإضافة تجمعات صحية ومستشفيات لعرض الهيكل الهرمي." />
+          ) : (
+            treeRoots.map((rootOrg: any) => (
+              <OrganizationTreeNode
+                key={rootOrg.id}
+                org={rootOrg}
+                level={0}
+                canUpdate={canUpdate}
+                canDelete={canDelete}
+                onEdit={(org) => { setOpenEdit(org); setFormData({ code: org.code, nameAr: org.nameAr, nameEn: org.nameEn || '', organizationTypeId: org.organizationTypeId || '', cityAr: org.cityAr || 'عرعر', regionAr: org.regionAr || 'الحدود الشمالية', status: org.status || 'active' }); }}
+                onDetails={(org) => setOpenDetails(org)}
+                onDelete={(id) => setDeleteId(id)}
+              />
+            ))
+          )}
+        </Paper>
+      ) : isLoading ? (
         <div style={{ display: 'grid', gap: space.xl, gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))' }}>
           {[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} variant="rounded" height={190} />)}
         </div>
@@ -367,89 +507,34 @@ export const Organizations: React.FC = () => {
         </div>
       )}
 
-      <TablePagination
-        component="div"
-        count={data?.meta?.total || 0}
-        page={page}
-        onPageChange={(_, newPage) => setPage(newPage)}
-        rowsPerPage={rowsPerPage}
-        onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
-        rowsPerPageOptions={[6, 12, 24, 48]}
-        labelRowsPerPage="عدد العناصر:"
-      />
-
-      {/* Dialog: Create Org */}
-      <Dialog open={openCreate} onClose={() => setOpenCreate(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>إضافة جهة / تجمع صحي جديد</DialogTitle>
-        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '16px' }}>
-          <TextField label="رمز الجهة (Code)" fullWidth value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} />
-          <TextField label="الاسم بالعربية" fullWidth value={formData.nameAr} onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })} />
-          <TextField label="الاسم بالإنجليزية" fullWidth value={formData.nameEn} onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })} />
-          <FormControl fullWidth>
-            <InputLabel>نوع الجهة</InputLabel>
-            <Select value={formData.organizationTypeId} onChange={(e) => setFormData({ ...formData, organizationTypeId: e.target.value })}>
-              {orgTypes?.map((t: any) => <MenuItem key={t.id} value={t.id}>{t.nameAr}</MenuItem>)}
-            </Select>
-          </FormControl>
-          <TextField label="المدينة" fullWidth value={formData.cityAr} onChange={(e) => setFormData({ ...formData, cityAr: e.target.value })} />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenCreate(false)}>إلغاء</Button>
-          <Button variant="contained" color="primary" onClick={handleSaveCreate} disabled={createMutation.isPending}>
-            {createMutation.isPending ? 'جاري الحفظ...' : 'إنشاء الجهة'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Dialog: Edit Org */}
-      <Dialog open={!!openEdit} onClose={() => setOpenEdit(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>تعديل بيانات الجهة</DialogTitle>
-        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '16px' }}>
-          <TextField label="الاسم بالعربية" fullWidth value={formData.nameAr} onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })} />
-          <TextField label="الاسم بالإنجليزية" fullWidth value={formData.nameEn} onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })} />
-          <FormControl fullWidth>
-            <InputLabel>حالة دورة الحياة</InputLabel>
-            <Select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
-              <MenuItem value="active">نشط (Active)</MenuItem>
-              <MenuItem value="draft">مسودة (Draft)</MenuItem>
-              <MenuItem value="suspended">معلق (Suspended)</MenuItem>
-              <MenuItem value="archived">مؤرشف (Archived)</MenuItem>
-            </Select>
-          </FormControl>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenEdit(null)}>إلغاء</Button>
-          <Button variant="contained" color="primary" onClick={handleSaveUpdate} disabled={updateMutation.isPending}>
-            {updateMutation.isPending ? 'جاري التحديث...' : 'تحديث البيانات'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Dialog: Details */}
-      <Dialog open={!!openDetails} onClose={() => setOpenDetails(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>تفاصيل الجهة المؤسسية</DialogTitle>
-        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '16px' }}>
-          <div><strong>اسم الجهة:</strong> {openDetails?.nameAr} ({openDetails?.nameEn})</div>
-          <div><strong>الرمز:</strong> {openDetails?.code}</div>
-          <div><strong>المدينة والمنطقة:</strong> {openDetails?.cityAr} - {openDetails?.regionAr}</div>
-          <div><strong>الحالة:</strong> {openDetails?.status}</div>
-          <div><strong>عدد المتدربين:</strong> {openDetails?._count?.traineeProfiles || 0}</div>
-          <div><strong>عدد الأقسام السريرية:</strong> {openDetails?._count?.departments || 0}</div>
+      {/* Modal Details */}
+      <Dialog open={Boolean(openDetails)} onClose={() => setOpenDetails(null)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>تفاصيل الجهة والحسابات المرتبطة</DialogTitle>
+        <DialogContent style={{ paddingTop: '16px' }}>
+          {openDetails && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <div><strong>اسم الجهة:</strong> {openDetails.nameAr}</div>
+              <div><strong>الرمز:</strong> {openDetails.code}</div>
+              <div><strong>النوع:</strong> {openDetails.organizationType?.nameAr || '—'}</div>
+              <div><strong>المدينة:</strong> {openDetails.cityAr || 'عرعر'}</div>
+              <div><strong>الحالة:</strong> {openDetails.status}</div>
+              <div><strong>السعة الاستيعابية:</strong> {openDetails.capacity || 0} مقعد</div>
+              <div><strong>الأقسام الكلينيكية:</strong> {openDetails.departments?.map((d: any) => d.nameAr).join(', ') || '—'}</div>
+              <div>
+                <strong>الحسابات الإدارية المرتبطة:</strong>
+                <ul>
+                  {openDetails.userRoles?.map((r: any) => (
+                    <li key={r.id}>
+                      {r.role?.nameAr || r.role?.code}: {r.userAccount?.person?.nameAr || r.userAccount?.email} ({r.userAccount?.email})
+                    </li>
+                  )) || 'لا توجد حسابات مرتبطة'}
+                </ul>
+              </div>
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenDetails(null)}>إغلاق</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Dialog: Delete Confirm */}
-      <Dialog open={!!deleteId} onClose={() => setDeleteId(null)}>
-        <DialogTitle>تأكيد حذف الجهة</DialogTitle>
-        <DialogContent>هل أنت تأكد من رغبتك في حذف هذه الجهة؟ هذا الإجراء سيمسح السجلات المرتبطة بها.</DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteId(null)}>إلغاء</Button>
-          <Button color="error" variant="contained" onClick={() => deleteId && deleteMutation.mutate(deleteId)}>
-            تأكيد الحذف
-          </Button>
         </DialogActions>
       </Dialog>
     </DataPageShell>

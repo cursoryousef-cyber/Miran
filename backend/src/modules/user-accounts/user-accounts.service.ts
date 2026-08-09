@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  OnModuleInit,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,8 +14,83 @@ import { membershipWhere } from '../organization-assignments/organization-assign
 import { roleScope } from '../../common/role-scope';
 
 @Injectable()
-export class UserAccountsService {
+export class UserAccountsService implements OnModuleInit {
   constructor(private prisma: PrismaService) {}
+
+  async onModuleInit() {
+    try {
+      await this.migrateDeprecatedRoles();
+    } catch (e) {
+      console.warn('[UserAccountsService] Role migration warning:', e);
+    }
+  }
+
+  private async migrateDeprecatedRoles() {
+    const canonicalRoles = [
+      { code: 'platform_owner', nameAr: 'مالك المنصة الوطنية', nameEn: 'Platform Owner' },
+      { code: 'cluster_manager', nameAr: 'مشرف التدريب بالتجمع', nameEn: 'Cluster Training Manager' },
+      { code: 'hospital_training_admin', nameAr: 'إدارة التدريب بالمستشفى', nameEn: 'Hospital Training Admin' },
+      { code: 'department_head', nameAr: 'رئيس القسم السريري', nameEn: 'Department Head' },
+      { code: 'training_supervisor', nameAr: 'المشرف التدريبي بالمستشفى', nameEn: 'Training Supervisor' },
+      { code: 'university_administrator', nameAr: 'مسؤول الجامعة الموفدة', nameEn: 'University Administrator' },
+      { code: 'academic_supervisor', nameAr: 'المشرف الأكاديمي', nameEn: 'Academic Supervisor' },
+      { code: 'trainer', nameAr: 'المدرب السريري', nameEn: 'Clinical Trainer' },
+      { code: 'trainee', nameAr: 'المتدرب', nameEn: 'Trainee' },
+    ];
+
+    for (const r of canonicalRoles) {
+      await this.prisma.role.upsert({
+        where: { code: r.code },
+        update: { nameAr: r.nameAr, nameEn: r.nameEn },
+        create: { code: r.code, nameAr: r.nameAr, nameEn: r.nameEn },
+      });
+    }
+
+    const allRoles = await this.prisma.role.findMany();
+    const roleIdByCode = new Map(allRoles.map((r) => [r.code, r.id]));
+
+    // System admin -> platform_owner
+    if (roleIdByCode.has('platform_owner') && roleIdByCode.has('system_admin')) {
+      await this.prisma.userRole.updateMany({
+        where: { roleId: roleIdByCode.get('system_admin')! },
+        data: { roleId: roleIdByCode.get('platform_owner')! },
+      });
+    }
+
+    // Cluster admin -> cluster_manager
+    if (roleIdByCode.has('cluster_manager') && roleIdByCode.has('cluster_administrator')) {
+      await this.prisma.userRole.updateMany({
+        where: { roleId: roleIdByCode.get('cluster_administrator')! },
+        data: { roleId: roleIdByCode.get('cluster_manager')! },
+      });
+    }
+
+    // Hospital admin -> hospital_training_admin
+    if (roleIdByCode.has('hospital_training_admin')) {
+      const legacyHospRole = roleIdByCode.get('hospital_administrator');
+      if (legacyHospRole) {
+        await this.prisma.userRole.updateMany({
+          where: { roleId: legacyHospRole },
+          data: { roleId: roleIdByCode.get('hospital_training_admin')! },
+        });
+      }
+      const aliasHospRole = roleIdByCode.get('hospitalAdmin');
+      if (aliasHospRole) {
+        await this.prisma.userRole.updateMany({
+          where: { roleId: aliasHospRole },
+          data: { roleId: roleIdByCode.get('hospital_training_admin')! },
+        });
+      }
+    }
+
+    // Academic affairs -> academic_supervisor
+    if (roleIdByCode.has('academic_supervisor') && roleIdByCode.has('academic_affairs')) {
+      await this.prisma.userRole.updateMany({
+        where: { roleId: roleIdByCode.get('academic_affairs')! },
+        data: { roleId: roleIdByCode.get('academic_supervisor')! },
+      });
+    }
+  }
 
   async findAll(organizationId: string | null, page = 1, limit = 20, search?: string) {
     const skip = (page - 1) * limit;
@@ -244,6 +320,23 @@ export class UserAccountsService {
     const primaryOrgId = scope.hospitalId ?? scope.organizationId;
     if (!primaryOrgId) {
       throw new BadRequestException('تعذّر تحديد نطاق الحساب — يجب تحديد الجهة أو المستشفى');
+    }
+
+    if (['hospital_training_admin', 'hospital_administrator', 'hospitalAdmin'].includes(dto.roleCode)) {
+      const targetHospitalId = scope.hospitalId || primaryOrgId;
+      const existingAdmin = await this.prisma.userRole.findFirst({
+        where: {
+          organizationId: targetHospitalId,
+          role: { code: { in: ['hospital_training_admin', 'hospital_administrator', 'hospitalAdmin'] } },
+          userAccount: { deletedAt: null, isActive: true },
+        },
+        select: { userAccount: { select: { email: true } } },
+      });
+      if (existingAdmin) {
+        throw new BadRequestException(
+          `يوجد بالفعل مسؤول تدريب مفعّل لهذا المستشفى (${existingAdmin.userAccount.email}) — يقتصر المستشفى الواحد على حساب إدارة تدريب واحد فقط`,
+        );
+      }
     }
 
     return this.prisma.$transaction(async (tx) => {

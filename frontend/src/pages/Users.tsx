@@ -459,16 +459,15 @@ export const UsersPage: React.FC = () => {
                 label="اختر الدور القيادي / السريري (Role)"
                 onChange={(e) => setFormData({ ...formData, roleCode: e.target.value })}
               >
-                <MenuItem value="platform_owner">مدير المنصة الوطنية (Platform Owner)</MenuItem>
-                <MenuItem value="system_admin">مدير النظام التنفيذي (System Admin)</MenuItem>
-                <MenuItem value="org_manager">مدير الجهة / الجامعة (Organization Manager)</MenuItem>
-                <MenuItem value="cluster_manager">مدير التجمع الصحي (Cluster Manager)</MenuItem>
-                <MenuItem value="hospital_administrator">مدير المستشفى (Hospital Administrator)</MenuItem>
-                <MenuItem value="hospital_training_admin">مدير إدارة التدريب بالمستشفى (Hospital Training Admin)</MenuItem>
-                <MenuItem value="training_supervisor">مشرف التدريب الميداني (Training Supervisor)</MenuItem>
-                <MenuItem value="academic_supervisor">مشرف الإشراف الأكاديمي (Academic Supervisor)</MenuItem>
-                <MenuItem value="trainer">استشاري ومدرب سريري (Clinical Trainer)</MenuItem>
-                <MenuItem value="trainee">طبيب امتياز / متدرب (Trainee)</MenuItem>
+                <MenuItem value="platform_owner">مالك المنصة الوطنية (Platform Owner)</MenuItem>
+                <MenuItem value="cluster_manager">مشرف التدريب بالتجمع (Cluster Manager)</MenuItem>
+                <MenuItem value="hospital_training_admin">إدارة التدريب بالمستشفى (Hospital Training Admin)</MenuItem>
+                <MenuItem value="department_head">رئيس القسم السريري (Department Head)</MenuItem>
+                <MenuItem value="training_supervisor">المشرف التدريبي بالمستشفى (Training Supervisor)</MenuItem>
+                <MenuItem value="university_administrator">مسؤول الجامعة الموفدة (University Administrator)</MenuItem>
+                <MenuItem value="academic_supervisor">المشرف الأكاديمي (Academic Supervisor)</MenuItem>
+                <MenuItem value="trainer">المدرب السريري (Clinical Trainer)</MenuItem>
+                <MenuItem value="trainee">المتدرب (Trainee)</MenuItem>
               </Select>
             </FormControl>
           </div>

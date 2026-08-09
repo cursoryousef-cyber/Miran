@@ -170,11 +170,29 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
   system_admin: ALL_CAPABILITIES,
   holding_administrator: READ_ONLY_CAPABILITIES,
 
-  // ── Cluster training management ───────────────────────────────────────────
-  // Owns the request→batch→distribution chain. Note what is *absent*:
-  // no capacity.manage, no department.manage, no trainer.manage, no
-  // allocation.hospital.* — the cluster decides which hospital, never how that
-  // hospital runs its own departments.
+  // ── Cluster training management (Canonical: cluster_manager) ────────────
+  cluster_manager: [
+    C.TRAINING_REQUEST_VIEW,
+    C.TRAINING_REQUEST_REVIEW,
+    C.TRAINING_REQUEST_APPROVE,
+    C.TRAINING_REQUEST_RETURN,
+    C.ACADEMIC_BATCH_CREATE_FROM_REQUEST,
+    C.ACADEMIC_BATCH_MANAGE,
+    C.ALLOCATION_CLUSTER_AUTO,
+    C.ALLOCATION_CLUSTER_MANUAL,
+    C.ALLOCATION_CLUSTER_REASSIGN,
+    C.CAPACITY_VIEW,
+    C.TRAINEE_VIEW_SCOPE,
+    C.LOGBOOK_VIEW,
+    C.TIMELINE_VIEW,
+    C.ORG_VIEW,
+    C.ORG_MEMBER_VIEW,
+    C.ORG_MEMBER_MANAGE,
+    C.INCIDENT_VIEW,
+    C.INCIDENT_MANAGE,
+    C.REPORT_VIEW,
+  ],
+  // Legacy aliases for cluster management
   training_director: [
     C.TRAINING_REQUEST_VIEW,
     C.TRAINING_REQUEST_REVIEW,
@@ -191,14 +209,11 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
     C.TIMELINE_VIEW,
     C.ORG_VIEW,
     C.ORG_MEMBER_VIEW,
+    C.ORG_MEMBER_MANAGE,
     C.INCIDENT_VIEW,
     C.INCIDENT_MANAGE,
     C.REPORT_VIEW,
   ],
-
-  // Legacy cluster role, retained verbatim pending the migration review. It
-  // overlaps training_director on purpose — removing that overlap would migrate
-  // a live user, which is out of scope for this phase.
   cluster_administrator: [
     C.TRAINING_REQUEST_VIEW,
     C.TRAINING_REQUEST_REVIEW,
@@ -220,20 +235,7 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
     C.REPORT_VIEW,
   ],
 
-  // Deprecated in the training workflow. Kept in the table with read-only
-  // capabilities so existing holders keep a working (if inert) session rather
-  // than being locked out by a role change they did not ask for.
-  cluster_manager: [
-    C.ORG_VIEW,
-    C.ORG_MEMBER_VIEW,
-    C.REPORT_VIEW,
-    C.INCIDENT_VIEW,
-    C.TIMELINE_VIEW,
-  ],
-
-  // ── Hospital training management — the operational owner ──────────────────
-  // Everything the hospital needs to run training, and nothing above it: no
-  // request approval, no batch creation, no cross-hospital allocation.
+  // ── Hospital training management (Canonical: hospital_training_admin) ────
   hospital_training_admin: [
     C.DEPARTMENT_MANAGE,
     C.CAPACITY_VIEW,
@@ -252,13 +254,39 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
     C.INCIDENT_MANAGE,
     C.REPORT_VIEW,
   ],
-
-  // ── General hospital administration — explicitly NOT training ─────────────
-  // Every training capability is absent by construction. The hospital director
-  // administers the hospital; the training administration runs training.
+  // Legacy aliases for hospital administration
   hospital_administrator: [
+    C.DEPARTMENT_MANAGE,
+    C.CAPACITY_VIEW,
+    C.CAPACITY_MANAGE,
+    C.TRAINER_MANAGE,
+    C.ALLOCATION_HOSPITAL_ASSIGN,
+    C.ALLOCATION_HOSPITAL_REASSIGN,
+    C.TRAINEE_VIEW_HOSPITAL,
+    C.TRAINING_OPERATE,
+    C.LOGBOOK_VIEW,
+    C.TIMELINE_VIEW,
     C.ORG_VIEW,
     C.ORG_MEMBER_VIEW,
+    C.ORG_MEMBER_MANAGE,
+    C.INCIDENT_VIEW,
+    C.INCIDENT_MANAGE,
+    C.REPORT_VIEW,
+  ],
+  hospitalAdmin: [
+    C.DEPARTMENT_MANAGE,
+    C.CAPACITY_VIEW,
+    C.CAPACITY_MANAGE,
+    C.TRAINER_MANAGE,
+    C.ALLOCATION_HOSPITAL_ASSIGN,
+    C.ALLOCATION_HOSPITAL_REASSIGN,
+    C.TRAINEE_VIEW_HOSPITAL,
+    C.TRAINING_OPERATE,
+    C.LOGBOOK_VIEW,
+    C.TIMELINE_VIEW,
+    C.ORG_VIEW,
+    C.ORG_MEMBER_VIEW,
+    C.ORG_MEMBER_MANAGE,
     C.INCIDENT_VIEW,
     C.INCIDENT_MANAGE,
     C.REPORT_VIEW,
