@@ -51,6 +51,47 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
   });
   const [trainerFormError, setTrainerFormError] = useState<string | null>(null);
 
+  // Assign Trainee state & query & mutation
+  const [assignModalTrainer, setAssignModalTrainer] = useState<any | null>(null);
+  const [selectedTraineeRowId, setSelectedTraineeRowId] = useState<string>('');
+  const [assignReason, setAssignReason] = useState<string>('إسناد متدرب للمدرب المباشر');
+  const [assignError, setAssignError] = useState<string | null>(null);
+
+  const { data: hospitalTraineesData, isLoading: loadingHospitalTrainees } = useQuery({
+    queryKey: ['hospital-review-trainees'],
+    queryFn: async () => {
+      const res = await apiClient.get('/training-requests/hospital-review').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+    enabled: Boolean(assignModalTrainer),
+  });
+
+  const assignTraineeMutation = useMutation({
+    mutationFn: async ({ rowId, trainerProfileId, departmentId, reason }: { rowId: string; trainerProfileId: string; departmentId?: string; reason?: string }) => {
+      const res = await apiClient.patch(`/training-requests/trainees/${rowId}/hospital-review/assignment`, {
+        trainerProfileId,
+        departmentId,
+        reason,
+      });
+      return res.data;
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['trainer-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['trainer-cards-assignment'] });
+      queryClient.invalidateQueries({ queryKey: ['hospital-review-trainees'] });
+      queryClient.invalidateQueries({ queryKey: ['incoming-trainees'] });
+      queryClient.invalidateQueries({ queryKey: ['hospitals-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['assigned-interns'] });
+      setSuccessMsg(res.message || 'تم إسناد المتدرب بنجاح وسيكون بانتظار قبول المدرب');
+      setAssignModalTrainer(null);
+      setSelectedTraineeRowId('');
+      setAssignError(null);
+    },
+    onError: (err: any) => {
+      setAssignError(err?.response?.data?.message || err?.message || 'حدث خطأ أثناء إسناد المتدرب');
+    },
+  });
+
   const { data: trainers, isLoading } = useQuery({
     queryKey: ['trainer-cards'],
     queryFn: async () => {
@@ -331,6 +372,16 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
               ? `${LEAVE_LABELS[t.leave.leaveType] ?? t.leave.leaveType} · البديل: ${t.leave.replacementTrainerNameAr ?? 'غير محدد'}`
               : 'على رأس العمل'}
             actions={[
+              {
+                label: 'إسناد متدرب',
+                icon: UserPlus,
+                tone: 'primary',
+                onClick: () => {
+                  setAssignModalTrainer(t);
+                  setSelectedTraineeRowId('');
+                  setAssignError(null);
+                },
+              },
               { label: 'تعديل الملف والأهلية', icon: Edit3, tone: 'info', onClick: () => setEditProfile({ ...t, departmentId: t.department?.id || '' }) },
               { label: 'الأهلية البرامجية', icon: UserCheck, tone: 'violet', onClick: () => setEditQualsTrainer(t) },
               { label: 'المتدربون الحاليون', icon: Users, tone: 'success', onClick: () => setExpanded(expanded === t.id ? null : t.id) },
@@ -585,6 +636,78 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
             sx={{ backgroundColor: '#0F766E', '&:hover': { backgroundColor: '#0D655E' } }}
           >
             {createTrainerMutation.isPending ? <CircularProgress size={20} color="inherit" /> : 'حفظ'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* مودال إسناد متدرب للمدرب */}
+      <Dialog open={Boolean(assignModalTrainer)} onClose={() => setAssignModalTrainer(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, borderBottom: '1px solid #E2E8F0', pb: 1.5 }}>
+          إسناد متدرب — {assignModalTrainer?.nameAr}
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2.5 }}>
+          {assignError && <Alert severity="error" sx={{ mb: 2 }}>{assignError}</Alert>}
+
+          {assignModalTrainer && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
+              <Alert severity="info" sx={{ fontSize: 13 }}>
+                سيتم إسناد المتدرب إلى المدرب <strong>{assignModalTrainer.nameAr}</strong>
+                {assignModalTrainer.department?.nameAr ? ` في قسم «${assignModalTrainer.department.nameAr}»` : ''}.
+                السعة المتاحة: {assignModalTrainer.available} من {assignModalTrainer.maxTrainees} مقعد.
+              </Alert>
+
+              <TextField
+                select
+                label="اختر المتدرب من نطاق المستشفى *"
+                size="small"
+                fullWidth
+                value={selectedTraineeRowId}
+                onChange={(e) => setSelectedTraineeRowId(e.target.value)}
+                disabled={loadingHospitalTrainees}
+              >
+                <MenuItem value="">-- اختر متدرباً --</MenuItem>
+                {(hospitalTraineesData ?? []).map((tr: any) => {
+                  const isAssignedToThis = tr.assignedTrainer?.id === assignModalTrainer.id;
+                  const isAssignedToOther = tr.assignedTrainer && !isAssignedToThis;
+                  return (
+                    <MenuItem key={tr.id} value={tr.id} disabled={isAssignedToThis}>
+                      {tr.nameAr} ({tr.academicNumber || tr.nationalId})
+                      {tr.assignedDepartment?.nameAr ? ` — قسم: ${tr.assignedDepartment.nameAr}` : ''}
+                      {isAssignedToThis ? ' (مُسند لهذا المدرب حالياً)' : isAssignedToOther ? ` (مُسند لـ ${tr.assignedTrainer?.person?.nameAr || 'مدرب آخر'})` : ' (غير مُسند لمدرب)'}
+                    </MenuItem>
+                  );
+                })}
+              </TextField>
+
+              <TextField
+                label="سبب أو ملاحظات الإسناد"
+                size="small"
+                fullWidth
+                multiline
+                rows={2}
+                value={assignReason}
+                onChange={(e) => setAssignReason(e.target.value)}
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, borderTop: '1px solid #E2E8F0', pt: 1.5 }}>
+          <Button onClick={() => setAssignModalTrainer(null)} color="inherit">إلغاء</Button>
+          <Button
+            variant="contained"
+            disabled={!selectedTraineeRowId || assignTraineeMutation.isPending}
+            onClick={() => {
+              if (!selectedTraineeRowId || !assignModalTrainer) return;
+              assignTraineeMutation.mutate({
+                rowId: selectedTraineeRowId,
+                trainerProfileId: assignModalTrainer.id,
+                departmentId: assignModalTrainer.department?.id || undefined,
+                reason: assignReason,
+              });
+            }}
+            sx={{ backgroundColor: '#0F766E', '&:hover': { backgroundColor: '#0D655E' } }}
+          >
+            {assignTraineeMutation.isPending ? <CircularProgress size={20} color="inherit" /> : 'تأكيد الإسناد'}
           </Button>
         </DialogActions>
       </Dialog>

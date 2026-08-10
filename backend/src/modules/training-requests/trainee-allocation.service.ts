@@ -195,14 +195,17 @@ export class TraineeAllocationService {
     reason?: string,
   ) {
     const existing = await this.findOpen(traineeRowId);
-    if (!existing) {
+    const context = await this.loadRowContext(traineeRowId);
+    const hospitalId = existing?.hospitalId || context.assignedHospitalId;
+
+    if (!hospitalId) {
       throw new ConflictException(
         'لا يوجد تخصيص مفتوح لهذا المتدرب — التوزيع على المستشفى يتم من إدارة التدريب بالتجمع أولاً',
       );
     }
 
     const isMove =
-      !!existing.departmentId && existing.departmentId !== target.departmentId;
+      !!existing?.departmentId && existing.departmentId !== target.departmentId;
     this.scopeContext.assertCapability(
       scope,
       isMove
@@ -211,30 +214,28 @@ export class TraineeAllocationService {
     );
 
     // The boundary that keeps a hospital inside itself. hospitalId is taken from
-    // the open allocation and never from the caller, so there is no field through
-    // which a hospital session could relocate a trainee elsewhere.
-    this.scopeContext.assertActiveHospital(scope, existing.hospitalId);
+    // the open allocation or assigned hospital and never from the caller.
+    this.scopeContext.assertActiveHospital(scope, hospitalId);
 
     if (target.departmentId) {
       await this.assertDepartmentUsable(
         target.departmentId,
-        existing.hospitalId,
-        existing.departmentId,
+        hospitalId,
+        existing?.departmentId ?? null,
       );
       this.scopeContext.assertDepartmentInScope(scope, target.departmentId);
     }
     if (target.trainerProfileId) {
       await this.assertTrainerUsable(
         target.trainerProfileId,
-        existing.hospitalId,
-        existing.trainerProfileId,
+        hospitalId,
+        existing?.trainerProfileId ?? null,
       );
     }
 
-    const context = await this.loadRowContext(traineeRowId);
     return this.writeAllocation(
       traineeRowId,
-      { ...target, hospitalId: existing.hospitalId },
+      { ...target, hospitalId },
       isMove ? 'hospital_reassign' : 'hospital_assign',
       user,
       scope,
@@ -659,6 +660,7 @@ export class TraineeAllocationService {
         academicIntakeId: true,
         traineeProfileId: true,
         trainingRequestId: true,
+        assignedHospitalId: true,
         status: true,
         trainingRequest: { select: { targetOrgId: true, status: true } },
       },
@@ -672,6 +674,7 @@ export class TraineeAllocationService {
       academicIntakeId: row.academicIntakeId,
       trainingRequestId: row.trainingRequestId,
       traineeProfileId: row.traineeProfileId,
+      assignedHospitalId: row.assignedHospitalId,
     };
   }
 

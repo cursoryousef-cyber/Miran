@@ -41,6 +41,35 @@ final class AppStore: ObservableObject {
     @Published var apiTraineeProfile: TraineeProfileModel?
     @Published var apiTrainerProfile: TrainerProfileModel?
 
+    // MARK: - طلبات التدريب الواردة للتجمع (Cluster)
+
+    @Published var trainingRequests: [TrainingRequestItem] = []
+    @Published var trainingRequestsLoading = false
+    @Published var trainingRequestsError: String?
+    @Published var trainingRequestsLoaded = false
+
+    @Published var trainingRequestDetail: TrainingRequestItem?
+    @Published var requestDetailLoading = false
+    @Published var requestDetailError: String?
+    @Published var requestDetailLoaded = false
+
+    @Published var requestTrainees: [TrainingRequestTraineeRow] = []
+    @Published var requestTraineesLoading = false
+    @Published var requestTraineesError: String?
+    @Published var requestTraineesLoaded = false
+
+    /// رسائل نجاح/فشل آخر إجراء على طلب (تُعرض كـ Alert في الشاشة).
+    @Published var requestActionResultMessage: String?
+
+    // MARK: - لوحة قيادة التجمع (إحصاءات فعلية من Backend)
+
+    @Published var organizationStatistics: OrganizationStatisticsModel?
+    @Published var hospitalCards: [HospitalCardModel] = []
+    @Published var clusterTimeline: ClusterTimelineDashboard?
+    @Published var clusterStatsLoading = false
+    @Published var clusterStatsError: String?
+    @Published var clusterStatsLoaded = false
+
     // MARK: - الإعدادات
 
     /// السقف الأسبوعي للنداءات لكل متدرب — ضابط منع الإرهاق
@@ -112,6 +141,146 @@ final class AppStore: ObservableObject {
         } catch {
             print("⚠️ [AppStore] No trainer profile (user may not be a trainer): \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - طلبات التدريب الواردة (Cluster)
+
+    /// قائمة طلبات التدريب الواردة للتجمع — مع حالات تحميل/خطأ/فارغ تُعرض في الشاشة.
+    func fetchTrainingRequests() async {
+        trainingRequestsLoading = true
+        trainingRequestsError = nil
+        do {
+            let result: APIListResponse<TrainingRequestItem> = try await APIClient.shared.request(
+                endpoint: "/training-requests?page=1&limit=100"
+            )
+            self.trainingRequests = result.data
+            self.trainingRequestsLoaded = true
+            print("✅ [AppStore] Training requests: \(result.data.count)")
+        } catch {
+            self.trainingRequestsError = error.localizedDescription
+            print("❌ [AppStore] Failed to fetch training requests: \(error.localizedDescription)")
+        }
+        trainingRequestsLoading = false
+    }
+
+    func fetchTrainingRequestDetail(id: String) async {
+        requestDetailLoading = true
+        requestDetailError = nil
+        do {
+            let result: APIDataResponse<TrainingRequestItem> = try await APIClient.shared.request(
+                endpoint: "/training-requests/\(id)"
+            )
+            self.trainingRequestDetail = result.data
+            self.requestDetailLoaded = true
+        } catch {
+            self.requestDetailError = error.localizedDescription
+        }
+        requestDetailLoading = false
+    }
+
+    func fetchRequestTrainees(id: String) async {
+        requestTraineesLoading = true
+        requestTraineesError = nil
+        do {
+            let result: APIListResponse<TrainingRequestTraineeRow> = try await APIClient.shared.request(
+                endpoint: "/training-requests/\(id)/trainees"
+            )
+            self.requestTrainees = result.data
+            self.requestTraineesLoaded = true
+        } catch {
+            self.requestTraineesError = error.localizedDescription
+        }
+        requestTraineesLoading = false
+    }
+
+    /// بعد أي إجراء على الطلب: إعادة جلب التفاصيل والقائمة فقط (لا إعادة تحميل كامل للشاشة).
+    private func refreshClusterRequests(after id: String) async {
+        if requestDetailLoaded || trainingRequestDetail?.id == id {
+            await fetchTrainingRequestDetail(id: id)
+        }
+        if trainingRequestsLoaded {
+            await fetchTrainingRequests()
+        }
+    }
+
+    /// الموافقة النهائية — ترمي الخطأ لعرضه في الشاشة (لا يُبتلع).
+    func approveTrainingRequest(id: String) async throws {
+        let _: TrainingRequestActionResult = try await APIClient.shared.request(endpoint: "/training-requests/\(id)/approve", method: "POST")
+        self.requestActionResultMessage = "تمت الموافقة على طلب التدريب بنجاح"
+        try await refreshClusterRequests(after: id)
+    }
+
+    /// رفض الطلب — الأدوار المخوَّلة فقط (Backend يفرض CLUSTER_ROLES).
+    func rejectTrainingRequest(id: String, reason: String) async throws {
+        let body = RejectTrainingRequestBody(reason: reason)
+        let _: TrainingRequestActionResult = try await APIClient.shared.request(
+            endpoint: "/training-requests/\(id)/reject", method: "POST", body: body
+        )
+        self.requestActionResultMessage = "تم رفض طلب التدريب"
+        try await refreshClusterRequests(after: id)
+    }
+
+    func returnTrainingRequestToUniversity(id: String, notes: String) async throws {
+        let body = ReturnTrainingRequestToUniversityBody(notes: notes)
+        let _: TrainingRequestActionResult = try await APIClient.shared.request(
+            endpoint: "/training-requests/\(id)/return-to-university", method: "POST", body: body
+        )
+        self.requestActionResultMessage = "أُعيد طلب التدريب للجامعة للتعديل"
+        try await refreshClusterRequests(after: id)
+    }
+
+    func autoAllocateTrainingRequest(id: String) async throws {
+        let _: TrainingRequestActionResult = try await APIClient.shared.request(endpoint: "/training-requests/\(id)/auto-allocate", method: "POST")
+        self.requestActionResultMessage = "تم تنفيذ التوزيع التلقائي على المستشفيات"
+        try await refreshClusterRequests(after: id)
+    }
+
+    // MARK: - لوحة قيادة التجمع (إحصاءات فعلية)
+
+    func fetchClusterDashboard() async {
+        clusterStatsLoading = true
+        clusterStatsError = nil
+
+        // الإحصاءات العامة للتجمع
+        do {
+            let stats: APIDataResponse<OrganizationStatisticsModel> = try await APIClient.shared.request(
+                endpoint: "/organizations/statistics"
+            )
+            self.organizationStatistics = stats.data
+        } catch {
+            self.clusterStatsError = error.localizedDescription
+            print("❌ [AppStore] Statistics failed: \(error.localizedDescription)")
+        }
+
+        // بطاقات المستشفيات (استجابة مصفوفة مكشوفة — لا تُغلَّف)
+        do {
+            let cards: [HospitalCardModel] = try await APIClient.shared.request(
+                endpoint: "/organizations/hospitals-cards"
+            )
+            self.hospitalCards = cards
+        } catch {
+            if self.clusterStatsError == nil { self.clusterStatsError = error.localizedDescription }
+            print("❌ [AppStore] Hospital cards failed: \(error.localizedDescription)")
+        }
+
+        // ملخص الخطوط الزمنية للتجمع (معدل الإنجاز، المعرضون للخطر، الروتيشنات النشطة)
+        do {
+            let timeline: APIDataResponse<ClusterTimelineDashboard> = try await APIClient.shared.request(
+                endpoint: "/timeline/dashboard?scope=cluster"
+            )
+            self.clusterTimeline = timeline.data
+        } catch {
+            if self.clusterStatsError == nil { self.clusterStatsError = error.localizedDescription }
+            print("❌ [AppStore] Cluster timeline failed: \(error.localizedDescription)")
+        }
+
+        clusterStatsLoading = false
+        if clusterStatsError == nil { clusterStatsLoaded = true }
+    }
+
+    /// عدد الطلبات التي تحتاج إجراءً من التجمع (لعداد لوحة القيادة).
+    var pendingTrainingRequestsCount: Int {
+        trainingRequests.filter { $0.requestStatus.isProcessing }.count
     }
 
     // MARK: - وصول سريع

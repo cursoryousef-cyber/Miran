@@ -144,6 +144,7 @@ final class AuthViewModel: ObservableObject {
                     email: user.email,
                     roles: response.roles ?? user.roles,
                     permissions: response.permissions ?? user.permissions,
+                    capabilities: user.capabilities,
                     activeOrganization: response.activeOrganization,
                     availableOrganizations: user.availableOrganizations
                 )

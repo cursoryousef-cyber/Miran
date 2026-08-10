@@ -28,6 +28,8 @@ import {
   UpdateTraineeRowDto,
 } from './dto/training-request-trainee.dto';
 
+import { TraineeAllocationService } from './trainee-allocation.service';
+
 /**
  * إدارة صفوف المتدربين داخل دفعة طلب التدريب (المراحل 1–3).
  * الصف سجل مرشّح فقط — لا يتحول إلى حساب حقيقي إلا عند اعتماد التجمع.
@@ -40,6 +42,7 @@ export class TrainingRequestTraineesService {
     private validationEngine: ValidationEngineService,
     private capacityService: CapacityService,
     private scopeContext: ScopeContextService,
+    private allocationService: TraineeAllocationService,
   ) {}
 
   // ─── القراءة ──────────────────────────────────────────────────────────────
@@ -964,14 +967,8 @@ export class TrainingRequestTraineesService {
   }
 
   /**
-   * تعديل التعيين (قسم / مدرب / مشرف / تواريخ) مع التحقق من الطاقة والنطاق.
-   *
-   * Hospital-internal by definition, so it is gated on the *active* hospital and
-   * not merely on visibility. Previously it validated status and capacity but
-   * never ownership: a hospital training administrator could pass any rowId and
-   * re-assign a trainee sitting in a different hospital, and a cluster session —
-   * which can legitimately see every hospital in its cluster — could reach inside
-   * one and move a trainee between its departments. Both are refused here.
+   * تعديل إسناد المتدرب داخل المستشفى (قسم/مدرب/مشرف/تواريخ) عبر المصدر الرسمي الوحيد
+   * TraineeAllocationService لضمان اتساق TraineeAllocation و TraineeProfile و Rotation.
    */
   async changeAssignment(
     rowId: string,
@@ -979,104 +976,20 @@ export class TrainingRequestTraineesService {
     user: IAuthenticatedUser,
     scope?: ScopeContext,
   ) {
-    const row = await this.loadRow(rowId);
-    if (!['allocated', 'hospital_review', 'on_hold'].includes(row.status)) {
-      throw new BadRequestException(`لا يمكن تعديل التعيين لصف بحالة "${row.status}"`);
-    }
-
-    if (scope) {
-      this.scopeContext.assertActiveHospital(scope, row.assignedHospitalId);
-    }
-    const old = this.snapshot(row as any);
-
-    // Validate new department capacity if changing
-    if (dto.departmentId && dto.departmentId !== row.assignedDepartmentId) {
-      // The department must belong to this hospital — otherwise the trainee would
-      // be moved out of the hospital under the guise of a department change,
-      // which is a cluster-level decision.
-      const dept = await this.prisma.department.findUnique({
-        where: { id: dto.departmentId },
-        select: { organizationId: true, isActive: true, nameAr: true },
-      });
-      if (!dept) throw new NotFoundException('القسم غير موجود');
-      if (dept.organizationId !== row.assignedHospitalId) {
-        throw new BadRequestException(
-          `القسم «${dept.nameAr}» لا يتبع المستشفى المسند إليه المتدرب — نقل المتدرب بين المستشفيات من صلاحية إدارة التدريب بالتجمع`,
-        );
-      }
-      if (!dept.isActive) {
-        throw new BadRequestException(`القسم «${dept.nameAr}» غير مفعّل للتدريب`);
-      }
-      if (scope) this.scopeContext.assertDepartmentInScope(scope, dto.departmentId);
-
-      const deptOcc = await this.capacityService.getDepartmentOccupancy(dto.departmentId);
-      if (deptOcc.available <= 0) {
-        throw new BadRequestException(
-          `القسم المحدد ممتلئ (${deptOcc.occupied}/${deptOcc.capacity} مقعد)`,
-        );
-      }
-    }
-
-    // Validate new trainer capacity if changing
-    if (dto.trainerProfileId && dto.trainerProfileId !== row.assignedTrainerProfileId) {
-      const trainer = await this.prisma.trainerProfile.findUnique({
-        where: { id: dto.trainerProfileId },
-        select: { organizationId: true, isActive: true, person: { select: { nameAr: true } } },
-      });
-      if (!trainer) throw new NotFoundException('المدرب غير موجود');
-      if (trainer.organizationId !== row.assignedHospitalId) {
-        throw new BadRequestException('المدرب المحدد لا يتبع المستشفى المسند إليه المتدرب');
-      }
-      if (!trainer.isActive) {
-        throw new BadRequestException(
-          `المدرب «${trainer.person?.nameAr ?? ''}» غير مفعّل — لا يمكن إسناد متدربين إليه`,
-        );
-      }
-
-      const today = new Date();
-      const activeLeave = await this.prisma.trainerLeave.findFirst({
-        where: {
-          trainerProfileId: dto.trainerProfileId,
-          status: { in: ['approved', 'active'] },
-          startDate: { lte: today },
-          endDate: { gte: today },
-        },
-      });
-      if (activeLeave) {
-        throw new BadRequestException(
-          `المدرب «${trainer.person?.nameAr ?? ''}» في إجازة حالياً — لا يمكن إسناد متدربين جدد إليه`,
-        );
-      }
-
-      const trainerOcc = await this.capacityService.getTrainerOccupancy(dto.trainerProfileId);
-      if (trainerOcc.available <= 0) {
-        throw new BadRequestException(
-          `المدرب المحدد وصل لأقصى عدد متدربين (${trainerOcc.occupied}/${trainerOcc.capacity})`,
-        );
-      }
-    }
-
-    const newValues: Record<string, unknown> = {};
-    if (dto.departmentId !== undefined) newValues.assignedDepartmentId = dto.departmentId;
-    if (dto.trainerProfileId !== undefined) newValues.assignedTrainerProfileId = dto.trainerProfileId;
-    if (dto.supervisorAccountId !== undefined) newValues.assignedSupervisorAccountId = dto.supervisorAccountId;
-    if (dto.startDate !== undefined) newValues.startDate = new Date(dto.startDate);
-    if (dto.endDate !== undefined) newValues.endDate = new Date(dto.endDate);
-
-    await this.prisma.trainingRequestTrainee.update({
-      where: { id: rowId },
-      data: { ...newValues, updatedById: user.accountId } as any,
-    });
-
-    await this.audit(
-      user,
-      row.trainingRequest.targetOrgId,
-      'hospital_change_assignment',
+    const effectiveScope = scope || (await this.scopeContext.resolve(user));
+    return this.allocationService.assignWithinHospital(
       rowId,
-      old,
-      { ...newValues, reason: dto.reason },
+      {
+        departmentId: dto.departmentId,
+        trainerProfileId: dto.trainerProfileId,
+        supervisorAccountId: dto.supervisorAccountId,
+        startDate: dto.startDate ? new Date(dto.startDate) : null,
+        endDate: dto.endDate ? new Date(dto.endDate) : null,
+      },
+      user,
+      effectiveScope,
+      dto.reason,
     );
-    return { success: true, message: 'تم تحديث التعيين بنجاح' };
   }
 
   /** إيقاف مؤقت: allocated/hospital_review → on_hold */
