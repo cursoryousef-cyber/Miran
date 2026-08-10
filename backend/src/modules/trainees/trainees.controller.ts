@@ -538,6 +538,7 @@ export class TraineesController {
         sponsorOrganization: true,
         program: true,
         academicIntake: true,
+        graduationApprovals: true,
         rotations: {
           orderBy: { startDate: 'desc' },
           include: {

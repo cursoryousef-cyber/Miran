@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { BedDouble, Building2, GraduationCap, Plus, Minus, Trash2, UserCog, Users, CheckCircle2, Gauge, Layers, AlertTriangle } from 'lucide-react';
+import { BedDouble, Building2, GraduationCap, Plus, Minus, Trash2, Pencil, UserCog, Users, CheckCircle2, Gauge, Layers, AlertTriangle } from 'lucide-react';
 import {
   Alert,
   Box,
@@ -73,7 +73,7 @@ interface Breakdown {
 const occupancyColor = (pct: number) => (pct >= 100 ? 'error' : pct >= 80 ? 'warning' : 'success');
 
 export const HospitalCapacity: React.FC = () => {
-  const { user } = useAuth();
+  const { user, hasCapability, hasAnyCapability } = useAuth();
   const queryClient = useQueryClient();
   const hospitalId = user?.activeOrganization?.id as string;
 
@@ -88,6 +88,11 @@ export const HospitalCapacity: React.FC = () => {
     endDate: '',
   });
   const [deptFormError, setDeptFormError] = useState<string | null>(null);
+  const [editDept, setEditDept] = useState<Department | null>(null);
+  const [editDeptForm, setEditDeptForm] = useState({ nameAr: '', capacity: 10 });
+  const [editDeptError, setEditDeptError] = useState<string | null>(null);
+  const [deleteDeptId, setDeleteDeptId] = useState<string | null>(null);
+  const [deleteDeptName, setDeleteDeptName] = useState('');
   const [allocForm, setAllocForm] = useState({
     scopeType: 'department',
     scopeId: '',
@@ -98,6 +103,13 @@ export const HospitalCapacity: React.FC = () => {
   });
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Create (POST /rotations/departments) accepts DEPARTMENT_MANAGE or CAPACITY_MANAGE.
+  // Edit/Delete (PATCH/DELETE /rotations/departments/:id) require DEPARTMENT_MANAGE
+  // on the backend — the buttons mirror that exactly so nobody sees an action the
+  // API will refuse.
+  const canAddDept = hasAnyCapability(['department.manage', 'capacity.manage']);
+  const canManageDept = hasCapability('department.manage');
 
   const { data, isLoading } = useQuery<Breakdown>({
     queryKey: ['hospital-capacity', hospitalId],
@@ -175,6 +187,67 @@ export const HospitalCapacity: React.FC = () => {
       endDate: addDeptForm.endDate || undefined,
     });
   };
+
+  // Edit: PATCH /rotations/departments/:id updates the department's own record
+  // (name + capacity), the same row the capacity table renders.
+  const updateDeptDetailsMutation = useMutation({
+    mutationFn: async ({ departmentId, body }: { departmentId: string; body: { nameAr?: string; capacity?: number } }) => {
+      const res = await apiClient.patch(`/rotations/departments/${departmentId}`, body);
+      return res.data;
+    },
+    onSuccess: (res) => {
+      setSuccessMsg(res.message || 'تم تحديث القسم بنجاح');
+      setErrorMsg(null);
+      setEditDept(null);
+      setEditDeptError(null);
+      invalidate();
+    },
+    onError: (err: any) => {
+      setEditDeptError(err?.response?.data?.message || 'حدث خطأ أثناء تحديث القسم');
+    },
+  });
+
+  const handleSaveEditDepartment = () => {
+    setEditDeptError(null);
+    if (!editDeptForm.nameAr.trim()) {
+      setEditDeptError('اسم القسم مطلوب');
+      return;
+    }
+    if (editDeptForm.capacity < 1) {
+      setEditDeptError('عدد المقاعد يجب أن يكون 1 على الأقل');
+      return;
+    }
+    if (!editDept) return;
+    updateDeptDetailsMutation.mutate({
+      departmentId: editDept.id,
+      body: {
+        nameAr: editDeptForm.nameAr.trim(),
+        capacity: editDeptForm.capacity,
+      },
+    });
+  };
+
+  // Delete: the backend refuses (ConflictException) when the department is still
+  // referenced by live records and explains which relations block it — that reason
+  // is surfaced verbatim, never replaced by an empty success or a generic error.
+  const deleteDeptMutation = useMutation({
+    mutationFn: async (departmentId: string) => {
+      const res = await apiClient.delete(`/rotations/departments/${departmentId}`);
+      return res.data;
+    },
+    onSuccess: (res) => {
+      setSuccessMsg(res.message || 'تم حذف القسم');
+      setErrorMsg(null);
+      setDeleteDeptId(null);
+      setDeleteDeptName('');
+      invalidate();
+    },
+    onError: (err: any) => {
+      setErrorMsg(err?.response?.data?.message || 'تعذر حذف القسم');
+      setDeleteDeptId(null);
+      setDeleteDeptName('');
+    },
+  });
 
   const upsertAllocMutation = useMutation({
     mutationFn: async () => {
@@ -317,15 +390,17 @@ export const HospitalCapacity: React.FC = () => {
           {/* الأقسام والسعة المتاحة */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
             <Typography variant="subtitle1" fontWeight={700}>الطاقة لكل قسم</Typography>
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<Plus size={16} />}
-              onClick={() => setOpenAddDeptDialog(true)}
-              sx={{ backgroundColor: '#0F766E', '&:hover': { backgroundColor: '#0D655E' } }}
-            >
-              إضافة قسم جديد
-            </Button>
+            {canAddDept && (
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<Plus size={16} />}
+                onClick={() => setOpenAddDeptDialog(true)}
+                sx={{ backgroundColor: '#0F766E', '&:hover': { backgroundColor: '#0D655E' } }}
+              >
+                إضافة قسم جديد
+              </Button>
+            )}
           </Box>
           <TableContainer component={Paper} sx={{ mb: 3 }}>
             <Table size="small">
@@ -338,6 +413,7 @@ export const HospitalCapacity: React.FC = () => {
                   <TableCell>نسبة الإشغال</TableCell>
                   <TableCell>تحديث السعة</TableCell>
                   <TableCell>حفظ</TableCell>
+                  {canManageDept && <TableCell>إجراءات</TableCell>}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -366,6 +442,24 @@ export const HospitalCapacity: React.FC = () => {
                           حفظ
                         </Button>
                       </TableCell>
+                      {canManageDept && (
+                        <TableCell>
+                          <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            <IconButton size="small" color="primary" title="تعديل القسم"
+                              onClick={() => {
+                                setEditDept(d);
+                                setEditDeptForm({ nameAr: d.nameAr, capacity: d.capacity });
+                                setEditDeptError(null);
+                              }}>
+                              <Pencil size={16} />
+                            </IconButton>
+                            <IconButton size="small" color="error" title="حذف القسم"
+                              onClick={() => { setDeleteDeptId(d.id); setDeleteDeptName(d.nameAr); }}>
+                              <Trash2 size={16} />
+                            </IconButton>
+                          </Box>
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
@@ -569,6 +663,87 @@ export const HospitalCapacity: React.FC = () => {
           <Button onClick={() => setOpenAllocDialog(false)}>إلغاء</Button>
           <Button variant="contained" onClick={() => upsertAllocMutation.mutate()} disabled={upsertAllocMutation.isPending || !allocForm.scopeId}>
             حفظ
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* مودال تعديل قسم */}
+      <Dialog open={Boolean(editDept)} onClose={() => setEditDept(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, borderBottom: '1px solid #E2E8F0', pb: 1.5 }}>
+          تعديل القسم
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2.5 }}>
+          {editDeptError && <Alert severity="error" sx={{ mb: 2 }}>{editDeptError}</Alert>}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
+            <TextField
+              label="اسم القسم"
+              size="small"
+              fullWidth
+              required
+              value={editDeptForm.nameAr}
+              onChange={(e) => setEditDeptForm({ ...editDeptForm, nameAr: e.target.value })}
+            />
+            <Box>
+              <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>عدد المقاعد *</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <IconButton
+                  size="small"
+                  onClick={() => setEditDeptForm((prev) => ({ ...prev, capacity: Math.max(1, prev.capacity - 1) }))}
+                  sx={{ border: '1px solid #CBD5E1', borderRadius: 1.5 }}
+                >
+                  <Minus size={18} />
+                </IconButton>
+                <TextField
+                  type="number"
+                  size="small"
+                  value={editDeptForm.capacity}
+                  onChange={(e) => setEditDeptForm({ ...editDeptForm, capacity: Math.max(1, parseInt(e.target.value) || 1) })}
+                  inputProps={{ min: 1, style: { textAlign: 'center', fontWeight: 700 } }}
+                  sx={{ width: 90 }}
+                />
+                <IconButton
+                  size="small"
+                  onClick={() => setEditDeptForm((prev) => ({ ...prev, capacity: prev.capacity + 1 }))}
+                  sx={{ border: '1px solid #CBD5E1', borderRadius: 1.5 }}
+                >
+                  <Plus size={18} />
+                </IconButton>
+              </Box>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, borderTop: '1px solid #E2E8F0', pt: 1.5 }}>
+          <Button onClick={() => setEditDept(null)} color="inherit">إلغاء</Button>
+          <Button
+            variant="contained"
+            onClick={() => handleSaveEditDepartment()}
+            disabled={updateDeptDetailsMutation.isPending}
+            sx={{ backgroundColor: '#0F766E', '&:hover': { backgroundColor: '#0D655E' } }}
+          >
+            {updateDeptDetailsMutation.isPending ? <CircularProgress size={20} color="inherit" /> : 'حفظ'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* مودال تأكيد حذف القسم */}
+      <Dialog open={Boolean(deleteDeptId)} onClose={() => setDeleteDeptId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, color: '#B91C1C', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Trash2 size={18} /> حذف القسم
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mt: 1 }}>هل أنت متأكد من حذف هذا القسم؟</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>{deleteDeptName}</Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setDeleteDeptId(null)} color="inherit">إلغاء</Button>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<Trash2 size={16} />}
+            onClick={() => deleteDeptId && deleteDeptMutation.mutate(deleteDeptId)}
+            disabled={deleteDeptMutation.isPending}
+          >
+            {deleteDeptMutation.isPending ? <CircularProgress size={18} color="inherit" /> : 'نعم، حذف القسم'}
           </Button>
         </DialogActions>
       </Dialog>

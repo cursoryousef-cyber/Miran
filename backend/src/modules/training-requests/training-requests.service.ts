@@ -93,6 +93,19 @@ export class TrainingRequestsService {
         targetOrg: true,
         program: true,
         academicIntake: true,
+        traineeAllocations: {
+          include: {
+            hospital: { select: { id: true, nameAr: true, nameEn: true, code: true } },
+            department: { select: { id: true, nameAr: true, nameEn: true } },
+            trainerProfile: {
+              select: {
+                id: true,
+                person: { select: { id: true, nameAr: true, nameEn: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
 
@@ -100,7 +113,32 @@ export class TrainingRequestsService {
       throw new NotFoundException('طلب التدريب غير موجود');
     }
 
-    return { data: request };
+    const auditLogs = await this.prisma.auditLog.findMany({
+      where: {
+        OR: [
+          { entityType: 'training_request', entityId: id },
+          { entityType: 'training_request_trainee', entityId: { in: (await this.prisma.trainingRequestTrainee.findMany({ where: { trainingRequestId: id }, select: { id: true } })).map(t => t.id) } },
+        ],
+      },
+      include: {
+        actor: {
+          select: {
+            id: true,
+            email: true,
+            person: { select: { nameAr: true, nameEn: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+    }).catch(() => []);
+
+    return {
+      data: {
+        ...request,
+        auditLogs,
+      },
+    };
   }
 
   /**

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, ForbiddenException, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser } from '../../common/decorators';
@@ -37,10 +37,6 @@ export class RotationsController {
     CAPABILITIES.TRAINEE_VIEW_ASSIGNED,
   )
   async findAll(@CurrentUser() user: IAuthenticatedUser) {
-    if (user.roles.includes('hospital_administrator')) {
-      throw new ForbiddenException('مدير المستشفى لا يملك صلاحية على الروتيشنات التدريبية');
-    }
-
     if (user.roles.includes('trainee')) {
       const traineeProfile = await this.prisma.traineeProfile.findFirst({
         where: { person: { userAccounts: { some: { id: user.accountId } } } },
@@ -63,7 +59,13 @@ export class RotationsController {
         where: { trainerProfileId: trainer.id, status: 'active' },
         include: {
           department: true,
-          traineeProfile: { include: { person: true } },
+          traineeProfile: {
+            include: {
+              person: {
+                include: { userAccounts: { select: { id: true, isActive: true } } },
+              },
+            },
+          },
           trainerProfile: { include: { person: true } },
         },
         orderBy: { startDate: 'asc' },
@@ -182,7 +184,7 @@ export class RotationsController {
   @ApiOperation({ summary: 'قائمة الأقسام السريرية وطاقتها الاستيعابية' })
   async getDepartments(@CurrentUser() user: IAuthenticatedUser) {
     const departments = await this.prisma.department.findMany({
-      where: { organizationId: user.organizationId },
+      where: { organizationId: user.organizationId, isActive: true, deletedAt: null },
       include: {
         _count: { select: { rotations: true, trainerProfiles: true } },
       },
@@ -253,9 +255,63 @@ export class RotationsController {
   @Delete('departments/:id')
   @RequireCapability(CAPABILITIES.DEPARTMENT_MANAGE)
   @ScopedResource('department', 'id')
-  @ApiOperation({ summary: 'حذف قسم سريري' })
-  async deleteDepartment(@Param('id') id: string) {
-    await this.prisma.department.delete({ where: { id } });
-    return { success: true, message: 'تم حذف القسم' };
+  @ApiOperation({ summary: 'حذف قسم سريري (رفض عند الارتباط بسجلات قائمة، تعطيل ناعم عند خلوّه)' })
+  async deleteDepartment(
+    @Param('id') id: string,
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    // Never a hard delete. Rotations, trainer profiles, allocations, shifts and
+    // case logs all reference the department, so deleting the row would trip a
+    // foreign key and orphan every record that names it. First count the live
+    // relations — any positive count blocks the delete and the caller is told
+    // exactly which relations stand in the way (and the reason is logged). A
+    // pristine department is still removed softly (isActive=false + deletedAt) so
+    // historical references keep resolving and the record stays in audit history.
+    const dept = await this.prisma.department.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            caseLogs: true,
+            clinicalPrivileges: true,
+            commonMistakes: true,
+            objectives: true,
+            orgAssignments: true,
+            rotations: true,
+            shifts: true,
+            trainerCalls: true,
+            trainerProfiles: true,
+            trainerReassignments: true,
+            trainingRequestTrainees: true,
+            traineeAllocations: true,
+          },
+        },
+      },
+    });
+    if (!dept) throw new NotFoundException('القسم غير موجود');
+
+    const counts = dept._count as Record<string, number>;
+    const blockingRelations: Array<[string, number]> = Object.entries(counts)
+      .filter(([, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1]) as Array<[string, number]>;
+
+    if (blockingRelations.length > 0) {
+      for (const [relation, count] of blockingRelations) {
+        console.log(
+          `DELETE BLOCKED BY EXISTING RELATION → Relation: ${relation} (count=${count}) — department ${id}`,
+        );
+      }
+      throw new ConflictException(
+        `لا يمكن حذف هذا القسم لارتباطه بسجلات قائمة (${blockingRelations
+          .map(([r, n]) => `${r}: ${n}`)
+          .join('، ')}).`,
+      );
+    }
+
+    const updated = await this.prisma.department.update({
+      where: { id },
+      data: { isActive: false, deletedAt: new Date(), deletedById: user.accountId },
+    });
+    return { success: true, message: 'تم حذف القسم', data: updated };
   }
 }

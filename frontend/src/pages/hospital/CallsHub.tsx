@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button, TextField, Select, MenuItem, FormControl,
-  InputLabel, Tooltip,
+  InputLabel, Tooltip, Dialog, DialogTitle, DialogContent,
+  DialogActions, Alert, CircularProgress,
 } from '@mui/material';
 import {
   Phone, PhoneOff, Clock, MapPin,
-  TrendingUp, Zap, Radio,
+  TrendingUp, Zap, Radio, Plus, RefreshCw,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { Badge, DataPageShell, EmptyState, Panel, StatBar, Surface } from '../../components/ui';
@@ -223,8 +224,25 @@ export const CallsHub: React.FC = () => {
         { label: 'المتدربون بالمؤشر', value: (diligenceData ?? []).length, icon: TrendingUp, tone: 'success' },
       ] : undefined}
       actions={
-        isTrainer && activeCount > 0 ? (
-          <Badge label={`${activeCount} نداء نشط الآن`} tone="primary" />
+        isTrainer ? (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {activeCount > 0 && <Badge label={`${activeCount} نداء نشط الآن`} tone="primary" />}
+            <Button
+              variant="contained"
+              startIcon={<Plus size={16} />}
+              onClick={() => {
+                const el = document.getElementById('launch-form');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+                else {
+                  const launchBtn = document.getElementById('submit-launch-btn');
+                  if (launchBtn) launchBtn.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              style={{ background: 'linear-gradient(135deg, #DC2626 0%, #EF4444 100%)', fontWeight: 700 }}
+            >
+              إضافة نداء جديد
+            </Button>
+          </div>
         ) : undefined
       }
     >
@@ -376,7 +394,8 @@ export const CallsHub: React.FC = () => {
           })}
 
           {/* Launch Form */}
-          <Panel title="إطلاق نداء جديد" icon={Phone} tone="primary">
+          <div id="launch-form">
+            <Panel title="إطلاق نداء جديد" icon={Phone} tone="primary">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: space.md, marginBottom: space.md }}>
               <FormControl size="small" fullWidth>
                 <InputLabel>نوع النداء</InputLabel>
@@ -456,6 +475,7 @@ export const CallsHub: React.FC = () => {
               {launching ? 'جارٍ الإطلاق...' : 'إطلاق النداء 🔔'}
             </Button>
           </Panel>
+          </div>
 
           {/* Diligence Leaderboard */}
           {(diligenceData ?? []).length > 0 && (

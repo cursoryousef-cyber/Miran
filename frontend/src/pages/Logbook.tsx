@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { PageHeader, DataPageShell } from '../components/ui';
 import {
@@ -82,18 +82,64 @@ export const LogbookPage: React.FC = () => {
     },
   });
 
-  // Trainer's own assigned trainees — needed to pick who a log entry is for
-  // (trainee role resolves itself server-side, everyone else must specify).
+  // ── Trainer-side data (Feature B) ──────────────────────────────────────────
+  // A trainer picks the trainees/rotations actually assigned to them — never a
+  // raw typed ID. TraineeProfile.id comes from /operations/trainer/groups (the
+  // log-entry POST needs traineeProfileId), while the evaluation & midpoint
+  // endpoints additionally require rotationId + evaluateeId (UserAccount.id).
+  // That pair is only reachable through the trainer branch of GET /rotations,
+  // which embeds each active rotation's trainee and their user accounts.
   const isTrainerRole = primaryRole === 'trainer' || primaryRole === 'training_supervisor';
-  const { data: trainerGroupsData } = useQuery({
+  const canViewSlowEvalReport = ['trainer', 'training_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'academic_supervisor', 'org_manager', 'platform_owner'].includes(primaryRole);
+
+  const {
+    data: trainerGroupsData,
+    isLoading: trainerGroupsLoading,
+    isError: trainerGroupsError,
+    refetch: refetchTrainerGroups,
+  } = useQuery({
     queryKey: ['trainer-groups-for-logbook'],
     enabled: isTrainerRole,
     queryFn: async () => {
-      const res = await apiClient.get('/operations/trainer/groups').catch(() => ({ data: { data: [] } }));
+      const res = await apiClient.get('/operations/trainer/groups');
       return res.data?.data ?? [];
     },
   });
   const assignedTrainees = (trainerGroupsData ?? []).flatMap((g: any) => g.trainees ?? []);
+
+  const {
+    data: rotationsData,
+    isLoading: rotationsLoading,
+    isError: rotationsError,
+    refetch: refetchRotations,
+  } = useQuery({
+    queryKey: ['trainer-rotations-for-evals'],
+    enabled: isTrainerRole,
+    queryFn: async () => {
+      const res = await apiClient.get('/rotations');
+      return res.data?.data ?? [];
+    },
+  });
+
+  // The rotation a trainer picks in the evaluation / midpoint forms. A rotation
+  // uniquely identifies its trainee, so one dropdown supplies both required IDs
+  // (rotationId + evaluateeId = the trainee's UserAccount.id).
+  const [evalRotationId, setEvalRotationId] = useState('');
+  const [midpointRotationId, setMidpointRotationId] = useState('');
+  const selectedEvalRotation = (rotationsData ?? []).find((r: any) => r.id === evalRotationId);
+  const evalEvaluateeId =
+    selectedEvalRotation?.traineeProfile?.person?.userAccounts?.find((ua: any) => ua.isActive)?.id ??
+    selectedEvalRotation?.traineeProfile?.person?.userAccounts?.[0]?.id;
+
+  // Auto-select the single active rotation when there is exactly one (the common
+  // trainer case) so no manual ID entry is ever needed.
+  useEffect(() => {
+    if (!isTrainerRole || rotationsLoading || !rotationsData) return;
+    if (rotationsData.length === 1) {
+      if (!evalRotationId) setEvalRotationId(rotationsData[0].id);
+      if (!midpointRotationId) setMidpointRotationId(rotationsData[0].id);
+    }
+  }, [rotationsData, rotationsLoading, isTrainerRole, evalRotationId, midpointRotationId]);
 
   const { data: competenciesData } = useQuery({
     queryKey: ['competencies-portfolio'],
@@ -111,11 +157,12 @@ export const LogbookPage: React.FC = () => {
     },
   });
 
-  // Pending evaluations (trainee) / received evaluations
+  // Pending evaluations (trainee) / received evaluations — API failures are
+  // surfaced, never swallowed into an empty state.
   const { data: pendingEvalsData, refetch: refetchPending } = useQuery({
     queryKey: ['my-pending-evals'],
     queryFn: async () => {
-      const res = await apiClient.get('/operations/evaluations/my-pending').catch(() => ({ data: { data: null } }));
+      const res = await apiClient.get('/operations/evaluations/my-pending');
       return res.data?.data ?? null;
     },
   });
@@ -124,16 +171,17 @@ export const LogbookPage: React.FC = () => {
   const { data: evalFormsData } = useQuery({
     queryKey: ['evaluation-forms'],
     queryFn: async () => {
-      const res = await apiClient.get('/operations/evaluations/forms').catch(() => ({ data: { data: [] } }));
+      const res = await apiClient.get('/operations/evaluations/forms');
       return res.data?.data ?? [];
     },
   });
 
-  // Slow-evaluator report (trainer/supervisor)
+  // Slow-evaluator report — trainer-side roles only (endpoint 403s otherwise).
   const { data: slowEvalData } = useQuery({
     queryKey: ['slow-evaluators'],
+    enabled: canViewSlowEvalReport,
     queryFn: async () => {
-      const res = await apiClient.get('/operations/evaluations/slow-evaluators').catch(() => ({ data: { data: [] } }));
+      const res = await apiClient.get('/operations/evaluations/slow-evaluators');
       return res.data?.data ?? [];
     },
   });
@@ -527,12 +575,38 @@ export const LogbookPage: React.FC = () => {
                   التقييم النهائي يتطلب: (١) إتمام اجتماع منتصف الدورة، (٢) إكمال المتدرب تقييمه للقسم.
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 }}>
-                  <TextField label="معرّف الروتيشن (Rotation ID)" size="small" fullWidth
-                    inputProps={{ id: 'trainer-eval-rotation-id' }}
-                    sx={{ '& label': { color: '#64748B' }, '& input': { color: '#0F172A' } }} />
-                  <TextField label="معرّف حساب المتدرب" size="small" fullWidth
-                    inputProps={{ id: 'trainer-eval-trainee-id' }}
-                    sx={{ '& label': { color: '#64748B' }, '& input': { color: '#0F172A' } }} />
+                  <FormControl size="small" fullWidth required error={!evalRotationId && !rotationsLoading}>
+                    <InputLabel sx={{ color: '#64748B' }}>المتدرب / الروتيشن النشط</InputLabel>
+                    <Select
+                      value={evalRotationId}
+                      onChange={(e) => setEvalRotationId(e.target.value)}
+                      label="المتدرب / الروتيشن النشط"
+                      sx={{ color: '#0F172A', '& .MuiOutlinedInput-notchedOutline': { borderColor: '#CBD5E1' } }}
+                    >
+                      {(rotationsData ?? []).map((r: any) => (
+                        <MenuItem key={r.id} value={r.id}>
+                          {r.traineeProfile?.person?.nameAr ?? 'متدرب'} — {r.department?.nameAr ?? ''}
+                          {' '}({new Date(r.startDate).toLocaleDateString('ar-SA')})
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  {rotationsLoading && (
+                    <div style={{ gridColumn: '1 / -1', fontSize: 12, color: '#64748B' }}>جارٍ تحميل الروتيشنات المسندة...</div>
+                  )}
+                  {rotationsError && (
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#DC2626' }}>
+                      تعذر تحميل المتدربين حاليًا
+                      <Button size="small" variant="outlined" onClick={() => refetchRotations()} style={{ borderColor: '#DC2626', color: '#DC2626', fontSize: 11 }}>
+                        إعادة المحاولة
+                      </Button>
+                    </div>
+                  )}
+                  {!rotationsLoading && !rotationsError && (rotationsData ?? []).length === 0 && (
+                    <div style={{ gridColumn: '1 / -1', fontSize: 13, color: '#64748B' }}>
+                      لا يوجد متدربون مسندون إليك حاليًا
+                    </div>
+                  )}
                   <FormControl size="small" fullWidth>
                     <InputLabel sx={{ color: '#64748B' }}>نوع التقييم</InputLabel>
                     <Select defaultValue="mid_rotation" inputProps={{ id: 'trainer-eval-type' }}
@@ -559,16 +633,18 @@ export const LogbookPage: React.FC = () => {
                 {evalMsg && <div style={{ marginBottom: 12, color: evalMsg.startsWith('✅') ? '#059669' : '#DC2626', fontWeight: 700 }}>{evalMsg}</div>}
                 <Button
                   variant="contained"
-                  disabled={evalSubmitting}
+                  disabled={evalSubmitting || !evalRotationId}
                   onClick={async () => {
                     setEvalSubmitting(true); setEvalMsg(null);
-                    const rotationId = (document.getElementById('trainer-eval-rotation-id') as HTMLInputElement)?.value;
-                    const evaluateeId = (document.getElementById('trainer-eval-trainee-id') as HTMLInputElement)?.value;
+                    const rotationId = evalRotationId;
+                    const evaluateeId = evalEvaluateeId;
                     const scoreEl = document.getElementById('trainer-eval-score') as HTMLInputElement;
                     const comments = (document.getElementById('trainer-eval-comments') as HTMLTextAreaElement)?.value;
                     const formId = (document.getElementById('trainer-eval-form-id') as HTMLInputElement)?.value;
                     const evalTypeEl = document.getElementById('trainer-eval-type') as HTMLInputElement;
                     const secondsSpent = Math.round((Date.now() - evalStartRef.current) / 1000);
+                    if (!rotationId) { setEvalMsg('❌ اختر المتدرب / الروتيشن أولاً'); setEvalSubmitting(false); return; }
+                    if (!evaluateeId) { setEvalMsg('❌ تعذر تحديد حساب المتدرب لهذا الروتيشن'); setEvalSubmitting(false); return; }
                     try {
                       await apiClient.post('/operations/evaluations', {
                         rotationId, evaluateeId, formId: formId || evalFormsData?.[0]?.id,
@@ -596,17 +672,29 @@ export const LogbookPage: React.FC = () => {
                   الاجتماع إلزامي ولا يُفتح التقييم النهائي إن لم يُنفَّذ.
                 </p>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                  <TextField label="معرّف الروتيشن" size="small"
-                    inputProps={{ id: 'midpoint-rotation-id' }}
-                    sx={{ '& label': { color: '#64748B' }, '& input': { color: '#0F172A' } }} />
+                  <FormControl size="small" required error={!midpointRotationId} sx={{ minWidth: 220 }}>
+                    <InputLabel sx={{ color: '#64748B' }}>المتدرب / الروتيشن النشط</InputLabel>
+                    <Select
+                      value={midpointRotationId}
+                      onChange={(e) => setMidpointRotationId(e.target.value)}
+                      label="المتدرب / الروتيشن النشط"
+                      sx={{ color: '#0F172A', '& .MuiOutlinedInput-notchedOutline': { borderColor: '#CBD5E1' } }}
+                    >
+                      {(rotationsData ?? []).map((r: any) => (
+                        <MenuItem key={r.id} value={r.id}>
+                          {r.traineeProfile?.person?.nameAr ?? 'متدرب'} — {r.department?.nameAr ?? ''}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
                   <TextField label="ملاحظات الاجتماع" size="small"
                     inputProps={{ id: 'midpoint-notes' }}
                     sx={{ flex: 1, '& label': { color: '#64748B' }, '& input': { color: '#0F172A' } }} />
                   <Button variant="outlined"
                     onClick={async () => {
-                      const rotId = (document.getElementById('midpoint-rotation-id') as HTMLInputElement)?.value;
+                      const rotId = midpointRotationId;
                       const notesVal = (document.getElementById('midpoint-notes') as HTMLInputElement)?.value;
-                      if (!rotId) return;
+                      if (!rotId) { setEvalMsg('❌ اختر المتدرب / الروتيشن أولاً'); return; }
                       try {
                         await apiClient.patch(`/operations/evaluations/midpoint/${rotId}/complete`, { notes: notesVal });
                         setEvalMsg('✅ تم تسجيل اجتماع منتصف الدورة.');
@@ -614,6 +702,7 @@ export const LogbookPage: React.FC = () => {
                         setEvalMsg(`❌ ${e?.response?.data?.message ?? 'حدث خطأ'}`);
                       }
                     }}
+                    disabled={!midpointRotationId}
                     style={{ borderColor: '#059669', color: '#059669', fontWeight: 700, height: 40 }}
                   >
                     تسجيل الاجتماع
@@ -632,21 +721,39 @@ export const LogbookPage: React.FC = () => {
         </DialogTitle>
         <DialogContent style={{ backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '20px' }}>
           {isTrainerRole && (
-            <FormControl size="small" fullWidth required error={!selectedTraineeId}>
-              <InputLabel id="trainee-select-label">المتدرب</InputLabel>
-              <Select
-                labelId="trainee-select-label"
-                value={selectedTraineeId}
-                label="المتدرب"
-                onChange={(e) => setSelectedTraineeId(e.target.value)}
-              >
-                {assignedTrainees.map((t: any) => (
-                  <MenuItem key={t.id} value={t.id}>
-                    {t.nameAr} {t.traineeNumber ? `(${t.traineeNumber})` : ''}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <>
+              <FormControl size="small" fullWidth required error={!selectedTraineeId && !trainerGroupsLoading}>
+                <InputLabel id="trainee-select-label">المتدرب</InputLabel>
+                <Select
+                  labelId="trainee-select-label"
+                  value={selectedTraineeId}
+                  label="المتدرب"
+                  onChange={(e) => setSelectedTraineeId(e.target.value)}
+                >
+                  {assignedTrainees.map((t: any) => (
+                    <MenuItem key={t.id} value={t.id}>
+                      {t.nameAr} {t.traineeNumber ? `(${t.traineeNumber})` : ''}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {trainerGroupsLoading && (
+                <div style={{ fontSize: 12, color: '#64748B' }}>جارٍ تحميل المتدربين المسندين...</div>
+              )}
+              {trainerGroupsError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#DC2626' }}>
+                  تعذر تحميل المتدربين حاليًا
+                  <Button size="small" variant="outlined" onClick={() => refetchTrainerGroups()} style={{ borderColor: '#DC2626', color: '#DC2626', fontSize: 11 }}>
+                    إعادة المحاولة
+                  </Button>
+                </div>
+              )}
+              {!trainerGroupsLoading && !trainerGroupsError && assignedTrainees.length === 0 && (
+                <div style={{ fontSize: 13, color: '#64748B' }}>
+                  لا يوجد متدربون مسندون إليك حاليًا
+                </div>
+              )}
+            </>
           )}
 
           <TextField

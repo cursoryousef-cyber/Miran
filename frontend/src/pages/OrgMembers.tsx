@@ -40,12 +40,36 @@ const ROLE_LABELS: Record<string, string> = {
   trainee: 'متدرب',
 };
 
+// The backend gates each org-members mutation behind its own @RequireRoles list.
+// The action buttons mirror those lists exactly, so a viewer never sees a button
+// whose call the API will refuse with «ليس لديك الدور المطلوب لهذا الإجراء».
+// POST /org-members and PATCH /org-members/:id share one list.
+const ADD_MEMBER_ROLES = [
+  'org_manager', 'platform_owner', 'cluster_administrator', 'training_director',
+  'hospital_administrator', 'hospital_training_admin', 'university_administrator',
+];
+// GET/PATCH /org-members/:id/permissions
+const MANAGE_PERMISSIONS_ROLES = [
+  'org_manager', 'platform_owner', 'cluster_administrator', 'training_director',
+  'hospital_training_admin', 'university_administrator',
+];
+// DELETE /org-members/:id (تعطيل) and PATCH /org-members/:id/activate
+const MANAGE_ACTIVE_ROLES = [
+  'org_manager', 'platform_owner', 'cluster_administrator',
+  'hospital_administrator', 'hospital_training_admin',
+];
+
 // ── OrgMembers Page ───────────────────────────────────────────────────────────
 export const OrgMembersPage: React.FC = () => {
-  const { user } = useAuth();
+  const { primaryRole } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const orgId = searchParams.get('orgId') || '';
+
+  const canAdd = ADD_MEMBER_ROLES.includes(primaryRole);
+  const canEdit = ADD_MEMBER_ROLES.includes(primaryRole);
+  const canManagePermissions = MANAGE_PERMISSIONS_ROLES.includes(primaryRole);
+  const canManageActive = MANAGE_ACTIVE_ROLES.includes(primaryRole);
 
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [roles, setRoles] = useState<RoleDef[]>([]);
@@ -172,13 +196,15 @@ export const OrgMembersPage: React.FC = () => {
 
           <ViewToggle value={view} onChange={setView} />
 
-          <Button
-            variant="contained"
-            onClick={() => setShowAddModal(true)}
-            sx={{ background: colour.primary, fontWeight: 700, borderRadius: 2, marginRight: 'auto' }}
-          >
-            إضافة عضو جديد +
-          </Button>
+          {canAdd && (
+            <Button
+              variant="contained"
+              onClick={() => setShowAddModal(true)}
+              sx={{ background: colour.primary, fontWeight: 700, borderRadius: 2, marginRight: 'auto' }}
+            >
+              إضافة عضو جديد +
+            </Button>
+          )}
         </div>
       }
     >
@@ -222,14 +248,14 @@ export const OrgMembersPage: React.FC = () => {
                   { label: 'رقم الجوال', value: member.phone || '—', tone: 'neutral' },
                 ]}
                 actions={[
-                  { label: 'تعديل', icon: Edit, tone: 'warning', onClick: () => setEditMember(member) },
-                  { label: 'إدارة الصلاحيات', icon: KeyRound, tone: 'primary', onClick: () => setPermissionsMember(member) },
-                  {
+                  ...(canEdit ? [{ label: 'تعديل', icon: Edit, tone: 'warning' as const, onClick: () => setEditMember(member) }] : []),
+                  ...(canManagePermissions ? [{ label: 'إدارة الصلاحيات', icon: KeyRound, tone: 'primary' as const, onClick: () => setPermissionsMember(member) }] : []),
+                  ...(canManageActive ? [{
                     label: member.isActive ? 'تعطيل' : 'تفعيل',
                     icon: member.isActive ? ShieldAlert : CheckCircle2,
-                    tone: member.isActive ? 'danger' : 'success',
+                    tone: member.isActive ? ('danger' as const) : ('success' as const),
                     onClick: () => member.isActive ? handleDeactivate(member.id) : handleActivate(member.id),
-                  },
+                  }] : []),
                 ]}
               />
             );
@@ -284,19 +310,23 @@ export const OrgMembersPage: React.FC = () => {
                   </td>
                   <td style={{ padding: `${space.md}px ${space.lg}px` }}>
                     <div style={{ display: 'flex', gap: space.sm }}>
-                      <Button size="small" variant="outlined" onClick={() => setEditMember(member)} sx={{ borderColor: colour.warning, color: colour.warning, fontWeight: 700 }}>
-                        تعديل
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        startIcon={<KeyRound size={14} />}
-                        onClick={() => setPermissionsMember(member)}
-                        sx={{ borderColor: colour.primary, color: colour.primary, fontWeight: 700 }}
-                      >
-                        إدارة الصلاحيات
-                      </Button>
-                      {member.isActive ? (
+                      {canEdit && (
+                        <Button size="small" variant="outlined" onClick={() => setEditMember(member)} sx={{ borderColor: colour.warning, color: colour.warning, fontWeight: 700 }}>
+                          تعديل
+                        </Button>
+                      )}
+                      {canManagePermissions && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<KeyRound size={14} />}
+                          onClick={() => setPermissionsMember(member)}
+                          sx={{ borderColor: colour.primary, color: colour.primary, fontWeight: 700 }}
+                        >
+                          إدارة الصلاحيات
+                        </Button>
+                      )}
+                      {canManageActive && (member.isActive ? (
                         <Button size="small" variant="outlined" onClick={() => handleDeactivate(member.id)} sx={{ borderColor: colour.danger, color: colour.danger, fontWeight: 700 }}>
                           تعطيل
                         </Button>
@@ -304,7 +334,7 @@ export const OrgMembersPage: React.FC = () => {
                         <Button size="small" variant="outlined" onClick={() => handleActivate(member.id)} sx={{ borderColor: colour.success, color: colour.success, fontWeight: 700 }}>
                           تفعيل
                         </Button>
-                      )}
+                      ))}
                     </div>
                   </td>
                 </tr>

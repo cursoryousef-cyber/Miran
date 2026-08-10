@@ -23,7 +23,7 @@ export class OrgMembersController {
 
   // ─── قائمة أعضاء الجهة ───────────────────────────────────────────────────
   @Get()
-  @RequireRoles('org_manager', 'academic_supervisor', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'university_administrator', 'training_supervisor', 'trainer')
+  @RequireRoles('org_manager', 'academic_supervisor', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'hospital_training_admin', 'university_administrator', 'training_supervisor', 'trainer', 'department_head')
   @ApiOperation({ summary: 'قائمة أعضاء الجهة مع أدوارهم' })
   async findAll(
     @CurrentUser() user: IAuthenticatedUser,
@@ -503,7 +503,7 @@ export class OrgMembersController {
 
   // ─── قائمة الأدوار المتاحة ────────────────────────────────────────────────
   @Get('roles/available')
-  @RequireRoles('org_manager', 'academic_supervisor', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'university_administrator')
+  @RequireRoles('org_manager', 'academic_supervisor', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'hospital_training_admin', 'university_administrator', 'training_supervisor', 'trainer', 'department_head')
   @ApiOperation({ summary: 'قائمة الأدوار المتاحة للتعيين' })
   async getAvailableRoles() {
     const roles = await this.prisma.role.findMany({
@@ -516,7 +516,7 @@ export class OrgMembersController {
 
   // ─── قائمة الأقسام ───────────────────────────────────────────────────────
   @Get('departments')
-  @RequireRoles('org_manager', 'academic_supervisor', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'university_administrator', 'training_supervisor', 'trainer')
+  @RequireRoles('org_manager', 'academic_supervisor', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'hospital_training_admin', 'university_administrator', 'training_supervisor', 'trainer', 'department_head')
   @ApiOperation({ summary: 'قائمة الأقسام في الجهة' })
   async getDepartments(@CurrentUser() user: IAuthenticatedUser) {
     const departments = await this.prisma.department.findMany({

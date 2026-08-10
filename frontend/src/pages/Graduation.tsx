@@ -41,7 +41,7 @@ export const Graduation: React.FC = () => {
     queryFn: async () => {
       const res = await apiClient.get('/trainees/incoming');
       const all: any[] = res.data?.data || [];
-      return all.filter((t) => t.applicationStatus === 'active' || t.applicationStatus === 'graduated');
+      return all.filter((t) => !t.applicationStatus || ['active', 'graduated', 'submitted', 'allocated'].includes(t.applicationStatus));
     },
   });
 

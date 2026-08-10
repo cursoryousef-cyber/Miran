@@ -36,7 +36,13 @@ const INCIDENT_TYPES = [
 ];
 
 const MANAGER_ROLES = [
-  'hospital_administrator', 'training_supervisor', 'cluster_administrator', 'platform_owner',
+  'hospital_administrator', 'hospital_training_admin', 'training_supervisor', 'cluster_administrator', 'platform_owner',
+];
+
+// Mirrors the backend POST /incidents @RequireRoles list: only these roles may
+// register a new بلاغ — everyone else sees the page read-only.
+const REPORTER_ROLES = [
+  'trainee', 'trainer', 'training_supervisor', 'hospital_administrator', 'hospital_training_admin', 'cluster_administrator',
 ];
 
 export const Incidents: React.FC = () => {
@@ -108,9 +114,10 @@ export const Incidents: React.FC = () => {
   };
 
   const isManager = MANAGER_ROLES.includes(primaryRole);
+  const isReporter = REPORTER_ROLES.includes(primaryRole);
 
   const openCount = incidents.filter((i: any) => i.status === 'open').length;
-  const investigating = incidents.filter((i: any) => i.status === 'investigating').length;
+  const investigating = incidents.filter((i: any) => i.status === 'under_review').length;
   const resolved = incidents.filter((i: any) => i.status === 'resolved').length;
   const critical = incidents.filter((i: any) => ['critical', 'high'].includes(i.severity)).length;
   const unresolvedCritical = incidents.filter((i: any) => ['critical', 'high'].includes(i.severity) && i.status !== 'resolved').length;
@@ -125,14 +132,16 @@ export const Incidents: React.FC = () => {
               <RefreshCw size={18} />
             </IconButton>
           </Tooltip>
-          <Button
-            variant="contained"
-            startIcon={<Plus size={16} />}
-            onClick={() => setCreateOpen(true)}
-            style={{ background: 'linear-gradient(135deg, #D97706, #d97706)', fontWeight: 700 }}
-          >
-            تسجيل بلاغ جديد
-          </Button>
+          {isReporter && (
+            <Button
+              variant="contained"
+              startIcon={<Plus size={16} />}
+              onClick={() => setCreateOpen(true)}
+              style={{ background: 'linear-gradient(135deg, #D97706, #d97706)', fontWeight: 700 }}
+            >
+              تسجيل بلاغ جديد
+            </Button>
+          )}
         </>}
         loading={isLoading}
         stats={[

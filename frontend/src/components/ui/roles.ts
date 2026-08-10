@@ -2,7 +2,7 @@ import {
   Award, GraduationCap, LayoutDashboard, Network, Stethoscope, UserCog, Users,
   Building2, ClipboardList, FolderGit2, FileSpreadsheet, RotateCcw, BedDouble,
   CheckSquare, BookOpen, AlertTriangle, Shield, Key, Activity, GitMerge, Settings,
-  FileSignature, BellRing, UsersRound, Route, PhoneCall, Inbox,
+  FileSignature, BellRing, UsersRound, Route, PhoneCall, Inbox, Send,
 } from 'lucide-react';
 
 /**
@@ -90,7 +90,11 @@ const CLUSTER_NAV: NavSection[] = [
     items: [
       { name: 'لوحة التجمع', path: '/', icon: Network },
       {
-        name: 'الطلبات الواردة', path: '/affiliations', icon: FolderGit2,
+        name: 'الطلبات الواردة', path: '/affiliations?tab=incoming', icon: FolderGit2,
+        requires: ['training_request.review'],
+      },
+      {
+        name: 'الطلبات المرسلة للمستشفيات', path: '/affiliations?tab=sent', icon: Send,
         requires: ['training_request.review'],
       },
       {
