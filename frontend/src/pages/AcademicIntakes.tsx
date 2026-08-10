@@ -286,7 +286,7 @@ export const AcademicIntakes: React.FC = () => {
                       {intake.program?.nameAr || intake.specialty || 'برنامج امتياز الطب البشري'}
                     </TableCell>
                     <TableCell style={{ color: '#64748B', fontSize: '12px' }}>
-                      {intake.startDate ? new Date(intake.startDate).toISOString().split('T')[0] : '2027-01-01'} إلى {intake.endDate ? new Date(intake.endDate).toISOString().split('T')[0] : '2027-12-31'}
+                      {intake.startDate ? new Date(intake.startDate).toISOString().split('T')[0] : '—'} إلى {intake.endDate ? new Date(intake.endDate).toISOString().split('T')[0] : '—'}
                     </TableCell>
                     <TableCell style={{ fontWeight: 800, color: '#0284C7' }}>{reqCount} طالب</TableCell>
                     <TableCell style={{ fontWeight: 800, color: '#059669' }}>{allocCount} موزع</TableCell>
@@ -371,7 +371,7 @@ export const AcademicIntakes: React.FC = () => {
                 <div>جهة الطلب: <strong>{selectedReq.sourceOrg?.nameAr || 'طلب تدريب داخلي للتجمع'}</strong></div>
                 <div>البرنامج / التخصص: <strong>{selectedReq.program?.nameAr || selectedReq.specialty || 'امتياز الطب البشري'}</strong></div>
                 <div>عدد أطباء الامتياز: <strong>{selectedReq.studentCount} طالب</strong></div>
-                <div>فترة التدريب: <strong>{selectedReq.trainingStartDate ? new Date(selectedReq.trainingStartDate).toISOString().split('T')[0] : '2027-01-01'} إلى {selectedReq.trainingEndDate ? new Date(selectedReq.trainingEndDate).toISOString().split('T')[0] : '2027-12-31'}</strong></div>
+                <div>فترة التدريب: <strong>{selectedReq.trainingStartDate ? new Date(selectedReq.trainingStartDate).toISOString().split('T')[0] : '—'} إلى {selectedReq.trainingEndDate ? new Date(selectedReq.trainingEndDate).toISOString().split('T')[0] : '—'}</strong></div>
               </div>
             </Paper>
           )}
