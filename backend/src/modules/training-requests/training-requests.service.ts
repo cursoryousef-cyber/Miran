@@ -231,7 +231,12 @@ export class TrainingRequestsService {
         studentCount: dto.studentCount,
         priority: dto.priority || 'normal',
         notes: notesPayload,
-        status: isClusterReq ? 'hospital_review' : 'submitted',
+        // Both cluster-originated and university-originated requests enter the
+        // same pipeline at 'submitted'. ('hospital_review' is a per-trainee row
+        // status, not a legal TrainingRequest status — it has no outgoing
+        // transitions and would strand the request. The cluster advances it to
+        // 'auto_allocated' → 'approved' through the normal review flow.)
+        status: 'submitted',
         createdById: user?.accountId,
       },
       include: {
@@ -422,8 +427,18 @@ export class TrainingRequestsService {
     } else {
       // Fallback: no cluster_approved TRT rows yet (Phase 1 staging not used).
       // Distribute request.studentCount seats across hospitals by available capacity.
+      //
+      // targetOrgId is a hospital when the request was created by a cluster user
+      // (the create flow maps a cluster request onto the hospital it targets), so
+      // "hospitals under the target" must also include the target itself — a plain
+      // parentId match finds nothing for those requests. Mirrors
+      // getHospitalCardsMetrics' hospital-or-cluster candidate set.
       const hospitals = await this.prisma.organization.findMany({
-        where: { parentId: request.targetOrgId, status: 'active', deletedAt: null },
+        where: {
+          status: 'active',
+          deletedAt: null,
+          OR: [{ id: request.targetOrgId }, { parentId: request.targetOrgId }],
+        },
         select: { id: true, nameAr: true, code: true, capacity: true },
       });
 

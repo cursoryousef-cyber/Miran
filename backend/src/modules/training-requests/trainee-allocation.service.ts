@@ -479,18 +479,39 @@ export class TraineeAllocationService {
         });
         const trainerAccountId = trainerAccount?.person.userAccounts[0]?.id;
         if (trainerAccountId) {
-          await this.prisma.notification.create({
-            data: {
-              organizationId: openAllocation.hospitalId,
-              userId: trainerAccountId,
-              titleAr: 'طلب إسناد متدرب جديد',
-              bodyAr: 'لديك متدرب مسند بانتظار قبولك — راجع طلبات إسناد المتدربين',
-              type: 'trainee_assignment_request',
-              referenceType: 'Rotation',
-              referenceId: openAllocation.id,
-              sentVia: 'in_app',
+          // Find the rotation that was just created for this assignment — it is
+          // the rotation the trainer needs to accept/reject, so the notification
+          // must point at it, not at the allocation row.
+          const pendingRotation = await this.prisma.rotation.findFirst({
+            where: {
+              traineeProfileId: openAllocation.traineeProfileId,
+              trainerProfileId: openAllocation.trainerProfileId,
+              status: 'pending_acceptance',
             },
+            select: { id: true },
           });
+          if (!pendingRotation) {
+            // No Rotation exists for this assignment. Do NOT fall back to the
+            // allocation id — a Notification whose referenceType says 'Rotation'
+            // must reference a real Rotation or it is a dangling wrong link. Log
+            // and skip instead of creating a notification the trainer cannot act on.
+            console.warn(
+              `[trainee-allocation] Skipped trainer-assignment notification: no pending_acceptance Rotation for trainee ${openAllocation.traineeProfileId} / trainer ${openAllocation.trainerProfileId} (allocation ${openAllocation.id} created without a rotation)`,
+            );
+          } else {
+            await this.prisma.notification.create({
+              data: {
+                organizationId: openAllocation.hospitalId,
+                userId: trainerAccountId,
+                titleAr: 'طلب إسناد متدرب جديد',
+                bodyAr: 'لديك متدرب مسند بانتظار قبولك — راجع طلبات إسناد المتدربين',
+                type: 'trainee_assignment_request',
+                referenceType: 'Rotation',
+                referenceId: pendingRotation.id,
+                sentVia: 'in_app',
+              },
+            });
+          }
         }
       } catch (e) {
         console.warn('Post-allocation activation failed (allocation itself succeeded):', e);

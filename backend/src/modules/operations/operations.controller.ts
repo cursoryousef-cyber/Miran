@@ -124,10 +124,7 @@ export class OperationsController {
     const data = await this.prisma.rotation.update({ where: { id: rotationId }, data: { status: 'active' } });
     await this.audit(user, 'rotation.trainer_accept', 'Rotation', rotationId, data);
 
-    // Recipient is resolved server-side the same way reject already does —
-    // whoever performed the still-open allocation for this trainee at this
-    // hospital, i.e. the hospital training administration — never a
-    // client-supplied id.
+    // Notify the hospital training administration (allocation performer)
     const allocation = await this.prisma.traineeAllocation.findFirst({
       where: { traineeProfileId: rotation.traineeProfileId, hospitalId: rotation.organizationId, status: 'open' },
     });
@@ -137,6 +134,24 @@ export class OperationsController {
         allocation.performedById,
         'تم قبول إسناد المتدرب من قبل المدرب.',
         'تم قبول إسناد المتدرب من قبل المدرب.',
+        'trainee_assignment_accepted',
+        'Rotation',
+        rotationId,
+      );
+    }
+
+    // Notify the trainee that their trainer accepted the assignment
+    const trainee = await this.prisma.traineeProfile.findUnique({
+      where: { id: rotation.traineeProfileId },
+      include: { person: { include: { userAccounts: { select: { id: true }, take: 1 } } } },
+    });
+    const traineeAccountId = trainee?.person?.userAccounts[0]?.id;
+    if (traineeAccountId) {
+      await this.notify(
+        rotation.organizationId,
+        traineeAccountId,
+        'تم قبول إسنادك للمدرب',
+        `تم قبول إسنادك للمدرب — يمكنك الآن بدء التدريب.`,
         'trainee_assignment_accepted',
         'Rotation',
         rotationId,
@@ -167,8 +182,7 @@ export class OperationsController {
     await this.audit(user, 'rotation.trainer_reject', 'Rotation', rotationId, data);
 
     // Send the assignment back to the hospital's training administration by
-    // clearing the trainer/department on the still-open allocation — the same
-    // existing /allocations/department call reassigns it, no new workflow.
+    // clearing the trainer/department on the still-open allocation
     const allocation = await this.prisma.traineeAllocation.findFirst({
       where: { traineeProfileId: rotation.traineeProfileId, hospitalId: rotation.organizationId, status: 'open' },
     });
@@ -189,6 +203,25 @@ export class OperationsController {
         );
       }
     }
+
+    // Notify the trainee that their trainer rejected the assignment
+    const trainee = await this.prisma.traineeProfile.findUnique({
+      where: { id: rotation.traineeProfileId },
+      include: { person: { include: { userAccounts: { select: { id: true }, take: 1 } } } },
+    });
+    const traineeAccountId = trainee?.person?.userAccounts[0]?.id;
+    if (traineeAccountId) {
+      await this.notify(
+        rotation.organizationId,
+        traineeAccountId,
+        'تم رفض إسنادك للمدرب',
+        `تم رفض إسنادك للمدرب — سيتم إعادة تعيينك لمدرب آخر. السبب: ${dto.reason}`,
+        'trainee_assignment_rejected',
+        'Rotation',
+        rotationId,
+      );
+    }
+
     return { success: true, data };
   }
 

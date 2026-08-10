@@ -26,19 +26,22 @@ export const ClusterDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const { data: orgs, isLoading: orgsLoading } = useQuery({
-    queryKey: ['cl-orgs'],
-    queryFn: async () => {
-      const res = await apiClient.get('/organizations', { params: { limit: 100 } }).catch(() => ({ data: { data: [] } }));
-      return res.data?.data ?? [];
-    },
-  });
-
   const { data: requests, isLoading: reqLoading } = useQuery({
     queryKey: ['cl-requests'],
     queryFn: async () => {
       const res = await apiClient.get('/training-requests').catch(() => ({ data: { data: [] } }));
       return res.data?.data ?? [];
+    },
+  });
+
+  // Per-hospital capacity/occupancy comes from the hospital cards endpoint —
+  // the same single source of truth the statistics endpoint now reads — not
+  // from the organisations list, whose `capacity` column is deprecated.
+  const { data: hospitalCards, isLoading: cardsLoading } = useQuery({
+    queryKey: ['cl-hospital-cards'],
+    queryFn: async () => {
+      const res = await apiClient.get('/organizations/hospitals-cards').catch(() => ({ data: [] }));
+      return res.data ?? [];
     },
   });
 
@@ -64,12 +67,12 @@ export const ClusterDashboard: React.FC = () => {
     },
   });
 
-  const hospitals = (orgs ?? []).filter((o: any) => o.organizationType?.code === 'hospital');
+  const hospitals = (hospitalCards ?? []) as any[];
 
   const withLoad = hospitals
     .map((h: any) => {
       const capacity = h.capacity ?? 0;
-      const occupied = h._count?.traineeProfiles ?? 0;
+      const occupied = h.occupied ?? 0;
       return {
         ...h,
         capacity,
@@ -86,8 +89,14 @@ export const ClusterDashboard: React.FC = () => {
   const occupancy = stats?.occupancyPercentage ?? 0;
   const remaining = stats?.availableSeats ?? 0;
 
-  const pending = (requests ?? []).filter((r: any) => ['submitted', 'under_review'].includes(r.status));
-  const awaitingAllocation = (requests ?? []).filter((r: any) => ['approved', 'cluster_approved'].includes(r.status));
+  // Request-level statuses only — 'under_review' is not a real status and
+  // 'cluster_approved' is a trainee-row status, never a request status.
+  const pending = (requests ?? []).filter((r: any) =>
+    ['submitted', 'under_cluster_review', 'resubmitted'].includes(r.status),
+  );
+  const awaitingAllocation = (requests ?? []).filter((r: any) =>
+    ['auto_allocated', 'manually_reallocated', 'allocated', 'hospital_returned_to_cluster'].includes(r.status),
+  );
   const pressured = withLoad.filter((h: any) => h.pct >= 80);
   const noCapacity = withLoad.filter((h: any) => h.capacity === 0);
 
@@ -126,7 +135,7 @@ export const ClusterDashboard: React.FC = () => {
           icon={TrendingUp}
           action={<PanelLink label="إدارة المستشفيات" onClick={() => navigate('/organizations')} />}
         >
-          {chart.length === 0 ? (
+          {cardsLoading ? <PanelSkeleton /> : chart.length === 0 ? (
             <EmptyState icon={Stethoscope} title="لا توجد مستشفيات مسجلة" hint="أضف مستشفيات التجمع لعرض توزيع السعة." />
           ) : (
             <ResponsiveContainer width="100%" height={280}>
@@ -146,7 +155,7 @@ export const ClusterDashboard: React.FC = () => {
         </Panel>
 
         <Panel title="أكثر المستشفيات ضغطاً" icon={Gauge} tone="warning">
-          {withLoad.length === 0 ? (
+          {cardsLoading ? <PanelSkeleton /> : withLoad.length === 0 ? (
             <EmptyState icon={Gauge} title="لا توجد بيانات سعة" />
           ) : (
             withLoad.slice(0, 6).map((h: any) => (

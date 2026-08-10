@@ -36,6 +36,39 @@ export class RotationInputDto {
 }
 
 /**
+ * One hospital allocation row on a training request — how many seats go to
+ * which hospital. Declared as its own class (not `any[]`) because the global
+ * ValidationPipe runs with `whitelist: true`: an untyped `any[]` gets its
+ * nested objects stripped to empty, silently dropping the seats on assign.
+ */
+export class AllocationInputDto {
+  @ApiProperty({ description: 'معرّف المستشفى المستهدف' })
+  @IsString()
+  @IsNotEmpty()
+  hospitalId!: string;
+
+  @ApiPropertyOptional({ description: 'اسم المستشفى' })
+  @IsOptional()
+  @IsString()
+  hospitalName?: string;
+
+  @ApiPropertyOptional({ description: 'رمز المستشفى' })
+  @IsOptional()
+  @IsString()
+  hospitalCode?: string;
+
+  @ApiPropertyOptional({ description: 'عدد المقاعد الموزعة' })
+  @IsOptional()
+  @IsNumber()
+  seats?: number;
+
+  @ApiPropertyOptional({ description: 'القسم المستهدف (اختياري)' })
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+}
+
+/**
  * One trainee proposed alongside the request itself, so a university can submit
  * the request and its roster in a single call. Reuses exactly the same shape and
  * the same validated write path as the standalone
@@ -285,5 +318,7 @@ export class UpdateTrainingRequestDto {
   @ApiPropertyOptional({ description: 'قائمة مستشفيات التوزيع والمقاعد' })
   @IsOptional()
   @IsArray()
-  allocations?: any[];
+  @ValidateNested({ each: true })
+  @Type(() => AllocationInputDto)
+  allocations?: AllocationInputDto[];
 }

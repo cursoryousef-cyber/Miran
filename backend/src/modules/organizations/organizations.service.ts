@@ -252,19 +252,28 @@ export class OrganizationsService {
       orgs.filter((o) => typeById.get(o.organizationTypeId) === code).length;
 
     const hospitals = orgs.filter((o) => typeById.get(o.organizationTypeId) === 'hospital');
-    const totalCapacity = hospitals.reduce((sum, h) => sum + (h.capacity ?? 0), 0);
     const totalTrainees = orgs.reduce((sum, o) => sum + o._count.traineeProfiles, 0);
     const totalTrainers = orgs.reduce((sum, o) => sum + o._count.trainerProfiles, 0);
     const totalDepartments = orgs.reduce((sum, o) => sum + o._count.departments, 0);
 
+    // Hospital capacity/occupancy must come from CapacityService — the single
+    // source of truth — not the deprecated `organizations.capacity` column,
+    // which the service explicitly no longer reads (capacity lives on the
+    // department rows). This mirrors getHospitalCardsMetrics so the statistics
+    // endpoint and the hospital cards never disagree.
+    const hospitalOccupancies = await Promise.all(
+      hospitals.map((h) => this.capacityService.getHospitalOccupancy(h.id)),
+    );
+
     // Occupancy is measured against hospital capacity only, since that is the
     // only capacity that exists — clusters and universities do not host.
-    const hospitalTrainees = hospitals.reduce((sum, h) => sum + h._count.traineeProfiles, 0);
+    const totalCapacity = hospitalOccupancies.reduce((sum, o) => sum + o.capacity, 0);
+    const hospitalTrainees = hospitalOccupancies.reduce((sum, o) => sum + o.occupied, 0);
     const occupancyPercentage = totalCapacity > 0
       ? Math.min(100, Math.round((hospitalTrainees / totalCapacity) * 100)) : 0;
 
-    const pressured = hospitals.filter(
-      (h) => (h.capacity ?? 0) > 0 && h._count.traineeProfiles / h.capacity! >= 0.8,
+    const pressured = hospitalOccupancies.filter(
+      (o) => o.capacity > 0 && o.occupied / o.capacity >= 0.8,
     ).length;
 
     return {
@@ -283,7 +292,7 @@ export class OrganizationsService {
         availableSeats: Math.max(0, totalCapacity - hospitalTrainees),
         occupancyPercentage,
         pressuredHospitals: pressured,
-        hospitalsWithoutCapacity: hospitals.filter((h) => !h.capacity).length,
+        hospitalsWithoutCapacity: hospitalOccupancies.filter((o) => o.capacity === 0).length,
       },
     };
   }

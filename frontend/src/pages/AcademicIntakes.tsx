@@ -34,7 +34,14 @@ import { useAuth } from '../context/AuthContext';
 export const AcademicIntakes: React.FC = () => {
   const { user, hasCapability } = useAuth();
   const navigate = useNavigate();
-  const canCreateBatch = hasCapability('academic_batch.create_from_request') || user?.roles?.some(r => ['platform_owner', 'cluster_manager', 'cluster_administrator', 'hospital_training_admin'].includes(r));
+  // Batch creation is a cluster-scope capability. hospital_training_admin holds
+  // no academic-batch capability, so listing it here would show a button whose
+  // POST always 403s — keep the UI aligned with the backend-authorised set.
+  const canCreateBatch = hasCapability('academic_batch.create_from_request') || user?.roles?.some(r => ['platform_owner', 'cluster_manager', 'cluster_administrator'].includes(r));
+  // A cluster user creating a request is the source org; the backend's
+  // assertRequestDirection then requires the target to be a hospital (or
+  // cluster). A university/entity user must target a cluster instead.
+  const isClusterUser = user?.roles?.some((r: string) => ['cluster_manager', 'cluster_administrator', 'training_director', 'platform_owner', 'system_admin'].includes(r));
   const queryClient = useQueryClient();
 
   const [openModal, setOpenModal] = useState(false);
@@ -44,7 +51,10 @@ export const AcademicIntakes: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // New Training Request form state
+  // New Training Request form state. targetOrgId is a REQUIRED DTO field
+  // (@IsUUID @IsNotEmpty) — for a cluster user it is the receiving hospital,
+  // for a university/entity user it is the receiving cluster. programId is
+  // optional at creation but mandatory later for `academic-intakes/from-request`.
   const [reqFormData, setReqFormData] = useState({
     requestType: 'internal_request',
     specialty: 'طب باطني',
@@ -53,6 +63,8 @@ export const AcademicIntakes: React.FC = () => {
     trainingEndDate: new Date(Date.now() + 180 * 86400000).toISOString().split('T')[0],
     trainingLevel: 'R1',
     targetHospitalId: '',
+    targetOrgId: '',
+    programId: '',
     notes: '',
   });
 
@@ -71,19 +83,48 @@ export const AcademicIntakes: React.FC = () => {
     queryFn: async () => {
       const res = await apiClient.get('/training-requests');
       const all = res.data?.data || res.data || [];
-      return all.filter((r: any) => r.status === 'approved' || r.status === 'cluster_approved');
+      // 'approved' is the request-level status eligible for batch creation;
+      // 'cluster_approved' is a trainee-row status and never appears here.
+      return all.filter((r: any) => r.status === 'approved');
     },
     enabled: !!canCreateBatch,
   });
 
-  // Load available hospitals for internal training request
+  // Load available hospitals for internal training request. The backend list
+  // endpoint only filters by typeId, not `type`, so `?type=hospital` is ignored
+  // and would return the cluster itself — filter to hospital-type rows here,
+  // mirroring the cluster filter above.
   const { data: hospitalsData } = useQuery({
     queryKey: ['available-hospitals-intakes'],
     queryFn: async () => {
-      const res = await apiClient.get('/organizations?type=hospital');
-      return res.data?.data || res.data || [];
+      const res = await apiClient.get('/organizations');
+      const all = res.data?.data || res.data || [];
+      return all.filter((o: any) => o.organizationType?.code === 'hospital');
     },
   });
+
+  // Programs from the catalog — the request must reference one so a batch can
+  // be created from it later (academic-intakes/from-request requires programId).
+  const { data: programsData } = useQuery({
+    queryKey: ['programs-list'],
+    queryFn: async () => {
+      const res = await apiClient.get('/programs').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? res.data ?? [];
+    },
+  });
+  const programs = programsData || [];
+
+  // Clusters — the receiving org for university/entity-originated requests
+  // (backend direction rule: university → cluster only).
+  const { data: clustersData } = useQuery({
+    queryKey: ['clusters-list'],
+    queryFn: async () => {
+      const res = await apiClient.get('/organizations').catch(() => ({ data: [] }));
+      const all = Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
+      return all.filter((o: any) => o.organizationType?.code === 'cluster' || o.type === 'cluster' || o.code?.includes('CLUSTER'));
+    },
+  });
+  const clusters = clustersData || [];
 
   const createBatchFromRequestMutation = useMutation({
     mutationFn: async () => {
@@ -110,15 +151,22 @@ export const AcademicIntakes: React.FC = () => {
 
   const createNewRequestMutation = useMutation({
     mutationFn: async (payload: any) => {
+      // targetOrgId is mandatory in CreateTrainingRequestDto. For a cluster
+      // user the target is the hospital they picked (sent as both targetOrgId
+      // and targetHospitalId — the service maps cluster requests onto
+      // targetHospitalId); for a university/entity user the target is a cluster.
+      const targetOrgId = isClusterUser ? payload.targetHospitalId : payload.targetOrgId;
       const cleanPayload: any = {
         requestType: payload.requestType,
+        targetOrgId,
+        targetHospitalId: isClusterUser ? payload.targetHospitalId : undefined,
+        programId: payload.programId,
         specialty: payload.specialty,
         studentCount: Number(payload.studentCount),
         trainingStartDate: payload.trainingStartDate,
         trainingEndDate: payload.trainingEndDate,
         notes: payload.notes || 'طلب تدريب داخلي محدد من التجمع الصحي',
       };
-      if (payload.targetHospitalId) cleanPayload.targetHospitalId = payload.targetHospitalId;
       const res = await apiClient.post('/training-requests', cleanPayload);
       return res.data;
     },
@@ -425,19 +473,52 @@ export const AcademicIntakes: React.FC = () => {
               />
             </Grid>
 
-            <Grid item xs={12}>
-              <FormControl fullWidth size="small">
-                <InputLabel>المستشفى المستهدف (اختياري)</InputLabel>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" required>
+                <InputLabel>{isClusterUser ? 'المستشفى المستهدف *' : 'التجمع الصحي المستهدف *'}</InputLabel>
                 <Select
-                  value={reqFormData.targetHospitalId}
-                  label="المستشفى المستهدف (اختياري)"
-                  onChange={(e) => setReqFormData({ ...reqFormData, targetHospitalId: e.target.value })}
+                  value={isClusterUser ? reqFormData.targetHospitalId : reqFormData.targetOrgId}
+                  label={isClusterUser ? 'المستشفى المستهدف *' : 'التجمع الصحي المستهدف *'}
+                  onChange={(e) => {
+                    if (isClusterUser) {
+                      setReqFormData({ ...reqFormData, targetHospitalId: e.target.value, targetOrgId: e.target.value });
+                    } else {
+                      setReqFormData({ ...reqFormData, targetOrgId: e.target.value });
+                    }
+                  }}
                 >
-                  <MenuItem value="">كل مستشفيات التجمع (توزيع تلقائي)</MenuItem>
-                  {hospitalsList.map((h: any) => (
-                    <MenuItem key={h.id} value={h.id}>
-                      🏥 {h.nameAr}
-                    </MenuItem>
+                  {isClusterUser
+                    ? hospitalsList.map((h: any) => (
+                        <MenuItem key={h.id} value={h.id}>🏥 {h.nameAr}</MenuItem>
+                      ))
+                    : clusters.map((c: any) => (
+                        <MenuItem key={c.id} value={c.id}>{c.nameAr} ({c.code || 'CLUSTER'})</MenuItem>
+                      ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small" required>
+                <InputLabel>البرنامج التدريبي *</InputLabel>
+                <Select
+                  value={reqFormData.programId}
+                  label="البرنامج التدريبي *"
+                  onChange={(e) => {
+                    const p = programs.find((x: any) => x.id === e.target.value);
+                    let next = { ...reqFormData, programId: e.target.value };
+                    // Fit the window to the program's catalog duration so the
+                    // backend duration check passes (it rejects mismatches).
+                    if (p?.durationMonths) {
+                      const end = new Date(reqFormData.trainingStartDate);
+                      end.setMonth(end.getMonth() + p.durationMonths);
+                      next.trainingEndDate = end.toISOString().split('T')[0];
+                    }
+                    setReqFormData(next);
+                  }}
+                >
+                  {programs.map((p: any) => (
+                    <MenuItem key={p.id} value={p.id}>{p.nameAr} ({p.durationMonths} شهر)</MenuItem>
                   ))}
                 </Select>
               </FormControl>
@@ -461,7 +542,13 @@ export const AcademicIntakes: React.FC = () => {
           <Button
             variant="contained"
             onClick={() => createNewRequestMutation.mutate(reqFormData)}
-            disabled={createNewRequestMutation.isPending || !reqFormData.specialty || reqFormData.studentCount <= 0}
+            disabled={
+              createNewRequestMutation.isPending ||
+              !reqFormData.specialty ||
+              reqFormData.studentCount <= 0 ||
+              !reqFormData.programId ||
+              (isClusterUser ? !reqFormData.targetHospitalId : !reqFormData.targetOrgId)
+            }
             style={{ background: '#0F766E', fontWeight: 700 }}
           >
             {createNewRequestMutation.isPending ? <CircularProgress size={20} /> : 'إرسال ونشر طلب التدريب'}

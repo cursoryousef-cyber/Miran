@@ -50,7 +50,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 export const ClusterTrainees: React.FC = () => {
-  const { user } = useAuth();
+  const { user, hasAnyRole } = useAuth();
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState('');
@@ -330,6 +330,24 @@ export const ClusterTrainees: React.FC = () => {
   const clusterPct = clusterCapacity > 0 ? Math.round((clusterOccupied / clusterCapacity) * 100) : 0;
   const unassigned = traineesList.filter((t: any) => !t.assignedHospitalId).length;
 
+  // Truthful status chip from the trainee's actual applicationStatus — the
+  // previous hardcoded "موزع ومعتمد" chip claimed every trainee was
+  // distributed+approved regardless of their real state.
+  const statusChip = (t: any) => {
+    const map: Record<string, { label: string; color: 'success' | 'warning' | 'error' | 'info' | 'default' }> = {
+      draft: { label: 'مسودة', color: 'default' },
+      pending_hospital_review: { label: 'بانتظار مراجعة المستشفى', color: 'warning' },
+      documents_requested: { label: 'طُلبت المستندات', color: 'warning' },
+      approved: { label: 'معتمد', color: 'success' },
+      rejected: { label: 'مرفوض', color: 'error' },
+      returned_to_cluster: { label: 'مُعاد للتجمع', color: 'warning' },
+      active: { label: 'نشط', color: 'success' },
+      graduated: { label: 'متخرج', color: 'info' },
+    };
+    const s = map[t?.applicationStatus] ?? { label: t?.applicationStatus ?? '—', color: 'default' as const };
+    return <Chip label={s.label} color={s.color} size="small" style={{ fontWeight: 700 }} />;
+  };
+
   return (
     <DataPageShell
         title="توزيع متدربي الامتياز وطاقتي التجمع (Cluster Training Distribution)"
@@ -352,6 +370,10 @@ export const ClusterTrainees: React.FC = () => {
             تحميل نموذج Excel المعتمد
           </Button>
 
+          {/* Backend import requires cluster_administrator/training_director/
+              platform_owner (CLUSTER_ROLES) — cluster_manager cannot call it, so
+              the button is hidden rather than failing with a 403. */}
+          {hasAnyRole(['cluster_administrator', 'training_director', 'platform_owner']) && (
           <Button
             variant="contained"
             component="label"
@@ -361,6 +383,7 @@ export const ClusterTrainees: React.FC = () => {
             استيراد ملف Excel
             <input type="file" hidden accept=".xlsx, .xls" onChange={handleFileUpload} />
           </Button>
+          )}
         </>}
         loading={isLoadingTrainees}
         stats={[
@@ -504,7 +527,7 @@ export const ClusterTrainees: React.FC = () => {
                 .filter((t: any) => (t.person?.nameAr || '').includes(search) || (t.traineeNumber || '').includes(search) || (t.person?.nationalId || '').includes(search))
                 .map((t: any) => {
                   const activeRotation = t.rotations?.[0];
-                  const deptName = activeRotation?.department?.nameAr || 'القسم العام';
+                  const deptName = activeRotation?.department?.nameAr || '—';
                   const trainerName = activeRotation?.trainerProfile?.person?.nameAr || 'غير معين';
 
                   return (
@@ -529,11 +552,11 @@ export const ClusterTrainees: React.FC = () => {
                         {t.sponsorOrganization?.nameAr ?? t.academicIntake?.organization?.nameAr ?? '—'}
                       </TableCell>
                       <TableCell style={{ color: '#047857', fontWeight: 600 }}>
-                        {t.specialtyAr || 'طب وجراحة عامة'}
-                        <div style={{ fontSize: '11px', color: '#64748B' }}>{t.program?.nameAr || 'دفعة امتياز 2027'}</div>
+                        {t.specialtyAr || '—'}
+                        <div style={{ fontSize: '11px', color: '#64748B' }}>{t.program?.nameAr || '—'}</div>
                       </TableCell>
                       <TableCell style={{ fontWeight: 700, color: '#D97706' }}>
-                        {t.organization?.nameAr || 'مستشفى برج الشمال الطبي'}
+                        {t.organization?.nameAr || '—'}
                       </TableCell>
                       <TableCell style={{ fontSize: '12px' }}>
                         <div style={{ color: '#0284C7', fontWeight: 700 }}>القسم: {deptName}</div>
@@ -541,7 +564,7 @@ export const ClusterTrainees: React.FC = () => {
                       </TableCell>
                       <TableCell>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <Chip label="موزع ومعتمد" color="success" size="small" style={{ fontWeight: 700 }} />
+                          {statusChip(t)}
                           <Button
                             size="small"
                             variant="outlined"

@@ -765,6 +765,40 @@ async function main() {
     },
   });
 
+  // --------------------------------------------------------------------------
+  // Hierarchy closure backfill
+  // --------------------------------------------------------------------------
+  // OrganizationHierarchyService.addNode() is only invoked when organizations
+  // are created through the provisioning service. Orgs inserted directly by the
+  // seed bypass it, which leaves the closure table empty and silently breaks
+  // every getDescendantIds() consumer — including the cluster dashboard's
+  // capacity/occupancy statistics (hospitals resolve to zero). Rebuild the
+  // full transitive closure from parent_id chains so seeded orgs behave like
+  // API-created ones.
+  const orgsForClosure = await prisma.organization.findMany({
+    where: { deletedAt: null },
+    select: { id: true, parentId: true },
+  });
+  const byId = new Map(orgsForClosure.map((o) => [o.id, o.parentId]));
+  const closureRows: Array<{ ancestorId: string; descendantId: string; depth: number }> = [];
+  for (const org of orgsForClosure) {
+    closureRows.push({ ancestorId: org.id, descendantId: org.id, depth: 0 });
+    let ancestor: string | null = org.parentId;
+    let depth = 1;
+    while (ancestor && byId.has(ancestor)) {
+      closureRows.push({ ancestorId: ancestor, descendantId: org.id, depth });
+      const next = byId.get(ancestor);
+      if (!next) break;
+      ancestor = next;
+      depth += 1;
+    }
+  }
+  await prisma.$transaction([
+    prisma.organizationHierarchy.deleteMany(),
+    prisma.organizationHierarchy.createMany({ data: closureRows }),
+  ]);
+  console.log(`🏛️  Hierarchy closure rebuilt: ${closureRows.length} rows`);
+
   console.log('✅ Production-like Seed successfully completed!');
   console.log('========================================================================');
   console.log('📌 1. Platform Owner:       platform@miran.health');

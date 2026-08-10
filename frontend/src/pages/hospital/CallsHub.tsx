@@ -123,19 +123,13 @@ export const CallsHub: React.FC = () => {
 
   const { data: hospitalTrainers } = useQuery({
     queryKey: ['calls-hospital-trainers'],
-    queryFn: async () => {
-      const res = await apiClient.get('/trainers/workspace-cards').catch(() => ({ data: { data: [] } }));
-      return res.data?.data ?? [];
-    },
+    queryFn: async () => (await apiClient.get('/trainers/workspace-cards')).data?.data ?? [],
     enabled: isTrainer,
   });
 
   const { data: hospitalTrainees } = useQuery({
     queryKey: ['calls-hospital-trainees'],
-    queryFn: async () => {
-      const res = await apiClient.get('/trainees/incoming').catch(() => ({ data: { data: [] } }));
-      return res.data?.data ?? [];
-    },
+    queryFn: async () => (await apiClient.get('/trainees/incoming')).data?.data ?? [],
     enabled: isTrainer,
   });
 

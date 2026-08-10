@@ -905,7 +905,14 @@ export class AllocationEngineService {
     clusterId: string,
     onlyHospitalId?: string,
   ): Promise<HospitalCandidate[]> {
-    const where: Record<string, unknown> = { parentId: clusterId, deletedAt: null };
+    // clusterId is usually a cluster (hospitals under it), but for a request a
+    // cluster user created it is the hospital itself — the create flow maps a
+    // cluster request onto its target hospital. Include the target in the
+    // candidate set too, mirroring getHospitalCardsMetrics.
+    const where: Record<string, unknown> = {
+      deletedAt: null,
+      OR: [{ id: clusterId }, { parentId: clusterId }],
+    };
     if (onlyHospitalId) where.id = onlyHospitalId;
 
     const hospitals = await this.prisma.organization.findMany({

@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
-import { FileText, CheckCircle2, Clock, Building2, Send, AlertCircle, RefreshCw, FolderGit2, Clock3, Sparkles, Users, XCircle, Trash2, FileSpreadsheet } from 'lucide-react';
+import { FileText, CheckCircle2, Clock, Building2, Send, AlertCircle, RefreshCw, FolderGit2, Clock3, Sparkles, Users, XCircle, Trash2, FileSpreadsheet, Eye, Undo2, ShieldCheck } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
   Button,
@@ -31,7 +31,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 export const Affiliations: React.FC = () => {
-  const { user, hasAnyRole } = useAuth();
+  const { user, hasAnyRole, hasCapability } = useAuth();
   const queryClient = useQueryClient();
 
   const [selectedReq, setSelectedReq] = useState<any>(null);
@@ -39,6 +39,14 @@ export const Affiliations: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [clusterNotes, setClusterNotes] = useState('تمت المراجعة واعتماد التوزيع على المستشفيات وفق السعة المتاحة');
+
+  // Row-action dialogs: View Details, Approve (confirm), Reject, Return
+  const [detailsReq, setDetailsReq] = useState<any>(null);
+  const [confirmApproveReq, setConfirmApproveReq] = useState<any>(null);
+  const [rejectReq, setRejectReq] = useState<any>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [returnReq, setReturnReq] = useState<any>(null);
+  const [returnNotes, setReturnNotes] = useState('');
 
   // Hospital seat allocations — dynamic
   const [allocations, setAllocations] = useState<Record<string, number>>({});
@@ -337,12 +345,100 @@ export const Affiliations: React.FC = () => {
     },
   });
 
+  // ─── Row actions (approve / reject / return / details) ─────────────────────
+  // Gates mirror the backend state machine + capabilities, so a button never
+  // shows for a transition the API will reject (RBAC stays backend-authoritative).
+  const canApprove = hasCapability('training_request.approve');
+  const canReturn = hasCapability('training_request.return');
+  const canViewDetails = hasCapability('training_request.view');
+  // Assign = PATCH /training-requests/:id (status + allocations) → cluster users
+  // who also hold the review/create capability (keeps the cluster queue cluster-only).
+  const isClusterUser = hasAnyRole(['cluster_administrator', 'cluster_manager', 'training_director', 'platform_owner', 'system_admin']);
+  const canAssign = isClusterUser && (hasCapability('training_request.review') || hasCapability('training_request.create'));
+  // Reject = POST /training-requests/:id/reject → role-gated on CLUSTER_ROLES only
+  // (cluster_administrator, training_director, platform_owner). cluster_manager is
+  // intentionally excluded server-side, so the button must not show for it.
+  const canReject = hasAnyRole(['cluster_administrator', 'training_director', 'platform_owner']);
+
+  const APPROVEABLE = ['auto_allocated', 'allocated', 'manually_reallocated'];
+  const REJECTABLE = ['submitted', 'under_cluster_review', 'auto_allocated', 'allocated', 'manually_reallocated', 'approved'];
+  const RETURNABLE = ['submitted', 'under_cluster_review', 'auto_allocated', 'allocated', 'manually_reallocated'];
+  const ASSIGNABLE = ['submitted', 'under_cluster_review', 'auto_allocated', 'allocated', 'manually_reallocated', 'hospital_returned_to_cluster'];
+
+  const approveMutation = useMutation({
+    mutationFn: (id: string) => apiClient.post(`/training-requests/${id}/approve`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['training-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['approved-training-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['cluster-orgs'] });
+      setConfirmApproveReq(null);
+      setSuccessMsg('تم اعتماد طلب التدريب نهائياً — سيظهر الآن في شاشة الدفعات الأكاديمية لإنشاء دفعة تدريبية.');
+      setErrorMsg(null);
+    },
+    onError: (err: any) => {
+      setErrorMsg(err.response?.data?.message || err.message || 'فشل اعتماد الطلب — تحقق من الحالة والطاقة الاستيعابية');
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiClient.post(`/training-requests/${id}/reject`, { reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['training-requests'] });
+      setRejectReq(null);
+      setRejectReason('');
+      setSuccessMsg('تم رفض طلب التدريب.');
+      setErrorMsg(null);
+    },
+    onError: (err: any) => {
+      setErrorMsg(err.response?.data?.message || err.message || 'فشل رفض الطلب');
+    },
+  });
+
+  const returnMutation = useMutation({
+    mutationFn: ({ id, notes }: { id: string; notes: string }) =>
+      apiClient.post(`/training-requests/${id}/return-to-university`, { notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['training-requests'] });
+      setReturnReq(null);
+      setReturnNotes('');
+      setSuccessMsg('تمت إعادة الطلب إلى الجامعة للتعديل.');
+      setErrorMsg(null);
+    },
+    onError: (err: any) => {
+      setErrorMsg(err.response?.data?.message || err.message || 'فشل إعادة الطلب');
+    },
+  });
+
+  // View Details fetches the request record plus its trainee rows on open —
+  // both real GET endpoints (training_request.view), nothing hardcoded.
+  const { data: detailData, isLoading: detailLoading } = useQuery({
+    queryKey: ['training-request-detail', detailsReq?.id],
+    queryFn: async () => {
+      const res = await apiClient.get(`/training-requests/${detailsReq.id}`);
+      return res.data?.data ?? res.data;
+    },
+    enabled: !!detailsReq?.id,
+  });
+
+  const {
+    data: detailTrainees,
+    error: detailTraineesError,
+    isLoading: traineesLoading,
+  } = useQuery({
+    queryKey: ['training-request-trainees', detailsReq?.id],
+    queryFn: async () => {
+      const res = await apiClient.get(`/training-requests/${detailsReq.id}/trainees`);
+      return Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
+    },
+    enabled: !!detailsReq?.id,
+  });
+
   const getStatusChip = (status: string) => {
     const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 'error' | 'info' | 'default' }> = {
       draft: { label: 'مسودة', color: 'default' },
       submitted: { label: 'مرسل', color: 'info' },
       under_cluster_review: { label: 'قيد المراجعة', color: 'warning' },
-      under_review: { label: 'قيد المراجعة', color: 'warning' },
       returned_to_university: { label: 'مُعاد للجامعة', color: 'warning' },
       resubmitted: { label: 'مُعاد الإرسال', color: 'info' },
       auto_allocated: { label: 'موزع (آلي)', color: 'success' },
@@ -373,11 +469,13 @@ export const Affiliations: React.FC = () => {
   const totalAllocated = Object.values(allocations).reduce((s, v) => s + v, 0);
 
   const reqRows: any[] = data?.data ?? [];
-  const submitted = reqRows.filter((r: any) => ['submitted', 'under_review'].includes(r.status)).length;
-  const allocatedReq = reqRows.filter((r: any) => ['allocated', 'auto_allocated'].includes(r.status)).length;
+  // Request-level statuses only — 'under_review' and 'returned' are not real
+  // statuses ('under_review' was a misspelling of under_cluster_review).
+  const submitted = reqRows.filter((r: any) => ['submitted', 'under_cluster_review', 'resubmitted'].includes(r.status)).length;
+  const allocatedReq = reqRows.filter((r: any) => ['allocated', 'auto_allocated', 'manually_reallocated'].includes(r.status)).length;
   const activeReq = reqRows.filter((r: any) => r.status === 'active').length;
   const totalStudents = reqRows.reduce((s: number, r: any) => s + (r.studentCount ?? 0), 0);
-  const rejectedReq = reqRows.filter((r: any) => ['rejected', 'returned'].includes(r.status)).length;
+  const rejectedReq = reqRows.filter((r: any) => ['rejected', 'returned_to_university'].includes(r.status)).length;
 
   return (
     <DataPageShell
@@ -472,22 +570,72 @@ export const Affiliations: React.FC = () => {
                     {getStatusChip(req.status)}
                   </TableCell>
                   <TableCell style={{ textAlign: 'center' }}>
-                    {hasAnyRole(['cluster_administrator', 'training_director', 'platform_owner']) && (
-                      <Button
-                        variant="contained"
-                        size="small"
-                        onClick={() => openAllocationDialog(req)}
-                        style={{
-                          background: req.status === 'allocated'
-                            ? '#059669'
-                            : 'linear-gradient(135deg, #0891b2, #0891B2)',
-                          fontWeight: 700,
-                          fontSize: '11px',
-                        }}
-                      >
-                        {req.status === 'allocated' ? 'عرض التوزيع' : 'مراجعة وتوزيع'}
-                      </Button>
-                    )}
+                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                      {canViewDetails && (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<Eye size={14} />}
+                          onClick={() => setDetailsReq(req)}
+                          style={{ fontWeight: 700, fontSize: '11px', color: '#0F766E', borderColor: '#0F766E' }}
+                        >
+                          التفاصيل
+                        </Button>
+                      )}
+
+                      {canAssign && ASSIGNABLE.includes(req.status) && (
+                        <Button
+                          variant="contained"
+                          size="small"
+                          onClick={() => openAllocationDialog(req)}
+                          style={{
+                            background: req.status === 'allocated' || req.status === 'auto_allocated' || req.status === 'manually_reallocated'
+                              ? '#059669'
+                              : 'linear-gradient(135deg, #0891b2, #0891B2)',
+                            fontWeight: 700,
+                            fontSize: '11px',
+                          }}
+                        >
+                          {['allocated', 'auto_allocated', 'manually_reallocated'].includes(req.status) ? 'عرض التوزيع' : 'مراجعة وتوزيع'}
+                        </Button>
+                      )}
+
+                      {canApprove && APPROVEABLE.includes(req.status) && (
+                        <Button
+                          variant="contained"
+                          size="small"
+                          startIcon={<ShieldCheck size={14} />}
+                          onClick={() => { setErrorMsg(null); setConfirmApproveReq(req); }}
+                          style={{ background: 'linear-gradient(135deg, #059669, #0D9488)', fontWeight: 700, fontSize: '11px' }}
+                        >
+                          اعتماد نهائي
+                        </Button>
+                      )}
+
+                      {canReturn && RETURNABLE.includes(req.status) && (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<Undo2 size={14} />}
+                          onClick={() => { setErrorMsg(null); setReturnReq(req); setReturnNotes(''); }}
+                          style={{ fontWeight: 700, fontSize: '11px', color: '#B45309', borderColor: '#F59E0B' }}
+                        >
+                          إعادة للجامعة
+                        </Button>
+                      )}
+
+                      {canReject && REJECTABLE.includes(req.status) && (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<XCircle size={14} />}
+                          onClick={() => { setErrorMsg(null); setRejectReq(req); setRejectReason(''); }}
+                          style={{ fontWeight: 700, fontSize: '11px', color: '#DC2626', borderColor: '#FCA5A5' }}
+                        >
+                          رفض
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -865,6 +1013,166 @@ export const Affiliations: React.FC = () => {
             style={{ background: '#059669', fontWeight: 700 }}
           >
             {createRequestMutation.isPending ? <CircularProgress size={20} /> : 'إرسال طلب التدريب (Submit Request)'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Details Dialog — real GET /training-requests/:id + /:id/trainees */}
+      <Dialog open={!!detailsReq} onClose={() => setDetailsReq(null)} maxWidth="md" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>
+          تفاصيل طلب التدريب {detailsReq?.requestNumber} {detailsReq && getStatusChip(detailsReq.status)}
+        </DialogTitle>
+        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '16px' }}>
+          {detailLoading ? (
+            <div style={{ textAlign: 'center', padding: '24px' }}><CircularProgress size={28} /></div>
+          ) : detailData ? (
+            <>
+              <Paper style={{ padding: '16px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
+                  <div>الجهة الموفِّدة: <strong>{detailData.sourceOrg?.nameAr || '—'}</strong></div>
+                  <div>الجهة المستقبلة: <strong>{detailData.targetOrg?.nameAr || '—'}</strong></div>
+                  <div>البرنامج: <strong>{detailData.program?.nameAr || detailData.specialty || '—'}</strong></div>
+                  <div>عدد المتدربين: <strong>{detailData.studentCount} طالب</strong></div>
+                  <div>الأولوية: <strong>{detailData.priority === 'urgent' ? 'عاجل' : detailData.priority === 'high' ? 'عالية' : 'عادي'}</strong></div>
+                  <div>تاريخ الإرسال: <strong>{detailData.createdAt ? new Date(detailData.createdAt).toLocaleDateString('ar-SA') : '—'}</strong></div>
+                  <div>فترة التدريب: <strong>{detailData.trainingStartDate ? new Date(detailData.trainingStartDate).toISOString().split('T')[0] : '—'} إلى {detailData.trainingEndDate ? new Date(detailData.trainingEndDate).toISOString().split('T')[0] : '—'}</strong></div>
+                  <div>الدفعة الأكاديمية: <strong>{detailData.academicIntake?.nameAr || detailData.academicIntake?.code || '—'}</strong></div>
+                </div>
+              </Paper>
+
+              <div style={{ fontWeight: 800, fontSize: '14px', color: '#0F172A' }}>صفوف المتدربين ({traineesLoading ? '…' : detailTrainees?.length ?? 0})</div>
+              {detailTraineesError ? (
+                <Alert severity="error">تعذر تحميل صفوف المتدربين: {(detailTraineesError as any)?.response?.data?.message || (detailTraineesError as any)?.message}</Alert>
+              ) : traineesLoading ? (
+                <div style={{ textAlign: 'center', padding: '16px' }}><CircularProgress size={22} /></div>
+              ) : detailTrainees?.length ? (
+                <TableContainer component={Paper}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell style={{ fontWeight: 700 }}>الاسم</TableCell>
+                        <TableCell style={{ fontWeight: 700 }}>الرقم الجامعي</TableCell>
+                        <TableCell style={{ fontWeight: 700 }}>الهوية</TableCell>
+                        <TableCell style={{ fontWeight: 700 }}>التخصص</TableCell>
+                        <TableCell style={{ fontWeight: 700 }}>حالة الصف</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {detailTrainees.map((row: any) => (
+                        <TableRow key={row.id}>
+                          <TableCell>{row.nameAr}</TableCell>
+                          <TableCell style={{ fontFamily: 'monospace', fontSize: '12px' }}>{row.academicNumber}</TableCell>
+                          <TableCell style={{ fontFamily: 'monospace', fontSize: '12px' }}>{row.nationalId}</TableCell>
+                          <TableCell>{row.specialty || '—'}</TableCell>
+                          <TableCell>{getStatusChip(row.status)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Alert severity="info">لا توجد صفوف متدربين مُرفقة بعد — يمكن إرفاقها عبر استيراد Excel أو إنشاء الطلب بقائمة متدربين.</Alert>
+              )}
+            </>
+          ) : (
+            <Alert severity="error">تعذر تحميل تفاصيل الطلب</Alert>
+          )}
+        </DialogContent>
+        <DialogActions style={{ padding: '16px 24px' }}>
+          <Button onClick={() => setDetailsReq(null)}>إغلاق</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Approve Confirm Dialog */}
+      <Dialog open={!!confirmApproveReq} onClose={() => setConfirmApproveReq(null)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>الاعتماد النهائي لطلب التدريب</DialogTitle>
+        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '16px' }}>
+          <Alert severity="info">
+            سيتم اعتماد طلب <strong>{confirmApproveReq?.requestNumber}</strong> نهائياً من {confirmApproveReq?.sourceOrg?.nameAr || '—'} ({confirmApproveReq?.studentCount} متدرب).
+            سيتحول إلى حالة <strong>معتمد (approved)</strong> ويظهر في شاشة الدفعات الأكاديمية لإنشاء دفعة تدريبية.
+          </Alert>
+          {approveMutation.isError && (
+            <Alert severity="error">
+              {(approveMutation.error as any)?.response?.data?.message || (approveMutation.error as any)?.message || 'فشل الاعتماد'}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions style={{ padding: '16px 24px' }}>
+          <Button onClick={() => setConfirmApproveReq(null)}>إلغاء</Button>
+          <Button
+            variant="contained"
+            onClick={() => approveMutation.mutate(confirmApproveReq.id)}
+            disabled={approveMutation.isPending}
+            style={{ background: '#059669', fontWeight: 700 }}
+          >
+            {approveMutation.isPending ? <CircularProgress size={20} /> : 'تأكيد الاعتماد النهائي'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Reject Dialog */}
+      <Dialog open={!!rejectReq} onClose={() => setRejectReq(null)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>رفض طلب التدريب {rejectReq?.requestNumber}</DialogTitle>
+        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '16px' }}>
+          <Alert severity="warning">الرفض نهائي ولا يمكن التراجع عنه من هذه الشاشة.</Alert>
+          <TextField
+            label="سبب الرفض (إلزامي)"
+            multiline
+            rows={3}
+            fullWidth
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+          />
+          {rejectMutation.isError && (
+            <Alert severity="error">
+              {(rejectMutation.error as any)?.response?.data?.message || (rejectMutation.error as any)?.message || 'فشل رفض الطلب'}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions style={{ padding: '16px 24px' }}>
+          <Button onClick={() => setRejectReq(null)}>إلغاء</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => rejectMutation.mutate({ id: rejectReq.id, reason: rejectReason })}
+            disabled={rejectMutation.isPending || !rejectReason.trim()}
+            style={{ fontWeight: 700 }}
+          >
+            {rejectMutation.isPending ? <CircularProgress size={20} /> : 'تأكيد الرفض'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Return-to-University Dialog */}
+      <Dialog open={!!returnReq} onClose={() => setReturnReq(null)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>إعادة الطلب للجامعة {returnReq?.requestNumber}</DialogTitle>
+        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '16px' }}>
+          <Alert severity="info">
+            سيعود الطلب إلى الجهة الموفِّدة بحالة <strong>مُعاد للجامعة (returned_to_university)</strong> لإجراء التعديلات المطلوبة.
+          </Alert>
+          <TextField
+            label="ملاحظات الإعادة (ما يجب تعديله)"
+            multiline
+            rows={3}
+            fullWidth
+            value={returnNotes}
+            onChange={(e) => setReturnNotes(e.target.value)}
+          />
+          {returnMutation.isError && (
+            <Alert severity="error">
+              {(returnMutation.error as any)?.response?.data?.message || (returnMutation.error as any)?.message || 'فشل إعادة الطلب'}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions style={{ padding: '16px 24px' }}>
+          <Button onClick={() => setReturnReq(null)}>إلغاء</Button>
+          <Button
+            variant="contained"
+            onClick={() => returnMutation.mutate({ id: returnReq.id, notes: returnNotes })}
+            disabled={returnMutation.isPending}
+            style={{ background: '#B45309', fontWeight: 700 }}
+          >
+            {returnMutation.isPending ? <CircularProgress size={20} /> : 'تأكيد الإعادة'}
           </Button>
         </DialogActions>
       </Dialog>

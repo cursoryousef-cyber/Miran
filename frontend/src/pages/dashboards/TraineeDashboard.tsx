@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CircularProgress, Button } from '@mui/material';
 import {
-  BellRing, BookOpen, CalendarCheck, CheckCircle2, ClipboardCheck, FileSignature,
-  GraduationCap, LogIn, LogOut, MapPin, Route, Target, Users,
+  AlertTriangle, BellRing, BookOpen, CalendarCheck, CheckCircle2, ClipboardCheck, FileSignature,
+  GraduationCap, LogIn, LogOut, MapPin, PhoneCall, Route, Target, Users,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -26,35 +26,43 @@ export const TraineeDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const { data: timeline, isLoading } = useQuery({
+  const { data: timeline, isLoading: timelineLoading, error: timelineError, refetch: refetchTimeline } = useQuery({
     queryKey: ['te-timeline'],
     queryFn: async () => {
-      const res = await apiClient.get('/timeline/me').catch(() => ({ data: { data: null } }));
+      const res = await apiClient.get('/timeline/me');
       return res.data?.data ?? null;
     },
   });
 
-  const { data: dash } = useQuery({
+  const { data: dash, error: dashError, refetch: refetchDash } = useQuery({
     queryKey: ['te-dashboard'],
     queryFn: async () => {
-      const res = await apiClient.get('/operations/trainee/dashboard').catch(() => ({ data: { data: null } }));
+      const res = await apiClient.get('/operations/trainee/dashboard');
       return res.data?.data ?? null;
     },
   });
 
-  const { data: colleagues } = useQuery({
+  const { data: colleagues, error: colleaguesError, refetch: refetchColleagues } = useQuery({
     queryKey: ['te-colleagues'],
     queryFn: async () => {
-      const res = await apiClient.get('/trainees/my-colleagues').catch(() => ({ data: { data: [] } }));
+      const res = await apiClient.get('/trainees/my-colleagues');
+      return res.data?.data ?? [];
+    },
+  });
+
+  const { data: calls, error: callsError, refetch: refetchCalls } = useQuery({
+    queryKey: ['te-calls'],
+    queryFn: async () => {
+      const res = await apiClient.get('/calls/my-incoming');
       return res.data?.data ?? [];
     },
   });
 
   const queryClient = useQueryClient();
-  const { data: attendanceList } = useQuery({
+  const { data: attendanceList, error: attendanceError, refetch: refetchAttendance } = useQuery({
     queryKey: ['te-attendance'],
     queryFn: async () => {
-      const res = await apiClient.get('/operations/attendance').catch(() => ({ data: { data: [] } }));
+      const res = await apiClient.get('/operations/attendance');
       return res.data?.data ?? [];
     },
   });
@@ -72,8 +80,60 @@ export const TraineeDashboard: React.FC = () => {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['te-attendance'] }); queryClient.invalidateQueries({ queryKey: ['te-dashboard'] }); },
   });
 
+  const completeTaskMutation = useMutation({
+    mutationFn: (taskId: string) => apiClient.patch(`/operations/tasks/${taskId}/complete`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['te-dashboard'] });
+    },
+  });
+
+  const ackCallMutation = useMutation({
+    mutationFn: (callId: string) => apiClient.post(`/calls/${callId}/ack`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['te-calls'] });
+      queryClient.invalidateQueries({ queryKey: ['te-dashboard'] });
+    },
+  });
+
+  const arriveCallMutation = useMutation({
+    mutationFn: (callId: string) => apiClient.post(`/calls/${callId}/arrived`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['te-calls'] });
+      queryClient.invalidateQueries({ queryKey: ['te-dashboard'] });
+    },
+  });
+
+  const isLoading = timelineLoading;
+
   if (isLoading) {
     return <div style={{ display: 'grid', placeItems: 'center', padding: 80 }}><CircularProgress sx={{ color: colour.primary }} /></div>;
+  }
+
+  // Error state with retry buttons
+  const hasError = timelineError || dashError || attendanceError || callsError;
+  if (hasError) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'] }}>
+        <PageHeader
+          eyebrow="MY TRAINING JOURNEY"
+          icon={GraduationCap}
+          title={`مرحباً، ${user?.nameAr ?? ''}`}
+          subtitle="برنامج التدريب"
+        />
+        <div className="glass-card" style={{ padding: space['2xl'], textAlign: 'center' }}>
+          <EmptyState
+            icon={AlertTriangle}
+            title="تعذر تحميل البيانات"
+            hint="تحقق من اتصالك بالشبكة وأعد المحاولة"
+          />
+          <div style={{ display: 'flex', gap: space.md, justifyContent: 'center', marginTop: space.lg }}>
+            <Button variant="contained" onClick={() => { refetchTimeline(); refetchDash(); refetchAttendance(); refetchCalls(); }}>
+              إعادة التحميل
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const current = timeline?.current;
@@ -84,6 +144,11 @@ export const TraineeDashboard: React.FC = () => {
   const statusTone = (s?: string) =>
     s === 'completed' ? 'success' : s === 'active' ? 'primary'
       : s === 'cancelled' || s === 'skipped' ? 'danger' : 'neutral';
+
+  const callStateLabel = (s?: string) =>
+    s === 'acknowledged' ? 'أكدت الاستلام' : s === 'self_arrived' ? 'وصلت للموقع'
+      : s === 'confirmed_arrived' ? 'تم تأكيد وصولك' : s === 'no_show' ? 'لم تحضر'
+      : s === 'notified' ? 'بانتظار تأكيدك' : s ?? '';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'] }}>
@@ -193,7 +258,21 @@ export const TraineeDashboard: React.FC = () => {
         <Panel title="جدولي التدريبي" icon={Route}
           action={<PanelLink label="السجل السريري" onClick={() => navigate('/logbook')} />}>
           {rotations.length === 0 ? (
-            <EmptyState icon={Route} title="لم يبدأ جدولك بعد" hint="سيظهر جدول الروتيشنات فور تفعيل تدريبك." />
+            <EmptyState
+              icon={Route}
+              title={
+                timeline?.trainee?.applicationStatus === 'draft' ? 'تدريبك قيد التفعيل'
+                  : timeline?.trainee?.applicationStatus === 'graduated' ? 'أتممت برنامج التدريب'
+                  : timeline?.trainee?.applicationStatus === 'suspended' ? 'تدريبك موقف مؤقتاً'
+                  : 'لا يوجد جدول تدريبي'
+              }
+              hint={
+                timeline?.trainee?.applicationStatus === 'draft' ? 'سيظهر جدولك فور اعتماد إسنادك للمدرب.'
+                  : timeline?.trainee?.applicationStatus === 'graduated' ? 'يمكنك مراجعة سجلك التدريبي من قسم السجل السريري.'
+                  : timeline?.trainee?.applicationStatus === 'suspended' ? 'تواصل مع إدارة التدريب لمعرفة التفاصيل.'
+                  : 'سيظهر جدول الروتيشنات فور تفعيل تدريبك.'
+              }
+            />
           ) : (
             rotations.map((r: any) => {
               const tone = statusTone(r.status);
@@ -211,7 +290,15 @@ export const TraineeDashboard: React.FC = () => {
                   }
                   title={r.departmentNameAr}
                   meta={`${String(r.startDate).slice(0, 10)} → ${String(r.endDate).slice(0, 10)} · ${r.trainerNameAr ?? ''}`}
-                  trailing={<Badge label={`${r.progressPercentage}%`} tone={tone as any} />}
+                  trailing={<Badge label={
+                    r.status === 'pending_acceptance' ? 'بانتظار قبول المدرب'
+                      : r.status === 'rejected' ? 'مرفوض'
+                      : r.status === 'completed' ? 'مكتمل'
+                      : r.status === 'active' ? 'نشط'
+                      : r.status === 'scheduled' ? 'مجدول'
+                      : r.status === 'transferred' ? 'منقول'
+                      : `${r.progressPercentage}%`
+                  } tone={tone as any} />}
                 />
               );
             })
@@ -236,7 +323,22 @@ export const TraineeDashboard: React.FC = () => {
           {dash?.tasks?.length ? (
             dash.tasks.slice(0, 5).map((t: any) => (
               <ListRow key={t.id} title={t.titleAr}
-                meta={t.dueDate ? `الاستحقاق: ${String(t.dueDate).slice(0, 10)}` : undefined} />
+                meta={t.dueDate ? `الاستحقاق: ${String(t.dueDate).slice(0, 10)}` : undefined}
+                trailing={
+                  t.status === 'completed' ? (
+                    <Badge label="مكتملة" tone="success" />
+                  ) : (
+                    <div style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
+                      <Badge label="معلقة" tone="warning" />
+                      <Button size="small" variant="outlined" color="success"
+                        disabled={completeTaskMutation.isPending}
+                        onClick={() => completeTaskMutation.mutate(t.id)}>
+                        إتمام
+                      </Button>
+                    </div>
+                  )
+                }
+              />
             ))
           ) : (
             <EmptyState icon={ClipboardCheck} title="لا توجد مهام معلقة" />
@@ -251,6 +353,45 @@ export const TraineeDashboard: React.FC = () => {
             ))
           ) : (
             <EmptyState icon={BellRing} title="لا توجد تنبيهات" />
+          )}
+        </Panel>
+
+        <Panel title="النداءات" icon={PhoneCall} tone={calls?.some((c: any) => c.call?.status === 'active') ? 'danger' : 'neutral'}>
+          {calls?.length ? (
+            calls.slice(0, 5).map((c: any) => {
+              const active = c.call?.status === 'active';
+              const canAck = active && c.state === 'notified';
+              const canArrive = active && ['notified', 'acknowledged'].includes(c.state);
+              return (
+                <ListRow
+                  key={c.id}
+                  title={c.call?.customTitle ?? (c.call?.callType === 'urgent' ? 'نداء عاجل' : 'نداء تدريبي')}
+                  meta={`${callStateLabel(c.state)}${c.call?.location ? ` · ${c.call.location}` : ''}${c.notifiedAt ? ` · ${new Date(c.notifiedAt).toLocaleDateString('ar-SA')}` : ''}`}
+                  trailing={
+                    <div style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
+                      {canAck && (
+                        <Button size="small" variant="contained"
+                          disabled={ackCallMutation.isPending}
+                          onClick={() => ackCallMutation.mutate(c.call.id)}
+                          sx={{ bgcolor: colour.primary, '&:hover': { bgcolor: colour.primary } }}>
+                          تأكيد الاستلام
+                        </Button>
+                      )}
+                      {canArrive && (
+                        <Button size="small" variant="outlined" color="info"
+                          disabled={arriveCallMutation.isPending}
+                          onClick={() => arriveCallMutation.mutate(c.call.id)}>
+                          وصلت الموقع
+                        </Button>
+                      )}
+                      <Badge label={active ? 'نشط' : 'منتهي'} tone={active ? 'danger' : 'neutral'} />
+                    </div>
+                  }
+                />
+              );
+            })
+          ) : (
+            <EmptyState icon={PhoneCall} title="لا توجد نداءات" hint="ستظهر هنا النداءات التي يطلقها المدربون." />
           )}
         </Panel>
 

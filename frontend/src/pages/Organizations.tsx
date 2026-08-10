@@ -21,10 +21,11 @@ const OrganizationTreeNode: React.FC<{
   level: number;
   canUpdate: boolean;
   canDelete: boolean;
+  capByOrg?: Map<string, { capacity: number; occupied: number }>;
   onEdit: (org: any) => void;
   onDetails: (org: any) => void;
   onDelete: (id: string) => void;
-}> = ({ org, level, canUpdate, canDelete, onEdit, onDetails, onDelete }) => {
+}> = ({ org, level, canUpdate, canDelete, capByOrg, onEdit, onDetails, onDelete }) => {
   const [expanded, setExpanded] = useState(true);
   const children = org.children || [];
   const roles = org.userRoles || [];
@@ -85,11 +86,12 @@ const OrganizationTreeNode: React.FC<{
             <span>الأقسام السريرية: <strong>{departments.map((d: any) => d.nameAr).join(', ')}</strong></span>
           </Box>
         )}
-        {org._count && (
+        {(org._count || capByOrg?.has(org.id)) && (
           <Box sx={{ display: 'flex', gap: 2, color: '#64748B' }}>
-            <span>السعة: <strong>{org.capacity || 0}</strong></span>
-            <span>المدربون: <strong>{org._count.trainerProfiles}</strong></span>
-            <span>المتدربون: <strong>{org._count.traineeProfiles}</strong></span>
+            <span>السعة: <strong>{capByOrg?.get(org.id)?.capacity ?? org.capacity ?? 0}</strong></span>
+            <span>المشغول: <strong>{capByOrg?.get(org.id)?.occupied ?? 0}</strong></span>
+            <span>المدربون: <strong>{org._count?.trainerProfiles ?? 0}</strong></span>
+            <span>المتدربون: <strong>{org._count?.traineeProfiles ?? 0}</strong></span>
           </Box>
         )}
       </Box>
@@ -104,6 +106,7 @@ const OrganizationTreeNode: React.FC<{
               level={level + 1}
               canUpdate={canUpdate}
               canDelete={canDelete}
+              capByOrg={capByOrg}
               onEdit={onEdit}
               onDetails={onDetails}
               onDelete={onDelete}
@@ -183,6 +186,27 @@ export const Organizations: React.FC = () => {
       return res.data?.data ?? null;
     },
   });
+
+  // Per-hospital capacity/occupancy from the canonical hospital-cards endpoint
+  // (CapacityService-backed). The directory rows expose the deprecated
+  // `organizations.capacity` column, which is always 0 since capacity lives on
+  // department rows — merging the cards keeps the cards/table/tree in agreement
+  // with the statistics KPIs above them.
+  const { data: hospitalCards } = useQuery({
+    queryKey: ['organization-hospital-cards'],
+    queryFn: async () => {
+      const res = await apiClient.get('/organizations/hospitals-cards').catch(() => ({ data: [] }));
+      return res.data ?? [];
+    },
+  });
+  const capByOrg = new Map<string, { capacity: number; occupied: number }>();
+  (hospitalCards ?? []).forEach((h: any) =>
+    capByOrg.set(h.id, { capacity: h.capacity ?? 0, occupied: h.occupied ?? 0 }),
+  );
+  // Capacity/occupied for one org row — hospitals read the canonical cards, all
+  // other types keep their (irrelevant) list values.
+  const capacityOf = (org: any) => capByOrg.get(org.id)?.capacity ?? org.capacity ?? 0;
+  const occupiedOf = (org: any) => capByOrg.get(org.id)?.occupied ?? org._count?.traineeProfiles ?? 0;
 
   // Query Org Types
   const { data: orgTypes } = useQuery({
@@ -403,6 +427,7 @@ export const Organizations: React.FC = () => {
                 level={0}
                 canUpdate={canUpdate}
                 canDelete={canDelete}
+                capByOrg={capByOrg}
                 onEdit={(org) => { setOpenEdit(org); setFormData({ code: org.code, nameAr: org.nameAr, nameEn: org.nameEn || '', organizationTypeId: org.organizationTypeId || '', parentId: org.parentId || '', cityAr: org.cityAr || 'عرعر', regionAr: org.regionAr || 'الحدود الشمالية', status: org.status || 'active' }); }}
                 onDetails={(org) => setOpenDetails(org)}
                 onDelete={(id) => setDeleteId(id)}
@@ -421,8 +446,8 @@ export const Organizations: React.FC = () => {
       ) : view === 'cards' ? (
         <div style={{ display: 'grid', gap: space.xl, gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', alignItems: 'stretch' }}>
           {rows.map((org: any) => {
-            const capacity = org.capacity || 0;
-            const accepted = org._count?.traineeProfiles || 0;
+            const capacity = capacityOf(org);
+            const accepted = occupiedOf(org);
             const remaining = Math.max(0, capacity - accepted);
             return (
               <Surface key={org.id} padding={space.xl}>
@@ -501,8 +526,8 @@ export const Organizations: React.FC = () => {
             </TableHead>
             <TableBody>
               {rows.map((org: any) => {
-                const capacity = org.capacity || 0;
-                const accepted = org._count?.traineeProfiles || 0;
+                const capacity = capacityOf(org);
+                const accepted = occupiedOf(org);
                 const remaining = Math.max(0, capacity - accepted);
                 const occupancy = capacity > 0 ? Math.min(100, Math.round((accepted / capacity) * 100)) : 0;
                 return (
@@ -665,7 +690,8 @@ export const Organizations: React.FC = () => {
               <div><strong>النوع:</strong> {openDetails.organizationType?.nameAr || '—'}</div>
               <div><strong>المدينة:</strong> {openDetails.cityAr || 'عرعر'}</div>
               <div><strong>الحالة:</strong> {openDetails.status}</div>
-              <div><strong>السعة الاستيعابية:</strong> {openDetails.capacity || 0} مقعد</div>
+              <div><strong>السعة الاستيعابية:</strong> {capByOrg.get(openDetails.id)?.capacity ?? (openDetails.capacity || 0)} مقعد</div>
+              <div><strong>المشغول حالياً:</strong> {capByOrg.get(openDetails.id)?.occupied ?? 0}</div>
               <div><strong>الأقسام الكلينيكية:</strong> {openDetails.departments?.map((d: any) => d.nameAr).join(', ') || '—'}</div>
               <div>
                 <strong>الحسابات الإدارية المرتبطة:</strong>

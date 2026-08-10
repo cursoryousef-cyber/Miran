@@ -219,13 +219,33 @@ export const HospitalReview: React.FC = () => {
                       label: 'بدء المراجعة والقبول', icon: PlayCircle, tone: 'info' as const,
                       onClick: () => startReviewMut.mutate(row.id),
                     }] : []),
-                    ...(['allocated', 'hospital_review', 'on_hold', 'accepted'].includes(row.status) ? [{
+                    ...(['allocated', 'hospital_review', 'on_hold'].includes(row.status) ? [{
                       label: 'توزيع قسم/مدرب', icon: Edit3, tone: 'success' as const,
                       onClick: () => openDialog(row, 'assign'),
                     }] : []),
-                    ...(['hospital_review', 'allocated'].includes(row.status) ? [{
+                    ...(['allocated', 'hospital_review', 'on_hold'].includes(row.status) ? [{
+                      label: 'طلب مستندات', icon: FileText, tone: 'info' as const,
+                      onClick: () => openDialog(row, 'docs'),
+                    }] : []),
+                    ...(['allocated', 'hospital_review', 'on_hold'].includes(row.status) ? [{
+                      label: 'طلب تصحيح بيانات', icon: FileWarning, tone: 'warning' as const,
+                      onClick: () => openDialog(row, 'correction'),
+                    }] : []),
+                    ...(['allocated', 'hospital_review'].includes(row.status) ? [{
+                      label: 'إيقاف مؤقت', icon: PauseCircle, tone: 'neutral' as const,
+                      onClick: () => openDialog(row, 'hold'),
+                    }] : []),
+                    ...(['hospital_review', 'on_hold'].includes(row.status) ? [{
+                      label: 'إعادة للتجمع', icon: ArrowRightLeft, tone: 'warning' as const,
+                      onClick: () => openDialog(row, 'return'),
+                    }] : []),
+                    ...(row.status === 'hospital_review' ? [{
                       label: 'رفض', icon: XCircle, tone: 'danger' as const,
                       onClick: () => openDialog(row, 'reject'),
+                    }] : []),
+                    ...(row.status === 'on_hold' ? [{
+                      label: 'استئناف المراجعة', icon: PlayCircle, tone: 'success' as const,
+                      onClick: () => resumeMut.mutate(row.id),
                     }] : []),
                     { label: 'عرض التفاصيل', icon: Eye, tone: 'neutral' as const, onClick: () => openDialog(row, 'details') },
                   ]}
@@ -300,7 +320,7 @@ export const HospitalReview: React.FC = () => {
                             </Button>
                           </Tooltip>
                         )}
-                        {['allocated', 'hospital_review', 'on_hold', 'accepted'].includes(row.status) && (
+                        {['allocated', 'hospital_review', 'on_hold'].includes(row.status) && (
                           <Tooltip title="توزيع على القسم والمدرب">
                             <Button size="small" variant="contained" style={{ background: '#059669', minWidth: 0, padding: '4px 8px' }}
                               onClick={() => openDialog(row, 'assign')}>
@@ -316,19 +336,45 @@ export const HospitalReview: React.FC = () => {
                                 <FileText size={14} />
                               </Button>
                             </Tooltip>
-                            <Tooltip title="إعادة للتجمع">
-                              <Button size="small" variant="outlined" style={{ borderColor: '#D97706', color: '#D97706', minWidth: 0, padding: '4px 8px' }}
-                                onClick={() => openDialog(row, 'return')}>
-                                <ArrowRightLeft size={14} />
-                              </Button>
-                            </Tooltip>
-                            <Tooltip title="رفض نهائي">
-                              <Button size="small" variant="outlined" color="error" style={{ minWidth: 0, padding: '4px 8px' }}
-                                onClick={() => openDialog(row, 'reject')}>
-                                <XCircle size={14} />
+                            <Tooltip title="طلب تصحيح بيانات">
+                              <Button size="small" variant="outlined" style={{ borderColor: '#9333EA', color: '#9333EA', minWidth: 0, padding: '4px 8px' }}
+                                onClick={() => openDialog(row, 'correction')}>
+                                <FileWarning size={14} />
                               </Button>
                             </Tooltip>
                           </>
+                        )}
+                        {['allocated', 'hospital_review'].includes(row.status) && (
+                          <Tooltip title="إيقاف مؤقت">
+                            <Button size="small" variant="outlined" style={{ borderColor: '#64748B', color: '#64748B', minWidth: 0, padding: '4px 8px' }}
+                              onClick={() => openDialog(row, 'hold')}>
+                              <PauseCircle size={14} />
+                            </Button>
+                          </Tooltip>
+                        )}
+                        {['hospital_review', 'on_hold'].includes(row.status) && (
+                          <Tooltip title="إعادة للتجمع">
+                            <Button size="small" variant="outlined" style={{ borderColor: '#D97706', color: '#D97706', minWidth: 0, padding: '4px 8px' }}
+                              onClick={() => openDialog(row, 'return')}>
+                              <ArrowRightLeft size={14} />
+                            </Button>
+                          </Tooltip>
+                        )}
+                        {row.status === 'hospital_review' && (
+                          <Tooltip title="رفض نهائي">
+                            <Button size="small" variant="outlined" color="error" style={{ minWidth: 0, padding: '4px 8px' }}
+                              onClick={() => openDialog(row, 'reject')}>
+                              <XCircle size={14} />
+                            </Button>
+                          </Tooltip>
+                        )}
+                        {row.status === 'on_hold' && (
+                          <Tooltip title="استئناف المراجعة">
+                            <Button size="small" variant="contained" style={{ background: '#16A34A', minWidth: 0, padding: '4px 8px' }}
+                              onClick={() => resumeMut.mutate(row.id)} disabled={resumeMut.isPending}>
+                              <PlayCircle size={14} />
+                            </Button>
+                          </Tooltip>
                         )}
                       </div>
                     </TableCell>

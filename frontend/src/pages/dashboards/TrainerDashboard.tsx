@@ -24,26 +24,26 @@ export const TrainerDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const { data: dash, isLoading } = useQuery({
+  const { data: dash, isLoading, error: dashError, refetch: refetchDash } = useQuery({
     queryKey: ['tr-dashboard'],
     queryFn: async () => {
-      const res = await apiClient.get('/operations/trainer/dashboard').catch(() => ({ data: { data: null } }));
+      const res = await apiClient.get('/operations/trainer/dashboard');
       return res.data?.data ?? null;
     },
   });
 
-  const { data: interns } = useQuery({
+  const { data: interns, error: internsError, refetch: refetchInterns } = useQuery({
     queryKey: ['tr-interns'],
     queryFn: async () => {
-      const res = await apiClient.get('/operations/trainer/assigned-interns').catch(() => ({ data: { data: [] } }));
+      const res = await apiClient.get('/operations/trainer/assigned-interns');
       return res.data?.data ?? [];
     },
   });
 
-  const { data: me } = useQuery({
+  const { data: me, error: meError, refetch: refetchMe } = useQuery({
     queryKey: ['tr-me'],
     queryFn: async () => {
-      const res = await apiClient.get('/trainers/me').catch(() => ({ data: null }));
+      const res = await apiClient.get('/trainers/me');
       return res.data?.data ?? res.data ?? null;
     },
   });
@@ -53,7 +53,7 @@ export const TrainerDashboard: React.FC = () => {
   const { data: recentLogs } = useQuery({
     queryKey: ['tr-recent-logs'],
     queryFn: async () => {
-      const res = await apiClient.get('/logbook/my-logs').catch(() => ({ data: { data: [] } }));
+      const res = await apiClient.get('/logbook/my-logs');
       return res.data?.data ?? [];
     },
   });
@@ -61,7 +61,7 @@ export const TrainerDashboard: React.FC = () => {
   const { data: groups } = useQuery({
     queryKey: ['tr-groups'],
     queryFn: async () => {
-      const res = await apiClient.get('/operations/trainer/groups').catch(() => ({ data: { data: [] } }));
+      const res = await apiClient.get('/operations/trainer/groups');
       return res.data?.data ?? [];
     },
   });
@@ -69,16 +69,16 @@ export const TrainerDashboard: React.FC = () => {
   const { data: incoming } = useQuery({
     queryKey: ['tr-incoming'],
     queryFn: async () => {
-      const res = await apiClient.get('/operations/trainer/incoming-requests').catch(() => ({ data: { data: null } }));
+      const res = await apiClient.get('/operations/trainer/incoming-requests');
       return res.data?.data ?? null;
     },
   });
 
   const queryClient = useQueryClient();
-  const { data: assignmentRequests } = useQuery({
+  const { data: assignmentRequests, error: assignmentError, refetch: refetchAssignments } = useQuery({
     queryKey: ['tr-assignment-requests'],
     queryFn: async () => {
-      const res = await apiClient.get('/operations/trainer/assignment-requests').catch(() => ({ data: { data: [] } }));
+      const res = await apiClient.get('/operations/trainer/assignment-requests');
       return res.data?.data ?? [];
     },
   });
@@ -97,10 +97,10 @@ export const TrainerDashboard: React.FC = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tr-assignment-requests'] }),
   });
 
-  const { data: traineeDetail, isLoading: detailLoading } = useQuery({
+  const { data: traineeDetail, isLoading: detailLoading, refetch: refetchTraineeDetail } = useQuery({
     queryKey: ['tr-trainee-detail', selectedTraineeId],
     queryFn: async () => {
-      const res = await apiClient.get(`/operations/trainer/trainee/${selectedTraineeId}`).catch(() => ({ data: { data: null } }));
+      const res = await apiClient.get(`/operations/trainer/trainee/${selectedTraineeId}`);
       return res.data?.data ?? null;
     },
     enabled: !!selectedTraineeId,
@@ -115,6 +115,32 @@ export const TrainerDashboard: React.FC = () => {
   const activeCalls = dash?.openCalls ?? 0;
   const presentToday = dash?.presentToday ?? 0;
   const notCheckedIn = dash?.absentOrNotCheckedIn ?? 0;
+
+  const hasError = dashError || internsError || meError;
+  if (hasError) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'] }}>
+        <PageHeader
+          eyebrow="CLINICAL TRAINER"
+          icon={UserCog}
+          title="يومك التدريبي"
+          subtitle={user?.nameAr ?? ''}
+        />
+        <div className="glass-card" style={{ padding: space['2xl'], textAlign: 'center' }}>
+          <EmptyState
+            icon={AlertTriangle}
+            title="تعذر تحميل البيانات"
+            hint="تحقق من اتصالك بالشبكة وأعد المحاولة"
+          />
+          <div style={{ display: 'flex', gap: space.md, justifyContent: 'center', marginTop: space.lg }}>
+            <Button variant="contained" onClick={() => { refetchDash(); refetchInterns(); refetchMe(); refetchAssignments(); }}>
+              إعادة التحميل
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'] }}>
@@ -293,7 +319,13 @@ export const TrainerDashboard: React.FC = () => {
               </Panel>
             </div>
           ) : (
-            <EmptyState icon={Users} title="تعذر تحميل بيانات المتدرب" />
+            <div style={{ textAlign: 'center' }}>
+              <EmptyState icon={Users} title="تعذر تحميل بيانات المتدرب" />
+              <Button variant="outlined" size="small" sx={{ marginTop: space.lg }}
+                onClick={() => refetchTraineeDetail()}>
+                إعادة المحاولة
+              </Button>
+            </div>
           )}
         </DialogContent>
       </Dialog>

@@ -22,9 +22,9 @@ export const Notifications: React.FC = () => {
     queryFn: async () => (await apiClient.get('/notifications/unread-count')).data?.data ?? { count: 0 },
   });
 
-  const { data: notifications, isLoading } = useQuery({
+  const { data: notifications, isLoading, error, refetch } = useQuery({
     queryKey: ['notifications-page-list'],
-    queryFn: async () => (await apiClient.get('/notifications', { params: { limit: 50 } }).catch(() => ({ data: { data: [] } }))).data?.data ?? [],
+    queryFn: async () => (await apiClient.get('/notifications', { params: { limit: 50 } })).data?.data ?? [],
   });
 
   const invalidate = () => {
@@ -76,6 +76,11 @@ export const Notifications: React.FC = () => {
       >
         {isLoading ? (
           <PanelSkeleton rows={6} />
+        ) : error ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: space.md, padding: space['2xl'] }}>
+            <EmptyState icon={BellRing} title="تعذر تحميل الإشعارات" hint="تحقق من اتصالك وأعد المحاولة" />
+            <Button variant="outlined" size="small" onClick={() => refetch()}>إعادة المحاولة</Button>
+          </div>
         ) : rows.length === 0 ? (
           <EmptyState icon={BellRing} title="لا توجد إشعارات حالياً" />
         ) : (

@@ -26,6 +26,9 @@ Miran_Recording.mp4
 *firebase-adminsdk*.json
 *service-account*.json
 backend/appsyousef-*.json
+*.p8
+*.p12
+*.mobileprovision
 
 # Node / Dependencies / Builds
 node_modules/
@@ -38,3 +41,17 @@ uploads/
 *.swp
 *~
 .env.test
+
+# Build logs (transient)
+build_error*.log
+build_log.txt
+
+# Runtime test artifacts (auth tokens / payloads / logs — not part of the project)
+backend/*.log
+backend/*_token.txt
+backend/*_login*.json
+backend/alloc_hosp.json
+backend/appr_row.json
+backend/assign_dept.json
+backend/submit_batch.json
+backend/row_id.txt
