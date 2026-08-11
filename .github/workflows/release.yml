@@ -127,14 +127,10 @@ jobs:
         if: steps.check_secrets.outputs.has_secrets != 'true'
         run: |
           mkdir -p build
-          xcodebuild -archivePath build/Miran.xcarchive \
-                     -project Miran.xcodeproj \
+          xcodebuild -project Miran.xcodeproj \
                      -scheme Miran \
-                     -sdk iphoneos \
                      -destination 'generic/platform=iOS' \
-                     -configuration Release \
-                     TARGETED_DEVICE_FAMILY="1" \
-                     SDKROOT=iphoneos \
+                     -archivePath build/Miran.xcarchive \
                      CODE_SIGNING_ALLOWED=NO \
                      archive
 
@@ -173,12 +169,11 @@ jobs:
                      -authenticationKeyPath "$KEY_PATH"
 
       - name: Package IPA (Payload Zip Verification Export)
-        if: steps.check_secrets.outputs.has_secrets != 'true'
         run: |
           mkdir -p build/Export/Payload
           cp -R build/Miran.xcarchive/Products/Applications/Miran.app build/Export/Payload/
           cd build/Export && zip -r Miran.ipa Payload
-          echo "Unsigned Miran.ipa exported successfully to build/Export/Miran.ipa"
+          echo "IPA generated successfully at build/Export/Miran.ipa"
 
       - name: Upload Miran.ipa Artifact
         uses: actions/upload-artifact@v4
