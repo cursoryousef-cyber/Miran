@@ -1,9 +1,10 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationService } from '../notifications/notification.service';
 import {
   CAPABILITIES, CapabilityGuard, RequireCapability,
 } from '../../common/authz';
@@ -15,7 +16,10 @@ const VALID_STATUSES = ['open', 'under_review', 'resolved', 'closed'];
 @Controller('incidents')
 @UseGuards(JwtAuthGuard, RolesGuard, CapabilityGuard)
 export class IncidentsController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationService: NotificationService,
+  ) {}
 
   @Get()
   @RequireCapability(CAPABILITIES.INCIDENT_VIEW)
@@ -75,6 +79,28 @@ export class IncidentsController {
         status: 'open',
       },
     });
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: user.organizationId,
+        actorId: user.accountId,
+        action: 'incident.created',
+        entityType: 'Incident',
+        entityId: data.id,
+        newValues: { status: data.status, severity: data.severity, incidentType: data.incidentType },
+      },
+    });
+    try {
+      await this.notificationService.notifyOrgUsers(user.organizationId, 'hospital_training_admin', {
+        titleAr: 'بلاغ تشغيلي جديد',
+        bodyAr: `${data.incidentType}: ${data.description}`,
+        type: 'incident_reported',
+        referenceType: 'Incident',
+        referenceId: data.id,
+        channels: ['in_app', 'email'],
+      });
+    } catch (error) {
+      console.warn('Incident notification error:', error);
+    }
     return { success: true, data };
   }
 
@@ -90,6 +116,11 @@ export class IncidentsController {
       throw new BadRequestException(`الحالة غير صحيحة. المتاح: ${VALID_STATUSES.join('، ')}`);
     }
     const isResolved = dto.status === 'resolved' || dto.status === 'closed';
+    const existing = await this.prisma.incident.findFirst({
+      where: { id, organizationId: user.organizationId },
+    });
+    if (!existing) throw new NotFoundException('البلاغ غير موجود ضمن نطاق المنظمة الحالية');
+
     const data = await this.prisma.incident.update({
       where: { id },
       data: {
@@ -99,6 +130,29 @@ export class IncidentsController {
         resolvedAt: isResolved ? new Date() : undefined,
       },
     });
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: user.organizationId,
+        actorId: user.accountId,
+        action: 'incident.status_updated',
+        entityType: 'Incident',
+        entityId: data.id,
+        oldValues: { status: existing.status },
+        newValues: { status: data.status, resolution: data.resolution },
+      },
+    });
+    try {
+      await this.notificationService.notifyOrgUsers(user.organizationId, 'hospital_training_admin', {
+        titleAr: 'تحديث حالة البلاغ',
+        bodyAr: `تم تحديث البلاغ إلى الحالة: ${data.status}`,
+        type: 'incident_status_updated',
+        referenceType: 'Incident',
+        referenceId: data.id,
+        channels: ['in_app', 'email'],
+      });
+    } catch (error) {
+      console.warn('Incident status notification error:', error);
+    }
     return { success: true, data };
   }
 }
