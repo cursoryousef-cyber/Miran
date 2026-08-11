@@ -178,7 +178,7 @@ jobs:
       - name: Upload Miran.ipa Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Miran-iOS-v1.12-IPA
+          name: Miran-iOS-v1.13-IPA
           path: build/Export/Miran.ipa
           retention-days: 14
 

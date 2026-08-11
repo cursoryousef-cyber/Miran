@@ -63,7 +63,7 @@ struct AcademicTabView: View {
                                                 .font(.caption.monospaced())
                                                 .foregroundColor(MiranTheme.emerald)
                                         }
-                                        Text("السنة: \(intake.academicYear) — السعة: \(intake.capacity) متدرب")
+                                        Text("السنة: \(intake.academicYear ?? "") — السعة: \(intake.capacity ?? 0) متدرب")
                                             .font(.caption)
                                             .foregroundColor(MiranTheme.subtext)
                                     }
