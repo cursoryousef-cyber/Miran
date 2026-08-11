@@ -107,9 +107,9 @@ const C = CAPABILITIES;
 export const CAPABILITY_CONTEXTS: Record<Capability, ContextType[]> = {
   [C.TRAINING_REQUEST_CREATE]: ['university', 'platform', 'cluster'],
   [C.TRAINING_REQUEST_VIEW]: ['university', 'cluster', 'platform', 'hospital'],
-  [C.TRAINING_REQUEST_REVIEW]: ['cluster', 'platform'],
-  [C.TRAINING_REQUEST_APPROVE]: ['cluster', 'platform'],
-  [C.TRAINING_REQUEST_RETURN]: ['cluster', 'platform'],
+  [C.TRAINING_REQUEST_REVIEW]: ['cluster', 'hospital', 'platform'],
+  [C.TRAINING_REQUEST_APPROVE]: ['cluster', 'hospital', 'platform'],
+  [C.TRAINING_REQUEST_RETURN]: ['cluster', 'hospital', 'platform'],
 
   [C.ACADEMIC_BATCH_CREATE_FROM_REQUEST]: ['cluster', 'platform'],
   [C.ACADEMIC_BATCH_MANAGE]: ['cluster', 'platform'],
@@ -253,6 +253,10 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
 
   // ── Hospital training management (Canonical: hospital_training_admin) ────
   hospital_training_admin: [
+    C.TRAINING_REQUEST_VIEW,
+    C.TRAINING_REQUEST_REVIEW,
+    C.TRAINING_REQUEST_APPROVE,
+    C.TRAINING_REQUEST_RETURN,
     C.DEPARTMENT_MANAGE,
     C.CAPACITY_VIEW,
     C.CAPACITY_MANAGE,
