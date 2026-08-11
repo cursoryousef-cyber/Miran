@@ -17,6 +17,7 @@ import { TrainerLeaveManagement } from '../TrainerLeaveManagement';
 import { LogbookPage } from '../Logbook';
 import { Incidents } from '../Incidents';
 import { Graduation } from '../Graduation';
+import { Notifications } from '../Notifications';
 
 import { ScheduleBuilder } from './ScheduleBuilder';
 
@@ -39,6 +40,7 @@ const SECTIONS: Section[] = [
   { key: 'logbook',      label: 'السجل السريري',      render: () => <LogbookPage /> },
   { key: 'incidents',    label: 'البلاغات',            render: () => <Incidents /> },
   { key: 'graduation',   label: 'التخرج',             render: () => <Graduation /> },
+  { key: 'notifications', label: 'الإشعارات',         render: () => <Notifications /> },
 ];
 
 export const HospitalWorkspace: React.FC = () => {
