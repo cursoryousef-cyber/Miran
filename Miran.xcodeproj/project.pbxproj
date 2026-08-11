@@ -504,7 +504,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.11;
 				OTHER_LDFLAGS = "$(inherited) -framework SwiftUI -framework UIKit -framework Foundation";
 				PRODUCT_BUNDLE_IDENTIFIER = sa.miran.app;
 				DEVELOPMENT_TEAM = B4S7M6N5U5;
@@ -542,7 +542,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.11;
 				OTHER_LDFLAGS = "$(inherited) -framework SwiftUI -framework UIKit -framework Foundation";
 				PRODUCT_BUNDLE_IDENTIFIER = sa.miran.app;
 				PRODUCT_MODULE_NAME = Miran;
