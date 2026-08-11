@@ -156,7 +156,7 @@ jobs:
           </plist>
           EOF
 
-      - name: Export IPA
+      - name: Export IPA (App Store Release)
         if: steps.check_secrets.outputs.has_secrets == 'true'
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
@@ -171,6 +171,21 @@ jobs:
                      -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
                      -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
                      -authenticationKeyPath "$KEY_PATH"
+
+      - name: Package IPA (Payload Zip Verification Export)
+        if: steps.check_secrets.outputs.has_secrets != 'true'
+        run: |
+          mkdir -p build/Export/Payload
+          cp -R build/Miran.xcarchive/Products/Applications/Miran.app build/Export/Payload/
+          cd build/Export && zip -r Miran.ipa Payload
+          echo "Unsigned Miran.ipa exported successfully to build/Export/Miran.ipa"
+
+      - name: Upload Miran.ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Miran-iOS-v1.12-IPA
+          path: build/Export/Miran.ipa
+          retention-days: 14
 
       - name: Upload IPA to App Store Connect
         if: steps.check_secrets.outputs.has_secrets == 'true'

@@ -116,3 +116,17 @@ jobs:
             -archivePath build/Miran.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
             archive
+
+      - name: Package & Export Miran.ipa
+        run: |
+          mkdir -p build/Export/Payload
+          cp -R build/Miran.xcarchive/Products/Applications/Miran.app build/Export/Payload/
+          cd build/Export && zip -r Miran.ipa Payload
+          echo "IPA generated successfully at build/Export/Miran.ipa"
+
+      - name: Upload Miran.ipa Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Miran-iOS-v1.12-IPA
+          path: build/Export/Miran.ipa
+          retention-days: 14
