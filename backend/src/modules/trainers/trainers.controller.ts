@@ -163,12 +163,28 @@ export class TrainersController {
   /** Own profile — scoped by the caller's own account, so it needs no capability. */
   @Get('me')
   async getMyProfile(@CurrentUser() user: IAuthenticatedUser) {
-    const profile = await this.prisma.trainerProfile.findFirst({
+    let profile = await this.prisma.trainerProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
       include: { person: true, organization: true, department: true },
     });
-    if (!profile) return { message: 'لا يوجد ملف مدرب لهذا الحساب' };
-    return profile;
+    if (!profile && user.personId) {
+      profile = await this.prisma.trainerProfile.findFirst({
+        where: { personId: user.personId },
+        include: { person: true, organization: true, department: true },
+      });
+    }
+    if (!profile && (user.roles.includes('trainer') || user.roles.includes('training_supervisor')) && user.personId && user.organizationId) {
+      profile = await this.prisma.trainerProfile.create({
+        data: {
+          personId: user.personId,
+          organizationId: user.organizationId,
+          maxTrainees: 5,
+        },
+        include: { person: true, organization: true, department: true },
+      });
+    }
+    if (!profile) return { data: null, message: 'لا يوجد ملف مدرب لهذا الحساب' };
+    return { data: profile };
   }
 
   /**

@@ -243,7 +243,12 @@ export class NotificationService {
 
   private scopeWhere(scope: ScopeContext): Record<string, unknown> {
     if (!scope || scope.visibleOrgIds === null) return {};
-    return { organizationId: { in: scope.visibleOrgIds } };
+    return {
+      OR: [
+        { organizationId: { in: scope.visibleOrgIds } },
+        { organizationId: null },
+      ],
+    };
   }
 
   /**

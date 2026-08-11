@@ -722,7 +722,7 @@ export const LogbookPage: React.FC = () => {
         <DialogContent style={{ backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '20px' }}>
           {isTrainerRole && (
             <>
-              <FormControl size="small" fullWidth required error={!selectedTraineeId && !trainerGroupsLoading}>
+              <FormControl size="small" fullWidth required>
                 <InputLabel id="trainee-select-label">المتدرب</InputLabel>
                 <Select
                   labelId="trainee-select-label"

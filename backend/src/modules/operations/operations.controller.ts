@@ -770,18 +770,42 @@ export class OperationsController {
     return { success: true, data: attendance };
   }
 
-  private myTrainee(user: IAuthenticatedUser) {
-    return this.prisma.traineeProfile.findFirst({
+  private async myTrainee(user: IAuthenticatedUser) {
+    let profile = await this.prisma.traineeProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
       include: { person: true, organization: true, program: true },
     });
+    if (!profile && user.personId) {
+      profile = await this.prisma.traineeProfile.findFirst({
+        where: { personId: user.personId },
+        include: { person: true, organization: true, program: true },
+      });
+    }
+    return profile;
   }
 
-  private myTrainer(user: IAuthenticatedUser) {
-    return this.prisma.trainerProfile.findFirst({
+  private async myTrainer(user: IAuthenticatedUser) {
+    let profile = await this.prisma.trainerProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
       include: { person: true, department: true },
     });
+    if (!profile && user.personId) {
+      profile = await this.prisma.trainerProfile.findFirst({
+        where: { personId: user.personId },
+        include: { person: true, department: true },
+      });
+    }
+    if (!profile && (user.roles.includes('trainer') || user.roles.includes('training_supervisor')) && user.personId && user.organizationId) {
+      profile = await this.prisma.trainerProfile.create({
+        data: {
+          personId: user.personId,
+          organizationId: user.organizationId,
+          maxTrainees: 5,
+        },
+        include: { person: true, department: true },
+      });
+    }
+    return profile;
   }
 
   private async assertAttendanceInScope(id: string, user: IAuthenticatedUser) {

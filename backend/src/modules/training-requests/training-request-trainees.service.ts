@@ -1036,12 +1036,22 @@ export class TrainingRequestTraineesService {
     return { success: true, message: 'تمت استعادة مراجعة المتدرب' };
   }
 
-  /** قائمة الصفوف بحالة hospital_review/on_hold لوحة مراجعة المستشفى */
+  /** قائمة الصفوف بحالة hospital_review/on_hold لوحة مراجعة المستشفى وسلسلة القبول */
   async findForHospitalReview(hospitalOrgId: string) {
+    const childHospitals = await this.prisma.organization.findMany({
+      where: { parentId: hospitalOrgId },
+      select: { id: true },
+    });
+    const hospitalOrgIds = Array.from(new Set([hospitalOrgId, ...childHospitals.map(h => h.id)]));
+
     const data = await this.prisma.trainingRequestTrainee.findMany({
       where: {
-        assignedHospitalId: hospitalOrgId,
-        status: { in: ['allocated', 'hospital_review', 'on_hold', 'hospital_returned_to_cluster', 'accepted', 'active'] },
+        OR: [
+          { assignedHospitalId: { in: hospitalOrgIds } },
+          { trainingRequest: { sourceOrgId: { in: hospitalOrgIds } } },
+          { trainingRequest: { targetOrgId: { in: hospitalOrgIds } } },
+        ],
+        status: { in: ['allocated', 'submitted', 'cluster_approved', 'hospital_review', 'on_hold', 'hospital_returned_to_cluster', 'accepted', 'active'] },
       },
       include: {
         documents: true,
