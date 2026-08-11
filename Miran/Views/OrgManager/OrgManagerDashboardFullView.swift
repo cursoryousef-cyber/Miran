@@ -651,12 +651,12 @@ struct TrainingRequestDetailView: View {
                 .font(.headline.bold())
                 .foregroundColor(.white)
 
-            InfoRow(label: "البرنامج التدريبي", value: request.program?.nameAr)
-            InfoRow(label: "التخصص", value: request.specialty)
+            InfoRow(label: "البرنامج التدريبي", value: request.program?.nameAr ?? "—")
+            InfoRow(label: "التخصص", value: request.specialty ?? "—")
             InfoRow(label: "عدد المتدربين", value: "\(request.studentCount)")
             InfoRow(label: "الأولوية", value: priorityLabel(request.priority))
-            InfoRow(label: "تاريخ بدء التدريب", value: displayDate(request.trainingStartDate))
-            InfoRow(label: "تاريخ انتهاء التدريب", value: displayDate(request.trainingEndDate))
+            InfoRow(label: "تاريخ بدء التدريب", value: displayDate(request.trainingStartDate) ?? "—")
+            InfoRow(label: "تاريخ انتهاء التدريب", value: displayDate(request.trainingEndDate) ?? "—")
             if let text = request.notesPayload?.text, !text.isEmpty {
                 InfoRow(label: "نص الطلب", value: text)
             }
