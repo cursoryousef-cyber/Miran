@@ -82,8 +82,8 @@ struct UserDetailRBACView: View {
 
                     // 4. Associated Organization, Hospital & University
                     RBACSectionCard(title: "الجهة والتجمع التابع (Organization)", icon: "building.2.fill") {
-                        RBACDetailRow(label: "الجهة الحالية النشطة", value: user.activeOrganization.nameAr)
-                        RBACDetailRow(label: "رمز الجهة", value: user.activeOrganization.code)
+                        RBACDetailRow(label: "الجهة الحالية النشطة", value: user.activeOrganization.nameAr ?? "—")
+                        RBACDetailRow(label: "رمز الجهة", value: user.activeOrganization.code ?? "—")
                     }
 
                     // 5. Backend Granted Permissions

@@ -86,6 +86,9 @@ struct UserOrgResponse: Codable, Identifiable, Hashable {
     let nameAr: String?
     let nameEn: String?
     let isPrimary: Bool?
+
+    var displayName: String { nameAr ?? nameEn ?? code ?? id }
+    var displayCode: String { code ?? "—" }
 }
 
 // MARK: - Person
@@ -99,6 +102,8 @@ struct PersonModel: Codable, Identifiable {
     let bloodType: String?
     let emergencyContactName: String?
     let emergencyContactPhone: String?
+
+    var displayName: String { nameAr ?? nameEn ?? email ?? id }
 }
 
 // MARK: - Organization
@@ -112,6 +117,10 @@ struct OrganizationModel: Codable, Identifiable {
     let regionAr: String?
     let contactEmail: String?
     let contactPhone: String?
+
+    var displayName: String { nameAr ?? nameEn ?? code ?? id }
+    var displayCode: String { code ?? "—" }
+    var displayStatus: String { status ?? "ACTIVE" }
 }
 
 // MARK: - Trainee Profile
@@ -458,6 +467,9 @@ struct AcademicIntakeModel: Codable, Identifiable {
     let status: String?
     let capacity: Int?
     let programId: String?
+
+    var displayName: String { nameAr ?? nameEn ?? code ?? id }
+    var displayCode: String { code ?? "—" }
 }
 
 /// عنصر توزيع داخل حقل `allocations` لطلب التدريب (توزيع المقاعد على المستشفيات).

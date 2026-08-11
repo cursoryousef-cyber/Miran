@@ -36,7 +36,7 @@ struct TrainerDashboardFullView: View {
                                     .font(.system(size: 28))
                                     .foregroundColor(MiranTheme.emerald)
                             }
-                            Text("\(store.currentUserProfile?.activeOrganization.nameAr ?? "الجهة الحالية")")
+                            Text(authViewModel.currentUser?.activeOrganization.nameAr ?? "الجهة الحالية")
                                 .font(.subheadline)
                                 .foregroundColor(MiranTheme.subtext)
                         }

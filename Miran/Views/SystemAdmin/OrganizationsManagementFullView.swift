@@ -25,10 +25,10 @@ struct OrganizationsManagementFullView: View {
     var filteredOrganizations: [OrganizationModel] {
         organizations.filter { org in
             let matchesSearch = searchText.isEmpty ||
-                org.nameAr.localizedCaseInsensitiveContains(searchText) ||
-                org.code.localizedCaseInsensitiveContains(searchText)
+                org.displayName.localizedCaseInsensitiveContains(searchText) ||
+                org.displayCode.localizedCaseInsensitiveContains(searchText)
 
-            let matchesType = selectedTypeFilter == "ALL" || org.status == selectedTypeFilter || selectedTypeFilter.lowercased() == "all"
+            let matchesType = selectedTypeFilter == "ALL" || org.displayStatus == selectedTypeFilter || selectedTypeFilter.lowercased() == "all"
             return matchesSearch && matchesType
         }
     }
@@ -157,7 +157,7 @@ struct OrganizationsManagementFullView: View {
             }
             Button("إلغاء", role: .cancel) {}
         } message: { org in
-            Text("هل أنت تأكد من رغبتك في حذف جهة \"\(org.nameAr)\"؟ لا يمكن التراجع عن هذا الإجراء.")
+            Text("هل أنت تأكد من رغبتك في حذف جهة \"\(org.displayName)\"؟ لا يمكن التراجع عن هذا الإجراء.")
         }
     }
 
@@ -193,7 +193,7 @@ struct OrganizationRowCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(org.nameAr)
+                    Text(org.displayName)
                         .font(.body.weight(.bold))
                         .foregroundColor(.white)
                     if let en = org.nameEn {
@@ -203,7 +203,7 @@ struct OrganizationRowCard: View {
                     }
                 }
                 Spacer()
-                Text(org.code)
+                Text(org.displayCode)
                     .font(.caption.monospaced().bold())
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -384,7 +384,7 @@ struct EditOrganizationSheet: View {
 
     init(org: OrganizationModel, onUpdated: @escaping () -> Void) {
         self.org = org
-        self._nameAr = State(initialValue: org.nameAr)
+        self._nameAr = State(initialValue: org.nameAr ?? "")
         self._nameEn = State(initialValue: org.nameEn ?? "")
         self.onUpdated = onUpdated
     }
@@ -395,7 +395,7 @@ struct EditOrganizationSheet: View {
                 MiranTheme.background.ignoresSafeArea()
 
                 VStack(spacing: 16) {
-                    Text("تعديل جهة: \(org.code)")
+                    Text("تعديل جهة: \(org.displayCode)")
                         .font(.subheadline)
                         .foregroundColor(MiranTheme.subtext)
 

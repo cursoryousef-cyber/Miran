@@ -39,7 +39,7 @@ struct OrgSwitcherSheet: View {
                                                 .foregroundColor(org.id == authViewModel.currentUser?.activeOrganization.id ? MiranTheme.emerald : MiranTheme.subtext)
 
                                             VStack(alignment: .leading, spacing: 4) {
-                                                Text(org.nameAr)
+                                                Text(org.displayName)
                                                     .font(.body.weight(.bold))
                                                     .foregroundColor(.white)
                                                 if let en = org.nameEn {

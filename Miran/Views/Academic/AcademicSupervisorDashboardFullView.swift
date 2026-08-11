@@ -39,9 +39,9 @@ struct AcademicSupervisorDashboardFullView: View {
                         // Academic Metrics Grid
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                             MetricStatCard(title: "طلاب الامتياز المسندين", count: "\(store.trainees.count)", icon: "person.3.sequence.fill", color: .purple)
-                            MetricStatCard(title: "البرامج الأكاديمية", count: store.trainingPrograms.isEmpty ? "—" : "\(store.trainingPrograms.count)", icon: "book.closed.fill", color: MiranTheme.emerald)
-                            MetricStatCard(title: "طلبات اعتماد Logbook", count: "\(store.pendingLogbookCount)", icon: "clock.arrow.circlepath", color: .orange)
-                            MetricStatCard(title: "نسبة إنجاز الدفعة", count: store.organizationStatistics?.averageAttendanceRate != nil ? "\(Int(store.organizationStatistics!.averageAttendanceRate!))%" : "—", icon: "chart.bar.fill", color: MiranTheme.teal)
+                            MetricStatCard(title: "طلبات التدريب الأكاديمية", count: "\(store.trainingRequests.count)", icon: "book.closed.fill", color: MiranTheme.emerald)
+                            MetricStatCard(title: "طلبات اعتماد Logbook", count: "\(store.caseLogsList.filter { $0.status == "pending" }.count)", icon: "clock.arrow.circlepath", color: .orange)
+                            MetricStatCard(title: "نسبة الإشغال بالجهة", count: store.organizationStatistics?.occupancyPercentage != nil ? "\(Int(store.organizationStatistics!.occupancyPercentage))%" : "—", icon: "chart.bar.fill", color: MiranTheme.teal)
                         }
                         .padding(.horizontal)
 

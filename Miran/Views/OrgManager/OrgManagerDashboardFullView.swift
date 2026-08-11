@@ -372,7 +372,7 @@ struct IncomingTrainingRequestsView: View {
         let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             items = items.filter { request in
-                request.requestNumber.localizedCaseInsensitiveContains(trimmed)
+                request.displayRequestNumber.localizedCaseInsensitiveContains(trimmed)
                 || (request.sourceOrg?.nameAr ?? "").contains(trimmed)
                 || (request.targetOrg?.nameAr ?? "").contains(trimmed)
                 || (request.specialty ?? "").contains(trimmed)
@@ -444,7 +444,7 @@ struct TrainingRequestRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(request.requestNumber)
+                Text(request.displayRequestNumber)
                     .font(.subheadline.bold())
                     .foregroundColor(.white)
                 Spacer()
@@ -467,7 +467,7 @@ struct TrainingRequestRowView: View {
             }
 
             HStack(spacing: 14) {
-                Label("\(request.studentCount) متدرب", systemImage: "person.3")
+                Label("\(request.count) متدرب", systemImage: "person.3")
                     .font(.caption)
                     .foregroundColor(MiranTheme.subtext)
                 if let prog = request.program?.nameAr, !prog.isEmpty {
@@ -632,7 +632,7 @@ struct TrainingRequestDetailView: View {
     private func headerCard(_ request: TrainingRequestItem) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(request.requestNumber)
+                Text(request.displayRequestNumber)
                     .font(.title3.bold())
                     .foregroundColor(.white)
                 Spacer()

@@ -55,11 +55,11 @@ struct AcademicTabView: View {
                                 ForEach(intakes) { intake in
                                     VStack(alignment: .leading, spacing: 6) {
                                         HStack {
-                                            Text(intake.nameAr)
+                                            Text(intake.displayName)
                                                 .font(.body.weight(.bold))
                                                 .foregroundColor(.white)
                                             Spacer()
-                                            Text(intake.code)
+                                            Text(intake.displayCode)
                                                 .font(.caption.monospaced())
                                                 .foregroundColor(MiranTheme.emerald)
                                         }
