@@ -488,7 +488,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -504,7 +504,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.11;
+				MARKETING_VERSION = 1.12;
 				OTHER_LDFLAGS = "$(inherited) -framework SwiftUI -framework UIKit -framework Foundation";
 				PRODUCT_BUNDLE_IDENTIFIER = sa.miran.app;
 				DEVELOPMENT_TEAM = B4S7M6N5U5;
@@ -524,7 +524,7 @@
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = B4S7M6N5U5;
 				PROVISIONING_PROFILE_SPECIFIER = "Miran App Store 2026";
@@ -542,7 +542,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.11;
+				MARKETING_VERSION = 1.12;
 				OTHER_LDFLAGS = "$(inherited) -framework SwiftUI -framework UIKit -framework Foundation";
 				PRODUCT_BUNDLE_IDENTIFIER = sa.miran.app;
 				PRODUCT_MODULE_NAME = Miran;
