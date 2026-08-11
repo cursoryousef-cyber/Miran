@@ -112,25 +112,25 @@
 		A1B2C3D420000038 /* DigitalIDCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalIDCardView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000039 /* JoiningDeclarationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoiningDeclarationSheet.swift; sourceTree = "<group>"; };
 		A1B2C3D420000040 /* OrgMembersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgMembersView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000101 /* SystemAdminTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/SystemAdmin/SystemAdminTabView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000102 /* OrgManagerTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/OrgManager/OrgManagerTabView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000103 /* AcademicSupervisorTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Academic/AcademicSupervisorTabView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000104 /* TrainingSupervisorTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/TrainingSupervisor/TrainingSupervisorTabView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000105 /* OrganizationsManagementFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/SystemAdmin/OrganizationsManagementFullView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000106 /* UsersAndRolesManagementFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/SystemAdmin/UsersAndRolesManagementFullView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000107 /* ClinicalLogbookManagementFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Logbook/ClinicalLogbookManagementFullView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000108 /* UserDetailRBACView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/SystemAdmin/UserDetailRBACView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000109 /* OrgManagerDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/OrgManager/OrgManagerDashboardFullView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000110 /* AcademicSupervisorDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Academic/AcademicSupervisorDashboardFullView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000111 /* TrainingSupervisorDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/TrainingSupervisor/TrainingSupervisorDashboardFullView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000112 /* TrainerDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Trainer/TrainerDashboardFullView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000113 /* TraineeDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Trainee/TraineeDashboardFullView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000114 /* WorkflowEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Services/WorkflowEngine.swift; sourceTree = "<group>"; };
-		A1B2C3D420000115 /* RotationSchedulerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Services/RotationSchedulerEngine.swift; sourceTree = "<group>"; };
-		A1B2C3D420000116 /* FineGrainedRBACEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Services/FineGrainedRBACEngine.swift; sourceTree = "<group>"; };
-		A1B2C3D420000117 /* WorkflowTimelineComponent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Components/WorkflowTimelineComponent.swift; sourceTree = "<group>"; };
-		A1B2C3D420000118 /* ScheduleBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Components/ScheduleBuilderView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000119 /* TrainerAttendanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Trainer/TrainerAttendanceView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000101 /* SystemAdminTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAdminTabView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000102 /* OrgManagerTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgManagerTabView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000103 /* AcademicSupervisorTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademicSupervisorTabView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000104 /* TrainingSupervisorTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingSupervisorTabView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000105 /* OrganizationsManagementFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationsManagementFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000106 /* UsersAndRolesManagementFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsersAndRolesManagementFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000107 /* ClinicalLogbookManagementFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicalLogbookManagementFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000108 /* UserDetailRBACView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDetailRBACView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000109 /* OrgManagerDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgManagerDashboardFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000110 /* AcademicSupervisorDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademicSupervisorDashboardFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000111 /* TrainingSupervisorDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingSupervisorDashboardFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000112 /* TrainerDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainerDashboardFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000113 /* TraineeDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraineeDashboardFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000114 /* WorkflowEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowEngine.swift; sourceTree = "<group>"; };
+		A1B2C3D420000115 /* RotationSchedulerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RotationSchedulerEngine.swift; sourceTree = "<group>"; };
+		A1B2C3D420000116 /* FineGrainedRBACEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FineGrainedRBACEngine.swift; sourceTree = "<group>"; };
+		A1B2C3D420000117 /* WorkflowTimelineComponent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowTimelineComponent.swift; sourceTree = "<group>"; };
+		A1B2C3D420000118 /* ScheduleBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleBuilderView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000119 /* TrainerAttendanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainerAttendanceView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
