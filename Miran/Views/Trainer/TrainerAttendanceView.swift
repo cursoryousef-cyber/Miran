@@ -116,12 +116,12 @@ struct AttendanceRecordCard: View {
                 Spacer()
 
                 // Status Badge
-                Text(statusLabel(record.status))
+                Text(self.statusLabel(record.status))
                     .font(.caption2.bold())
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(statusColor(record.status).opacity(0.15))
-                    .foregroundColor(statusColor(record.status))
+                    .background(self.statusColor(record.status).opacity(0.15))
+                    .foregroundColor(self.statusColor(record.status))
                     .cornerRadius(8)
             }
 

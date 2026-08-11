@@ -9,6 +9,14 @@
 
 import SwiftUI
 
+enum ScheduleViewMode: String, CaseIterable, Identifiable {
+    case week = "أسبوعي"
+    case day = "يومي"
+    case agenda = "الأجندة"
+
+    var id: String { rawValue }
+}
+
 struct ScheduleBuilderView: View {
     @EnvironmentObject var store: AppStore
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -22,14 +30,6 @@ struct ScheduleBuilderView: View {
     @State private var selectedRotationToEdit: RotationModel?
     @State private var filterDepartmentId: String = "ALL"
     @State private var filterStatus: String = "ALL"
-
-    enum ScheduleViewMode: String, CaseIterable, Identifiable {
-        case week = "أسبوعي"
-        case day = "يومي"
-        case agenda = "الأجندة"
-
-        var id: String { rawValue }
-    }
 
     var body: some View {
         VStack(spacing: 0) {
