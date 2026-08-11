@@ -150,6 +150,11 @@ export const TrainerReassignment: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['trainers-list'] });
       queryClient.invalidateQueries({ queryKey: ['all-rotations'] });
       queryClient.invalidateQueries({ queryKey: ['reassignment-history'] });
+      queryClient.invalidateQueries({ queryKey: ['trainer-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['trainer-cards-assignment'] });
+      queryClient.invalidateQueries({ queryKey: ['hospital-review-trainees'] });
+      queryClient.invalidateQueries({ queryKey: ['hospital-capacity-breakdown'] });
+      queryClient.invalidateQueries({ queryKey: ['hospital-capacity'] });
       resetForm();
     },
     onError: (err: any) => {

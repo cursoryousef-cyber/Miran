@@ -30,9 +30,31 @@ export class TrainerQualificationService {
 
     const data = await Promise.all(
       quals.map(async (q) => {
-        const occupied = await this.prisma.rotation.count({
-          where: { trainerProfileId, programId: q.programId, status: 'active' },
-        });
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const [rotations, allocations, stagingRows] = await Promise.all([
+          this.prisma.rotation.findMany({
+            where: { trainerProfileId, programId: q.programId, status: { in: ['active', 'pending_acceptance', 'scheduled'] } },
+            select: { id: true, traineeProfileId: true },
+          }),
+          this.prisma.traineeAllocation.findMany({
+            where: { trainerProfileId, status: 'open', OR: [{ endDate: null }, { endDate: { gte: today } }] },
+            select: { id: true, traineeRowId: true, traineeProfileId: true },
+          }),
+          this.prisma.trainingRequestTrainee.findMany({
+            where: { assignedTrainerProfileId: trainerProfileId, status: { in: ['allocated', 'hospital_review', 'on_hold', 'accepted', 'active'] }, trainingRequest: { programId: q.programId } },
+            select: { id: true, traineeProfileId: true },
+          }),
+        ]);
+
+        const occupants = new Set<string>([
+          ...rotations.map((r) => r.traineeProfileId ? `profile:${r.traineeProfileId}` : `rot:${r.id}`),
+          ...allocations.map((a) => a.traineeProfileId ? `profile:${a.traineeProfileId}` : `row:${a.traineeRowId}`),
+          ...stagingRows.map((s) => s.traineeProfileId ? `profile:${s.traineeProfileId}` : `row:${s.id}`),
+        ]);
+
+        const occupied = occupants.size;
         const capacity = q.maxTrainees ?? trainer.maxTrainees;
         return {
           id: q.id,
@@ -95,12 +117,66 @@ export class TrainerQualificationService {
     const ids = trainers.map((t) => t.id);
     const today = new Date();
 
-    const [rotations, leaves] = await Promise.all([
+    const [rotations, allocations, stagingRows, leaves] = await Promise.all([
       this.prisma.rotation.findMany({
-        where: { trainerProfileId: { in: ids }, status: { in: ['active', 'scheduled'] } },
+        where: { trainerProfileId: { in: ids }, status: { in: ['active', 'pending_acceptance', 'scheduled'] } },
         select: {
-          id: true, trainerProfileId: true, status: true, startDate: true, endDate: true,
+          id: true,
+          trainerProfileId: true,
+          status: true,
+          startDate: true,
+          endDate: true,
+          traineeProfileId: true,
           department: { select: { nameAr: true } },
+          traineeProfile: {
+            select: { id: true, traineeNumber: true, person: { select: { nameAr: true } } },
+          },
+        },
+      }),
+      this.prisma.traineeAllocation.findMany({
+        where: {
+          trainerProfileId: { in: ids },
+          status: 'open',
+          OR: [{ endDate: null }, { endDate: { gte: today } }],
+        },
+        select: {
+          id: true,
+          trainerProfileId: true,
+          status: true,
+          startDate: true,
+          endDate: true,
+          traineeRowId: true,
+          traineeProfileId: true,
+          department: { select: { nameAr: true } },
+          traineeRow: {
+            select: {
+              id: true,
+              academicNumber: true,
+              nameAr: true,
+              traineeProfile: {
+                select: { id: true, traineeNumber: true, person: { select: { nameAr: true } } },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.trainingRequestTrainee.findMany({
+        where: {
+          assignedTrainerProfileId: { in: ids },
+          status: { in: ['allocated', 'hospital_review', 'on_hold', 'accepted', 'active'] },
+          OR: [{ endDate: null }, { endDate: { gte: today } }],
+        },
+        select: {
+          id: true,
+          assignedTrainerProfileId: true,
+          status: true,
+          startDate: true,
+          endDate: true,
+          academicNumber: true,
+          nameAr: true,
+          traineeProfileId: true,
+          assignedDepartment: { select: { nameAr: true } },
+          person: { select: { nameAr: true } },
           traineeProfile: {
             select: { id: true, traineeNumber: true, person: { select: { nameAr: true } } },
           },
@@ -122,17 +198,93 @@ export class TrainerQualificationService {
 
     const rotationsByTrainer = new Map<string, typeof rotations>();
     for (const r of rotations) {
+      if (!r.trainerProfileId) continue;
       const list = rotationsByTrainer.get(r.trainerProfileId) ?? [];
       list.push(r);
       rotationsByTrainer.set(r.trainerProfileId, list);
     }
+
+    const allocationsByTrainer = new Map<string, typeof allocations>();
+    for (const a of allocations) {
+      if (!a.trainerProfileId) continue;
+      const list = allocationsByTrainer.get(a.trainerProfileId) ?? [];
+      list.push(a);
+      allocationsByTrainer.set(a.trainerProfileId, list);
+    }
+
+    const stagingByTrainer = new Map<string, typeof stagingRows>();
+    for (const s of stagingRows) {
+      if (!s.assignedTrainerProfileId) continue;
+      const list = stagingByTrainer.get(s.assignedTrainerProfileId) ?? [];
+      list.push(s);
+      stagingByTrainer.set(s.assignedTrainerProfileId, list);
+    }
+
     const leaveByTrainer = new Map(leaves.map((l) => [l.trainerProfileId, l]));
 
     const data = trainers.map((t) => {
-      const mine = rotationsByTrainer.get(t.id) ?? [];
-      // Occupancy counts active rotations only, matching CapacityService.
-      const occupied = mine.filter((r) => r.status === 'active').length;
+      const myRotations = rotationsByTrainer.get(t.id) ?? [];
+      const myAllocations = allocationsByTrainer.get(t.id) ?? [];
+      const myStaging = stagingByTrainer.get(t.id) ?? [];
       const leave = leaveByTrainer.get(t.id);
+
+      const traineesMap = new Map<string, {
+        rotationId: string;
+        traineeProfileId: string | null;
+        nameAr: string | null;
+        traineeNumber: string | null;
+        departmentNameAr: string | null;
+        startDate: Date | null;
+        endDate: Date | null;
+      }>();
+
+      for (const r of myRotations) {
+        const key = r.traineeProfileId ? `profile:${r.traineeProfileId}` : `rotation:${r.id}`;
+        traineesMap.set(key, {
+          rotationId: r.id,
+          traineeProfileId: r.traineeProfile?.id ?? r.traineeProfileId ?? null,
+          nameAr: r.traineeProfile?.person?.nameAr ?? null,
+          traineeNumber: r.traineeProfile?.traineeNumber ?? null,
+          departmentNameAr: r.department?.nameAr ?? null,
+          startDate: r.startDate ?? null,
+          endDate: r.endDate ?? null,
+        });
+      }
+
+      for (const a of myAllocations) {
+        const key = a.traineeProfileId ? `profile:${a.traineeProfileId}` : `row:${a.traineeRowId}`;
+        if (!traineesMap.has(key)) {
+          traineesMap.set(key, {
+            rotationId: a.id,
+            traineeProfileId: a.traineeRow?.traineeProfile?.id ?? a.traineeProfileId ?? null,
+            nameAr: a.traineeRow?.traineeProfile?.person?.nameAr ?? a.traineeRow?.nameAr ?? null,
+            traineeNumber: a.traineeRow?.traineeProfile?.traineeNumber ?? a.traineeRow?.academicNumber ?? null,
+            departmentNameAr: a.department?.nameAr ?? null,
+            startDate: a.startDate ?? null,
+            endDate: a.endDate ?? null,
+          });
+        }
+      }
+
+      for (const s of myStaging) {
+        const key = s.traineeProfileId ? `profile:${s.traineeProfileId}` : `row:${s.id}`;
+        if (!traineesMap.has(key)) {
+          traineesMap.set(key, {
+            rotationId: s.id,
+            traineeProfileId: s.traineeProfile?.id ?? s.traineeProfileId ?? null,
+            nameAr: s.traineeProfile?.person?.nameAr ?? s.nameAr ?? s.person?.nameAr ?? null,
+            traineeNumber: s.traineeProfile?.traineeNumber ?? s.academicNumber ?? null,
+            departmentNameAr: s.assignedDepartment?.nameAr ?? null,
+            startDate: s.startDate ?? null,
+            endDate: s.endDate ?? null,
+          });
+        }
+      }
+
+      const currentTraineesList = Array.from(traineesMap.values());
+      const occupied = currentTraineesList.length;
+      const available = Math.max(0, t.maxTrainees - occupied);
+      const occupancyPercentage = t.maxTrainees > 0 ? Math.min(100, Math.round((occupied / t.maxTrainees) * 100)) : 0;
 
       return {
         id: t.id,
@@ -152,20 +304,10 @@ export class TrainerQualificationService {
         })),
         maxTrainees: t.maxTrainees,
         occupied,
-        available: Math.max(0, t.maxTrainees - occupied),
-        occupancyPercentage: t.maxTrainees > 0 ? Math.min(100, Math.round((occupied / t.maxTrainees) * 100)) : 0,
-        rotationCount: mine.length,
-        currentTrainees: mine
-          .filter((r) => r.status === 'active')
-          .map((r) => ({
-            rotationId: r.id,
-            traineeProfileId: r.traineeProfile?.id,
-            nameAr: r.traineeProfile?.person?.nameAr ?? null,
-            traineeNumber: r.traineeProfile?.traineeNumber ?? null,
-            departmentNameAr: r.department?.nameAr ?? null,
-            startDate: r.startDate,
-            endDate: r.endDate,
-          })),
+        available,
+        occupancyPercentage,
+        rotationCount: currentTraineesList.length,
+        currentTrainees: currentTraineesList,
         leave: leave
           ? {
               id: leave.id,

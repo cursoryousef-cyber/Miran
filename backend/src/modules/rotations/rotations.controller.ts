@@ -77,7 +77,18 @@ export class RotationsController {
       where: { organizationId: user.organizationId },
       include: {
         department: true,
-        traineeProfile: { include: { person: true } },
+        traineeProfile: {
+          include: {
+            // The logbook page treats trainer + training_supervisor as the same
+            // "trainer mode" and derives evaluateeId (UserAccount.id) from these
+            // accounts for evaluation/midpoint submissions. Return the same
+            // id+isActive payload the trainer branch does so a training_supervisor
+            // filling a logbook for an org rotation resolves the evaluatee.
+            person: {
+              include: { userAccounts: { select: { id: true, isActive: true } } },
+            },
+          },
+        },
         trainerProfile: { include: { person: true } },
       },
       orderBy: { startDate: 'asc' },

@@ -136,6 +136,17 @@ export class TrainerReassignmentService {
         },
       });
 
+      if (rotation.traineeProfileId) {
+        await tx.traineeAllocation.updateMany({
+          where: { traineeProfileId: rotation.traineeProfileId, status: 'open' },
+          data: { trainerProfileId: dto.newTrainerId },
+        });
+        await tx.trainingRequestTrainee.updateMany({
+          where: { traineeProfileId: rotation.traineeProfileId },
+          data: { assignedTrainerProfileId: dto.newTrainerId },
+        });
+      }
+
       // 2. Create immutable reassignment record
       const reassignment = await tx.trainerReassignment.create({
         data: {
@@ -260,6 +271,17 @@ export class TrainerReassignmentService {
           where: { id: rotation.id },
           data: { trainerProfileId: dto.newTrainerId },
         });
+
+        if (rotation.traineeProfileId) {
+          await tx.traineeAllocation.updateMany({
+            where: { traineeProfileId: rotation.traineeProfileId, status: 'open' },
+            data: { trainerProfileId: dto.newTrainerId },
+          });
+          await tx.trainingRequestTrainee.updateMany({
+            where: { traineeProfileId: rotation.traineeProfileId },
+            data: { assignedTrainerProfileId: dto.newTrainerId },
+          });
+        }
 
         reassignmentTrainees.push({
           traineeProfileId: rotation.traineeProfileId,

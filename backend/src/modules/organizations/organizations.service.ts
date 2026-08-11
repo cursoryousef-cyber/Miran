@@ -163,7 +163,7 @@ export class OrganizationsService {
     });
   }
 
-  async getTree() {
+  async getTree(visibleOrgIds: string[] | null = null) {
     const orgInclude = {
       organizationType: true,
       userRoles: {
@@ -183,6 +183,26 @@ export class OrganizationsService {
         select: { traineeProfiles: true, trainerProfiles: true, departments: true },
       },
     };
+
+    if (visibleOrgIds !== null) {
+      const scopedOrgs = await this.prisma.organization.findMany({
+        where: { id: { in: visibleOrgIds }, deletedAt: null },
+        include: orgInclude,
+        orderBy: { createdAt: 'asc' },
+      });
+
+      const orgMap = new Map(scopedOrgs.map((o) => [o.id, { ...o, children: [] as any[] }]));
+      const tree: any[] = [];
+
+      for (const org of orgMap.values()) {
+        if (org.parentId && orgMap.has(org.parentId)) {
+          orgMap.get(org.parentId)!.children.push(org);
+        } else {
+          tree.push(org);
+        }
+      }
+      return tree;
+    }
 
     const roots = await this.prisma.organization.findMany({
       where: { parentId: null, deletedAt: null },

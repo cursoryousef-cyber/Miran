@@ -90,8 +90,8 @@ export class OrganizationsController {
   @Get('tree')
   @ApiOperation({ summary: 'الهيكل التنظيمي الكامل كشجرة ديناميكية' })
   @RequirePermissions('view_organizations')
-  async getTree() {
-    return this.organizationsService.getTree();
+  async getTree(@Scope() scope?: ScopeContext) {
+    return this.organizationsService.getTree(scope?.visibleOrgIds ?? null);
   }
 
   @Get(':id')
