@@ -93,10 +93,10 @@ jobs:
             echo "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode > "$KEY_PATH"
             chmod 600 "$KEY_PATH"
             echo "App Store Connect API key validated successfully at $KEY_PATH."
-            echo "has_secrets=true" >> $GITHUB_OUTPUT
+            echo "has_secrets=true" >> "$GITHUB_OUTPUT"
           else
             echo "Notice: App Store Connect API secrets not configured. Building & archiving in local validation mode."
-            echo "has_secrets=false" >> $GITHUB_OUTPUT
+            echo "has_secrets=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Archive App (Signed App Store Release)
