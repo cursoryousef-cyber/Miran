@@ -36,7 +36,7 @@ struct TrainerDashboardFullView: View {
                                     .font(.system(size: 28))
                                     .foregroundColor(MiranTheme.emerald)
                             }
-                            Text("قسم الباطنة العامة — مستشفى برج الشمال الطبي")
+                            Text("\(store.currentUserProfile?.activeOrganization.nameAr ?? "الجهة الحالية")")
                                 .font(.subheadline)
                                 .foregroundColor(MiranTheme.subtext)
                         }

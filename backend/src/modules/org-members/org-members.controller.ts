@@ -31,9 +31,17 @@ export class OrgMembersController {
     @Query('status') status?: string,
     @Query('page') page?: string,
   ) {
-    // Membership resolved from OrganizationAssignment (UserOrganization fallback).
+    const orgIds = [user.organizationId];
+    if (user.organizationId) {
+      const children = await this.prisma.organization.findMany({
+        where: { parentId: user.organizationId, deletedAt: null },
+        select: { id: true },
+      });
+      orgIds.push(...children.map((c) => c.id));
+    }
+
     const { members: rows, total } = await this.orgAssignments.findMembershipsInOrg(
-      user.organizationId,
+      orgIds,
       { skip: page ? (parseInt(page) - 1) * 20 : 0, take: 50 },
     );
 
@@ -80,6 +88,10 @@ export class OrgMembersController {
   @RequireRoles('org_manager', 'platform_owner', 'cluster_administrator', 'training_director', 'hospital_administrator', 'hospital_training_admin', 'university_administrator')
   @ApiOperation({ summary: 'إضافة عضو جديد للجهة' })
   async create(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
+    if (!dto.roleCode && (!dto.roleCodes || dto.roleCodes.length === 0)) {
+      throw new BadRequestException('الرجاء اختيار الدور الوظيفي للعضو الجديد');
+    }
+
     if (dto.roleCode === 'trainee' || (Array.isArray(dto.roleCodes) && dto.roleCodes.includes('trainee'))) {
       throw new BadRequestException(
         'لا يمكن إنشاء حساب متدرب مباشرة عبر أعضاء الجهة — ينشأ المتدربون حصراً عبر مسار طلب التدريب والدفعة الأكاديمية (جامعة ← طلب تدريب ← اعتماد التجمع ← دفعة أكاديمية).',

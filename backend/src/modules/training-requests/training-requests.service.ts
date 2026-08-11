@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTrainingRequestDto, UpdateTrainingRequestDto } from './dto/training-request.dto';
 import { IAuthenticatedUser } from '../../common/interfaces';
@@ -208,6 +208,19 @@ export class TrainingRequestsService {
     const isClusterReq = dto.requestType === 'cluster_request' || (user?.roles?.some((r) => r.includes('cluster')) ?? false);
     const targetOrgId = isClusterReq && dto.targetHospitalId ? dto.targetHospitalId : dto.targetOrgId;
     const sourceOrgId = user?.organizationId || dto.targetOrgId;
+
+    if (user && isClusterReq && user.organizationId) {
+      const isPlatformAdmin = user.roles?.some((r) => r.includes('admin') || r.includes('owner'));
+      if (!isPlatformAdmin) {
+        const targetHospital = await this.prisma.organization.findUnique({
+          where: { id: targetOrgId },
+          select: { id: true, parentId: true },
+        });
+        if (targetHospital && targetHospital.id !== user.organizationId && targetHospital.parentId !== user.organizationId) {
+          throw new ForbiddenException('المستشفى المستهدف لا يتبع لتجمعك الصحي');
+        }
+      }
+    }
 
     await this.assertRequestDirection(sourceOrgId, targetOrgId, dto.requestType);
 

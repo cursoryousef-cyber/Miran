@@ -243,12 +243,16 @@ struct AddMemberSheet: View {
     @State private var nationalId = ""
     @State private var email = ""
     @State private var phone = ""
-    @State private var selectedRoleCode = "trainee"
+    @State private var selectedRoleCode = ""
     @State private var selectedDeptId = ""
     @State private var traineeNumber = ""
     @State private var level = "intern"
     @State private var isLoading = false
     @State private var errorMsg = ""
+
+    var selectableRoles: [RoleModel] {
+        availableRoles.filter { $0.code != "trainee" }
+    }
 
     var body: some View {
         NavigationView {
@@ -265,29 +269,19 @@ struct AddMemberSheet: View {
                 }
 
                 Section("الدور والجهة") {
-                    Picker("الدور", selection: $selectedRoleCode) {
-                        ForEach(availableRoles) { role in
+                    Picker("الدور الوظيفي", selection: $selectedRoleCode) {
+                        Text("اختر الدور الوظيفي...").tag("")
+                        ForEach(selectableRoles) { role in
                             Text(role.nameAr).tag(role.code)
                         }
                     }
 
-                    if selectedRoleCode == "trainer" || selectedRoleCode == "trainee" {
-                        Picker("القسم", selection: $selectedDeptId) {
-                            Text("اختر قسماً").tag("")
+                    if selectedRoleCode == "trainer" {
+                        Picker("القسم السريري", selection: $selectedDeptId) {
+                            Text("اختر قسماً...").tag("")
                             ForEach(departments) { dept in
                                 Text(dept.nameAr).tag(dept.id)
                             }
-                        }
-                    }
-                }
-
-                if selectedRoleCode == "trainee" {
-                    Section("بيانات التدريب") {
-                        TextField("رقم المتدرب", text: $traineeNumber)
-                        Picker("المستوى", selection: $level) {
-                            Text("امتياز").tag("intern")
-                            Text("مقيم").tag("resident")
-                            Text("طالب").tag("student")
                         }
                     }
                 }
@@ -300,6 +294,11 @@ struct AddMemberSheet: View {
             }
             .navigationTitle("إضافة عضو جديد")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                if selectedRoleCode.isEmpty {
+                    selectedRoleCode = selectableRoles.first?.code ?? ""
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("إلغاء") { dismiss() }
@@ -309,7 +308,7 @@ struct AddMemberSheet: View {
                         ProgressView()
                     } else {
                         Button("إضافة") { Task { await addMember() } }
-                            .disabled(nameAr.isEmpty || nationalId.isEmpty || email.isEmpty)
+                            .disabled(nameAr.trimmingCharacters(in: .whitespaces).isEmpty || nationalId.trimmingCharacters(in: .whitespaces).isEmpty || email.trimmingCharacters(in: .whitespaces).isEmpty || selectedRoleCode.isEmpty)
                     }
                 }
             }
@@ -317,6 +316,10 @@ struct AddMemberSheet: View {
     }
 
     private func addMember() async {
+        if selectedRoleCode.isEmpty {
+            errorMsg = "الرجاء اختيار الدور الوظيفي المناسب للعضو"
+            return
+        }
         isLoading = true
         errorMsg = ""
         do {
@@ -327,15 +330,14 @@ struct AddMemberSheet: View {
                 let phone: String
                 let roleCode: String
                 let departmentId: String?
-                let traineeNumber: String?
-                let level: String?
             }
             let req = CreateMemberRequest(
-                nameAr: nameAr, nationalId: nationalId, email: email, phone: phone,
+                nameAr: nameAr.trimmingCharacters(in: .whitespaces),
+                nationalId: nationalId.trimmingCharacters(in: .whitespaces),
+                email: email.trimmingCharacters(in: .whitespaces),
+                phone: phone.trimmingCharacters(in: .whitespaces),
                 roleCode: selectedRoleCode,
-                departmentId: selectedDeptId.isEmpty ? nil : selectedDeptId,
-                traineeNumber: traineeNumber.isEmpty ? nil : traineeNumber,
-                level: selectedRoleCode == "trainee" ? level : nil
+                departmentId: selectedDeptId.isEmpty ? nil : selectedDeptId
             )
             let _: EmptyResponse = try await APIClient.shared.request(endpoint: "/org-members", method: "POST", body: req)
             dismiss()

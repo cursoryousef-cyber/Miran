@@ -82,8 +82,8 @@ struct UserProfileResponse: Codable, Identifiable {
 
 struct UserOrgResponse: Codable, Identifiable, Hashable {
     let id: String
-    let code: String
-    let nameAr: String
+    let code: String?
+    let nameAr: String?
     let nameEn: String?
     let isPrimary: Bool?
 }
@@ -92,7 +92,7 @@ struct UserOrgResponse: Codable, Identifiable, Hashable {
 struct PersonModel: Codable, Identifiable {
     let id: String
     let nationalId: String?
-    let nameAr: String
+    let nameAr: String?
     let nameEn: String?
     let email: String?
     let phone: String?
@@ -104,10 +104,10 @@ struct PersonModel: Codable, Identifiable {
 // MARK: - Organization
 struct OrganizationModel: Codable, Identifiable {
     let id: String
-    let code: String
-    let nameAr: String
+    let code: String?
+    let nameAr: String?
     let nameEn: String?
-    let status: String
+    let status: String?
     let cityAr: String?
     let regionAr: String?
     let contactEmail: String?
@@ -451,8 +451,8 @@ struct TrainingProgramModel: Codable, Identifiable {
 
 struct AcademicIntakeModel: Codable, Identifiable {
     let id: String
-    let code: String
-    let nameAr: String
+    let code: String?
+    let nameAr: String?
     let nameEn: String?
     let academicYear: String?
     let status: String?
@@ -466,13 +466,15 @@ struct TrainingRequestAllocation: Codable, Identifiable {
     let hospitalCode: String?
     let hospitalName: String?
     let allocatedSeats: Int?
+    let seats: Int?
     let capacity: Int?
     let occupied: Int?
     let available: Int?
     let allocated: Bool?
     let reason: String?
 
-    var id: String { hospitalId ?? hospitalCode ?? hospitalName ?? "alloc" }
+    var effectiveSeats: Int { allocatedSeats ?? seats ?? capacity ?? 0 }
+    var id: String { hospitalId ?? hospitalCode ?? hospitalName ?? UUID().uuidString }
 }
 
 /// حقل `notes` في واجهة Backend عبارة عن JSON مُرمَّز كنص — يُفكَّك عند العرض فقط.
@@ -485,14 +487,14 @@ struct RequestNotesPayload: Codable {
 
 struct TrainingRequestItem: Codable, Identifiable {
     let id: String
-    let requestNumber: String
-    let sourceOrgId: String
-    let targetOrgId: String
+    let requestNumber: String?
+    let sourceOrgId: String?
+    let targetOrgId: String?
     let programId: String?
     let academicIntakeId: String?
-    let studentCount: Int
+    let studentCount: Int?
     let priority: String?
-    let status: String
+    let status: String?
     let notes: String?
     let allocations: [TrainingRequestAllocation]?
     let trainingStartDate: String?
@@ -508,16 +510,18 @@ struct TrainingRequestItem: Codable, Identifiable {
     let createdById: String?
     let updatedById: String?
 
+    var displayRequestNumber: String { requestNumber ?? "TR-—" }
+    var count: Int { studentCount ?? 0 }
+
     var notesPayload: RequestNotesPayload? {
         guard let notes, let data = notes.data(using: .utf8) else { return nil }
         return try? JSONDecoder().decode(RequestNotesPayload.self, from: data)
     }
 
-    var requestStatus: TrainingRequestStatus { TrainingRequestStatus(rawValue: status) ?? .unknown }
+    var requestStatus: TrainingRequestStatus { TrainingRequestStatus(rawValue: status ?? "") ?? .unknown }
 
     /// هل الطلب «وارد» فعلاً إلى جهة المستخدم الحالية؟ (المصدر = مصدر التحقق من نطاق الصلاحيات)
     var isIncoming: Bool {
-        // المعيار السلوكي: الجهة المستقبلة للتجمع/المستشفى هي جهة المستخدم النشطة.
         sourceOrg?.id != targetOrg?.id
     }
 }

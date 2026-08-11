@@ -38,10 +38,10 @@ struct AcademicSupervisorDashboardFullView: View {
 
                         // Academic Metrics Grid
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            MetricStatCard(title: "طلاب الامتياز المسندين", count: "48", icon: "person.3.sequence.fill", color: .purple)
-                            MetricStatCard(title: "البرامج الأكاديمية", count: "4", icon: "book.closed.fill", color: MiranTheme.emerald)
-                            MetricStatCard(title: "طلبات اعتماد Logbook", count: "9", icon: "clock.arrow.circlepath", color: .orange)
-                            MetricStatCard(title: "نسبة إنجاز الدفعة", count: "92%", icon: "chart.bar.fill", color: MiranTheme.teal)
+                            MetricStatCard(title: "طلاب الامتياز المسندين", count: "\(store.trainees.count)", icon: "person.3.sequence.fill", color: .purple)
+                            MetricStatCard(title: "البرامج الأكاديمية", count: store.trainingPrograms.isEmpty ? "—" : "\(store.trainingPrograms.count)", icon: "book.closed.fill", color: MiranTheme.emerald)
+                            MetricStatCard(title: "طلبات اعتماد Logbook", count: "\(store.pendingLogbookCount)", icon: "clock.arrow.circlepath", color: .orange)
+                            MetricStatCard(title: "نسبة إنجاز الدفعة", count: store.organizationStatistics?.averageAttendanceRate != nil ? "\(Int(store.organizationStatistics!.averageAttendanceRate!))%" : "—", icon: "chart.bar.fill", color: MiranTheme.teal)
                         }
                         .padding(.horizontal)
 

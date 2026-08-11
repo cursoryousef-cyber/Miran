@@ -16,6 +16,7 @@ import SwiftUI
 struct OrgManagerDashboardFullView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var store: AppStore
+    @State private var showCreateRequestSheet = false
 
     var body: some View {
         NavigationView {
@@ -72,12 +73,14 @@ struct OrgManagerDashboardFullView: View {
                                     AdminActionRow(title: "طلبات التدريب الواردة", subtitle: "مراجعة واعتماد طلبات التدريب القادمة من الجامعات", icon: "envelope.open.badge.clock", color: MiranTheme.emerald)
                                 }
 
-                                NavigationLink(destination: OrgMembersView()) {
-                                    AdminActionRow(title: "أعضاء التجمع الصحي والجهات المعتمدة", subtitle: "إدارة المدربين والمتربين المسندين للتجمع", icon: "person.crop.rectangle.stack.fill", color: MiranTheme.emerald)
+                                Button {
+                                    showCreateRequestSheet = true
+                                } label: {
+                                    AdminActionRow(title: "إنشاء طلب تدريب جديد للمستشفى", subtitle: "إرسال طلب تدريب مباشر للمستشفيات التابعة ضمن نطاقك", icon: "plus.circle.fill", color: MiranTheme.emerald)
                                 }
 
-                                NavigationLink(destination: ClinicalLogbookManagementFullView()) {
-                                    AdminActionRow(title: "مراقبة وإقرار سجلات المهارات (Sign-off)", subtitle: "اعتماد السجلات السريرية المكتملة بالجهة", icon: "checkmark.seal.fill", color: .blue)
+                                NavigationLink(destination: OrgMembersView()) {
+                                    AdminActionRow(title: "أعضاء التجمع الصحي والجهات المعتمدة", subtitle: "إدارة المدربين والمتربين المسندين للتجمع", icon: "person.crop.rectangle.stack.fill", color: MiranTheme.emerald)
                                 }
                             }
                             .padding(.horizontal)
@@ -116,6 +119,9 @@ struct OrgManagerDashboardFullView: View {
             .task {
                 await store.fetchClusterDashboard()
                 await store.fetchTrainingRequests()
+            }
+            .sheet(isPresented: $showCreateRequestSheet) {
+                CreateTrainingRequestSheet()
             }
         }
     }
@@ -248,6 +254,7 @@ struct IncomingTrainingRequestsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var searchText = ""
     @State private var filterGroup: TrainingRequestStatus.Group = .all
+    @State private var showCreateSheet = false
 
     var body: some View {
         ZStack {
@@ -290,8 +297,21 @@ struct IncomingTrainingRequestsView: View {
                 }
             }
         }
-        .navigationTitle("طلبات التدريب الواردة")
+        .navigationTitle("طلبات التدريب")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showCreateSheet = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundColor(MiranTheme.emerald)
+                }
+            }
+        }
+        .sheet(isPresented: $showCreateSheet) {
+            CreateTrainingRequestSheet()
+        }
         .task {
             await store.fetchTrainingRequests()
         }
@@ -1254,4 +1274,121 @@ private func displayDate(_ iso: String?) -> String? {
         return out.string(from: date)
     }
     return String(iso.prefix(10))
+}
+
+// MARK: - نافذة إضافة طلب تدريب جديد للمستشفى (من مدير التجمع)
+struct CreateTrainingRequestSheet: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var store: AppStore
+
+    @State private var specialty = ""
+    @State private var studentCountStr = "10"
+    @State private var targetHospitalId = ""
+    @State private var startDate = Date()
+    @State private var endDate = Calendar.current.date(byAdding: .month, value: 3, to: Date()) ?? Date()
+    @State private var notes = ""
+    @State private var isLoading = false
+    @State private var errorMsg = ""
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("تفاصيل الطلب والجهة") {
+                    TextField("التخصص الطبي (مثال: طب باطني)", text: $specialty)
+                    TextField("عدد المتدربين", text: $studentCountStr)
+                        .keyboardType(.numberPad)
+
+                    Picker("المستشفى المستهدف", selection: $targetHospitalId) {
+                        Text("اختر المستشفى...").tag("")
+                        ForEach(store.hospitalCards, id: \.id) { hosp in
+                            Text(hosp.nameAr).tag(hosp.id)
+                        }
+                    }
+                }
+
+                Section("فترة التدريب") {
+                    DatePicker("تاريخ بداية التدريب", selection: $startDate, displayedComponents: .date)
+                    DatePicker("تاريخ نهاية التدريب", selection: $endDate, displayedComponents: .date)
+                }
+
+                Section("ملاحظات إضافية") {
+                    TextField("ملاحظات ومتطلبات إضافية", text: $notes)
+                }
+
+                if !errorMsg.isEmpty {
+                    Section {
+                        Text(errorMsg).foregroundColor(.red).font(.caption)
+                    }
+                }
+            }
+            .navigationTitle("إنشاء طلب تدريب جديد")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("إلغاء") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if isLoading {
+                        ProgressView()
+                    } else {
+                        Button("إرسال ونشر") { Task { await submitRequest() } }
+                            .disabled(specialty.trimmingCharacters(in: .whitespaces).isEmpty || targetHospitalId.isEmpty || (Int(studentCountStr) ?? 0) <= 0)
+                    }
+                }
+            }
+            .onAppear {
+                if targetHospitalId.isEmpty {
+                    targetHospitalId = store.hospitalCards.first?.id ?? ""
+                }
+            }
+        }
+    }
+
+    private func submitRequest() async {
+        guard let count = Int(studentCountStr), count > 0 else {
+            errorMsg = "الرجاء أدخل عدد متدربين صحيح"
+            return
+        }
+        guard !targetHospitalId.isEmpty else {
+            errorMsg = "الرجاء اختيار المستشفى المستهدف"
+            return
+        }
+
+        isLoading = true
+        errorMsg = ""
+
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+
+        struct CreateReqBody: Encodable {
+            let requestType: String
+            let targetOrgId: String
+            let targetHospitalId: String
+            let specialty: String
+            let studentCount: Int
+            let trainingStartDate: String
+            let trainingEndDate: String
+            let notes: String
+        }
+
+        let body = CreateReqBody(
+            requestType: "cluster_request",
+            targetOrgId: targetHospitalId,
+            targetHospitalId: targetHospitalId,
+            specialty: specialty.trimmingCharacters(in: .whitespaces),
+            studentCount: count,
+            trainingStartDate: fmt.string(from: startDate),
+            trainingEndDate: fmt.string(from: endDate),
+            notes: notes.isEmpty ? "طلب تدريب داخلي محدد من التجمع الصحي" : notes
+        )
+
+        do {
+            let _: EmptyResponse = try await APIClient.shared.request(endpoint: "/training-requests", method: "POST", body: body)
+            await store.fetchTrainingRequests()
+            dismiss()
+        } catch {
+            errorMsg = error.localizedDescription
+        }
+        isLoading = false
+    }
 }

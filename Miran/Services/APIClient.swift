@@ -103,8 +103,24 @@ final class APIClient {
                 decoder.keyDecodingStrategy = .useDefaultKeys
                 do {
                     return try decoder.decode(T.self, from: data)
+                } catch let decErr as DecodingError {
+                    let detail: String
+                    switch decErr {
+                    case .typeMismatch(let type, let ctx):
+                        detail = "Type mismatch for '\(type)' at path: \(ctx.codingPath.map(\.stringValue).joined(separator: ".")) — \(ctx.debugDescription)"
+                    case .valueNotFound(let type, let ctx):
+                        detail = "Value of type '\(type)' not found at path: \(ctx.codingPath.map(\.stringValue).joined(separator: ".")) — \(ctx.debugDescription)"
+                    case .keyNotFound(let key, let ctx):
+                        detail = "Key '\(key.stringValue)' not found at path: \(ctx.codingPath.map(\.stringValue).joined(separator: ".")) — \(ctx.debugDescription)"
+                    case .dataCorrupted(let ctx):
+                        detail = "Data corrupted at path: \(ctx.codingPath.map(\.stringValue).joined(separator: ".")) — \(ctx.debugDescription)"
+                    @unknown default:
+                        detail = decErr.localizedDescription
+                    }
+                    print("❌ [API DECODING ERROR] Endpoint: \(cleanEndpoint) | Details: \(detail)")
+                    throw APIError.decodingError(decErr)
                 } catch {
-                    print("❌ [API ERROR] Endpoint: \(cleanEndpoint) | Status Code: \(httpResponse.statusCode) | Decoding Failed: \(error)")
+                    print("❌ [API ERROR] Endpoint: \(cleanEndpoint) | Decoding Failed: \(error)")
                     throw APIError.decodingError(error)
                 }
             }

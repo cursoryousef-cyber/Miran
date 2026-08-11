@@ -241,7 +241,7 @@ export class OrganizationAssignmentService {
    * can build byte-identical responses.
    */
   async findMembershipsInOrg(
-    organizationId: string,
+    organizationId: string | string[],
     opts: { skip?: number; take?: number } = {},
   ): Promise<{
     members: Array<{
@@ -250,15 +250,17 @@ export class OrganizationAssignmentService {
     }>;
     total: number;
   }> {
+    const orgIds = Array.isArray(organizationId) ? organizationId : [organizationId];
+
     const userAccountInclude = {
       include: {
         person: true,
-        userRoles: { where: { organizationId }, include: { role: true } },
+        userRoles: { where: { organizationId: { in: orgIds } }, include: { role: true } },
       },
     } as const;
 
     const assignments = await this.prisma.organizationAssignment.findMany({
-      where: { organizationId, sourceType: { in: MEMBERSHIP_SOURCES } },
+      where: { organizationId: { in: orgIds }, sourceType: { in: MEMBERSHIP_SOURCES } },
       include: { userAccount: userAccountInclude, role: true },
       orderBy: [{ isPrimary: 'desc' }, { startDate: 'asc' }],
     });
@@ -302,7 +304,7 @@ export class OrganizationAssignmentService {
       }));
     } else {
       const userOrgs = await this.prisma.userOrganization.findMany({
-        where: { organizationId },
+        where: { organizationId: { in: orgIds } },
         include: { userAccount: userAccountInclude },
       });
       rows = userOrgs.map((uo) => ({
