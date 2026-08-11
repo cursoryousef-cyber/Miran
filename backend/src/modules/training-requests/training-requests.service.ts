@@ -424,7 +424,7 @@ export class TrainingRequestsService {
             if (alloc.hospitalId) {
               await this.notificationService.notifyOrgUsers(
                 alloc.hospitalId,
-                'hospital_administrator',
+                'hospital_training_admin',
                 {
                   titleAr: 'تم تخصيص متدربين جدد لمستشفاكم',
                   titleEn: 'New trainees allocated to your hospital',
@@ -976,7 +976,7 @@ export class TrainingRequestsService {
   // ─── Generic acceptance chain (Phase 5) ─────────────────────────────────
   // Maps current status → { next on approve, next on reject, next on return, notifyRole }
   private static readonly CHAIN_MAP: Record<string, { approve: string; notifyRole: string; label: string }> = {
-    approved:                         { approve: 'hospital_administrator_accepted', notifyRole: 'hospital_administrator', label: 'مدير المستشفى' },
+    approved:                         { approve: 'hospital_administrator_accepted', notifyRole: 'hospital_training_admin', label: 'مدير المستشفى' },
     hospital_accepted:                { approve: 'supervisor_accepted',            notifyRole: 'training_supervisor',    label: 'المشرف التدريبي' },
     hospital_administrator_accepted:  { approve: 'training_supervisor_accepted',   notifyRole: 'training_supervisor',    label: 'المشرف التدريبي' },
     supervisor_accepted:              { approve: 'trainer_accepted',               notifyRole: 'trainer',                label: 'المدرب السريري' },

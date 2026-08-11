@@ -111,7 +111,7 @@ export class GraduationService {
 
     // Notify all parties
     try {
-      await this.notificationService.notifyOrgUsers(updated.organizationId, 'hospital_administrator', {
+      await this.notificationService.notifyOrgUsers(updated.organizationId, 'hospital_training_admin', {
         titleAr: 'تهانينا — اكتمل تخرج المتدرب',
         bodyAr: 'أكمل المتدرب جميع متطلبات برنامج التدريب بنجاح',
         type: 'trainee_graduated',
