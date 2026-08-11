@@ -97,11 +97,3 @@ struct AcademicTabView: View {
         isLoading = false
     }
 }
-
-struct AcademicIntakeModel: Codable, Identifiable {
-    let id: String
-    let code: String
-    let nameAr: String
-    let academicYear: String
-    let capacity: Int
-}

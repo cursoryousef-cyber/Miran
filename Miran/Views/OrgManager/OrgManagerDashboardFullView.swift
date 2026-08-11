@@ -237,7 +237,7 @@ struct HospitalCardRow: View {
 
 extension CGFloat {
     func clamped(to range: ClosedRange<CGFloat>) -> CGFloat {
-        min(max(self, range.lowerBound), range.upperBound)
+        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
     }
 }
 
@@ -1233,26 +1233,6 @@ struct TraineeRowStatusChip: View {
 }
 
 // MARK: - أدوات عامة
-
-struct InfoRow: View {
-    let label: String
-    let value: String?
-
-    var body: some View {
-        HStack(alignment: .top) {
-            Text(label)
-                .font(.caption)
-                .foregroundColor(MiranTheme.subtext)
-                .frame(width: 110, alignment: .trailing)
-            Spacer()
-            Text(value ?? "—")
-                .font(.subheadline)
-                .foregroundColor(.white)
-                .multilineTextAlignment(.trailing)
-            Spacer()
-        }
-    }
-}
 
 private func priorityLabel(_ priority: String?) -> String {
     switch priority {
