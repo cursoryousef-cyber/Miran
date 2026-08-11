@@ -732,7 +732,7 @@ model TrainingPlanRotation {
 model AcademicIntake {
   id               String            @id @default(uuid()) @db.Uuid
   organizationId   String            @map("organization_id") @db.Uuid
-  programId        String            @map("program_id") @db.Uuid
+  programId        String?           @map("program_id") @db.Uuid
   code             String            @unique @db.VarChar(50)
   nameAr           String            @map("name_ar") @db.VarChar(200)
   nameEn           String?           @map("name_en") @db.VarChar(200)
@@ -761,7 +761,7 @@ model AcademicIntake {
   approvedBy       UserAccount?      @relation("IntakeApprover", fields: [approvedById], references: [id])
   organization     Organization      @relation(fields: [organizationId], references: [id])
   university       Organization?     @relation("IntakeUniversity", fields: [universityOrgId], references: [id])
-  program          Program           @relation(fields: [programId], references: [id])
+  program          Program?          @relation(fields: [programId], references: [id])
   sourceRequest    TrainingRequest?  @relation("BatchSourceRequest", fields: [trainingRequestId], references: [id])
   traineeProfiles  TraineeProfile[]
   trainingRequests TrainingRequest[]

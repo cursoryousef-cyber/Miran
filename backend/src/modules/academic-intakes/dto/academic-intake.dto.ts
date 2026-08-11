@@ -10,10 +10,10 @@ import {
 } from 'class-validator';
 
 export class CreateAcademicIntakeDto {
-  @ApiProperty({ description: 'معرف البرنامج التدريبي' })
+  @ApiPropertyOptional({ description: 'معرف البرنامج التدريبي' })
+  @IsOptional()
   @IsUUID('4')
-  @IsNotEmpty()
-  programId!: string;
+  programId?: string;
 
   @ApiProperty({ description: 'رمز الدفعة الأكاديمية (مثال: INT-2027-NB)' })
   @IsString()

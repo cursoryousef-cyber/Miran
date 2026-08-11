@@ -160,7 +160,7 @@ export const AcademicIntakes: React.FC = () => {
         requestType: payload.requestType,
         targetOrgId,
         targetHospitalId: isClusterUser ? payload.targetHospitalId : undefined,
-        programId: payload.programId,
+        programId: payload.programId || undefined,
         specialty: payload.specialty,
         studentCount: Number(payload.studentCount),
         trainingStartDate: payload.trainingStartDate,
@@ -499,11 +499,11 @@ export const AcademicIntakes: React.FC = () => {
             </Grid>
 
             <Grid item xs={12} sm={6}>
-              <FormControl fullWidth size="small" required>
-                <InputLabel>البرنامج التدريبي *</InputLabel>
+              <FormControl fullWidth size="small">
+                <InputLabel>التخصص / البرنامج التدريبي</InputLabel>
                 <Select
                   value={reqFormData.programId}
-                  label="البرنامج التدريبي *"
+                  label="التخصص / البرنامج التدريبي"
                   onChange={(e) => {
                     const p = programs.find((x: any) => x.id === e.target.value);
                     let next = { ...reqFormData, programId: e.target.value };
@@ -517,6 +517,7 @@ export const AcademicIntakes: React.FC = () => {
                     setReqFormData(next);
                   }}
                 >
+                  <MenuItem value=""><em>غير محدد / لم يتم اختياره</em></MenuItem>
                   {programs.map((p: any) => (
                     <MenuItem key={p.id} value={p.id}>{p.nameAr} ({p.durationMonths} شهر)</MenuItem>
                   ))}
@@ -546,7 +547,6 @@ export const AcademicIntakes: React.FC = () => {
               createNewRequestMutation.isPending ||
               !reqFormData.specialty ||
               reqFormData.studentCount <= 0 ||
-              !reqFormData.programId ||
               (isClusterUser ? !reqFormData.targetHospitalId : !reqFormData.targetOrgId)
             }
             style={{ background: '#0F766E', fontWeight: 700 }}

@@ -86,12 +86,6 @@ export class AcademicBatchService {
       );
     }
 
-    if (!request.programId) {
-      throw new BadRequestException(
-        'لا يمكن إنشاء دفعة من طلب بلا برنامج تدريبي محدد',
-      );
-    }
-
     const academicYear =
       opts.academicYear ??
       (request.trainingStartDate
@@ -121,13 +115,13 @@ export class AcademicBatchService {
       const batch = await tx.academicIntake.create({
         data: {
           organizationId: request.targetOrgId,
-          programId: request.programId!,
+          programId: request.programId ?? null,
           trainingRequestId: request.id,
           universityOrgId: request.sourceOrgId,
           code,
           nameAr:
             opts.nameAr ??
-            `دفعة ${request.program?.nameAr ?? 'تدريب'} — ${request.sourceOrg?.nameAr ?? ''} ${academicYear}`.trim(),
+            `دفعة ${request.program?.nameAr ?? request.specialty ?? 'تدريب'} — ${request.sourceOrg?.nameAr ?? ''} ${academicYear}`.trim(),
           academicYear,
           startDate: request.trainingStartDate ?? new Date(),
           endDate: request.trainingEndDate ?? new Date(),
