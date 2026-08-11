@@ -412,7 +412,7 @@ export const AcademicIntakes: React.FC = () => {
 
             <Grid item xs={12} sm={6}>
               <TextField
-                label="التخصص / البرنامج التدريبي *"
+                label="التخصص الطبي *"
                 fullWidth
                 size="small"
                 required
