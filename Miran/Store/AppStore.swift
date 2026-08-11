@@ -402,7 +402,6 @@ final class AppStore: ObservableObject {
         let _: APIDataResponse<EvaluationItemModel> = try await APIClient.shared.request(endpoint: "/operations/evaluations/department", method: "POST", body: DeptEvalReq(departmentId: departmentId, score: score, notes: notes))
         await fetchTraineeData()
     }
-    }
 
     // MARK: - طلبات التدريب الواردة (Cluster)
 
