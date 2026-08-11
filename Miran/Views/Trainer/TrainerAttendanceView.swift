@@ -68,7 +68,7 @@ struct TrainerAttendanceView: View {
                             ForEach(filtered) { record in
                                 AttendanceRecordCard(
                                     record: record,
-                                    onApprove: { Task { await store.approveAttendance(id: record.id) } },
+                                    onApprove: { Task { try? await store.approveAttendance(id: record.id) } },
                                     onReject: { rejectTargetRecord = record }
                                 )
                             }
