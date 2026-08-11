@@ -282,8 +282,8 @@ export const AcademicIntakes: React.FC = () => {
                     <TableCell style={{ color: '#475569', fontWeight: 600 }}>
                       {univName}
                     </TableCell>
-                    <TableCell style={{ color: '#047857', fontWeight: 600 }}>
-                      {intake.program?.nameAr || intake.specialty || 'برنامج امتياز الطب البشري'}
+                    <TableCell style={{ color: '#475569', fontWeight: 600 }}>
+                      {intake.program?.nameAr || intake.specialty || 'غير محدد / لم يتم اختياره'}
                     </TableCell>
                     <TableCell style={{ color: '#64748B', fontSize: '12px' }}>
                       {intake.startDate ? new Date(intake.startDate).toISOString().split('T')[0] : '—'} إلى {intake.endDate ? new Date(intake.endDate).toISOString().split('T')[0] : '—'}
