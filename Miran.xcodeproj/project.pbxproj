@@ -207,6 +207,7 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C3D420000007 /* SharedComponents.swift */,
+				A1B2C3D420000117 /* WorkflowTimelineComponent.swift */,
 				A1B2C3D420000118 /* ScheduleBuilderView.swift */,
 			);
 			path = Components;
@@ -222,6 +223,10 @@
 				A1B2C3D430000006 /* Trainee */,
 				A1B2C3D430000007 /* Trainer */,
 				A1B2C3D430000008 /* Academic */,
+				A1B2C3D430000012 /* SystemAdmin */,
+				A1B2C3D430000013 /* OrgManager */,
+				A1B2C3D430000014 /* TrainingSupervisor */,
+				A1B2C3D430000015 /* Logbook */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -248,6 +253,7 @@
 				A1B2C3D420000016 /* TraineeProfileView.swift */,
 				A1B2C3D420000099 /* ClinicalLogbookView.swift */,
 				A1B2C3D420000038 /* DigitalIDCardView.swift */,
+				A1B2C3D420000113 /* TraineeDashboardFullView.swift */,
 			);
 			path = Trainee;
 			sourceTree = "<group>";
@@ -262,6 +268,7 @@
 				A1B2C3D420000021 /* CallCenterView.swift */,
 				A1B2C3D420000022 /* TraineeDetailView.swift */,
 				A1B2C3D420000023 /* TrainerPlanView.swift */,
+				A1B2C3D420000112 /* TrainerDashboardFullView.swift */,
 				A1B2C3D420000119 /* TrainerAttendanceView.swift */,
 			);
 			path = Trainer;
@@ -275,8 +282,47 @@
 				A1B2C3D420000026 /* AssignmentView.swift */,
 				A1B2C3D420000027 /* ReportsView.swift */,
 				A1B2C3D420000028 /* RiskView.swift */,
+				A1B2C3D420000103 /* AcademicSupervisorTabView.swift */,
+				A1B2C3D420000110 /* AcademicSupervisorDashboardFullView.swift */,
 			);
 			path = Academic;
+			sourceTree = "<group>";
+		};
+		A1B2C3D430000012 /* SystemAdmin */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D420000101 /* SystemAdminTabView.swift */,
+				A1B2C3D420000105 /* OrganizationsManagementFullView.swift */,
+				A1B2C3D420000106 /* UsersAndRolesManagementFullView.swift */,
+				A1B2C3D420000108 /* UserDetailRBACView.swift */,
+			);
+			path = SystemAdmin;
+			sourceTree = "<group>";
+		};
+		A1B2C3D430000013 /* OrgManager */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D420000102 /* OrgManagerTabView.swift */,
+				A1B2C3D420000109 /* OrgManagerDashboardFullView.swift */,
+			);
+			path = OrgManager;
+			sourceTree = "<group>";
+		};
+		A1B2C3D430000014 /* TrainingSupervisor */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D420000104 /* TrainingSupervisorTabView.swift */,
+				A1B2C3D420000111 /* TrainingSupervisorDashboardFullView.swift */,
+			);
+			path = TrainingSupervisor;
+			sourceTree = "<group>";
+		};
+		A1B2C3D430000015 /* Logbook */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D420000107 /* ClinicalLogbookManagementFullView.swift */,
+			);
+			path = Logbook;
 			sourceTree = "<group>";
 		};
 		A1B2C3D430000009 /* Services */ = {
@@ -284,6 +330,9 @@
 			children = (
 				A1B2C3D420000030 /* KeychainService.swift */,
 				A1B2C3D420000031 /* APIClient.swift */,
+				A1B2C3D420000114 /* WorkflowEngine.swift */,
+				A1B2C3D420000115 /* RotationSchedulerEngine.swift */,
+				A1B2C3D420000116 /* FineGrainedRBACEngine.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
