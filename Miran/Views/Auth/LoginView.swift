@@ -57,7 +57,7 @@ struct LoginView: View {
                             .font(.title.weight(.bold))
                             .foregroundColor(.white)
 
-                        Text("المنصة الوطنية لإدارة التدريب الصحي")
+                        Text("منصة التدريب الصحية الالكترونية")
                             .font(.subheadline)
                             .foregroundColor(MiranTheme.subtext)
                     }
@@ -173,9 +173,10 @@ struct LoginView: View {
 
                     Spacer(minLength: 40)
 
-                    Text("نظام إدارة الحسابات والصلاحيات الوطنية (Miran Auth REST Server)")
+                    Text("جميع الحقوق محفوظة د. فواز جمال الديدب 2026")
                         .font(.caption2)
                         .foregroundColor(MiranTheme.subtext)
+                        .multilineTextAlignment(.center)
                 }
                 .padding(20)
             }

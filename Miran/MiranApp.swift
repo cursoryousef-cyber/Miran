@@ -1,6 +1,6 @@
 //
 //  MiranApp.swift
-//  مِران — المنصة الوطنية لإدارة التدريب الصحي (National Healthcare Internship Platform)
+//  مِران — منصة التدريب الصحية الالكترونية (National Healthcare Internship Platform)
 //
 //  نقطة الدخول الرئيسية. التبويبات والمحركات تُعرض بصفة حصرية ودقيقة حسب الدور (RBAC Pipeline).
 //
