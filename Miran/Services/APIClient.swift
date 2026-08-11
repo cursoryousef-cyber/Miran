@@ -207,10 +207,17 @@ private struct ServerErrorResponse: Decodable {
 struct AnyEncodable: Encodable {
     private let encodeClosure: (Encoder) throws -> Void
 
-    init<T: Encodable>(_ value: T) {
-        self.encodeClosure = { encoder in
-            var container = encoder.singleValueContainer()
-            try container.encode(value)
+    init<T>(_ value: T) {
+        if let enc = value as? Encodable {
+            self.encodeClosure = { encoder in
+                var container = encoder.singleValueContainer()
+                try container.encode(enc)
+            }
+        } else {
+            self.encodeClosure = { encoder in
+                var container = encoder.singleValueContainer()
+                try container.encodeNil()
+            }
         }
     }
 

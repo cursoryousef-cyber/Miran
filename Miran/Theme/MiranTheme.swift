@@ -84,6 +84,10 @@ struct MiranTheme {
         scheme == .dark ? Color(hex: "0B1220") : Color(hex: "F8FAFC")
     }
 
+    static func cardBackground(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "131A2B") : Color.white
+    }
+
     static func surface(for scheme: ColorScheme) -> Color {
         scheme == .dark ? Color(hex: "131A2B") : Color.white
     }

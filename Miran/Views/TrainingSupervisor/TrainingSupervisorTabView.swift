@@ -8,8 +8,6 @@
 
 import SwiftUI
 
-typealias HospitalSupervisorTabView = TrainingSupervisorTabView
-
 struct TrainingSupervisorTabView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var selectedTab = 0

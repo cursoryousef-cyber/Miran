@@ -160,6 +160,7 @@ struct RotationModel: Codable, Identifiable {
     let midpointMeetingDone: Bool
     let department: DepartmentModel?
     let trainerProfile: TrainerProfileModel?
+    let traineeProfile: TraineeProfileModel?
 }
 
 // MARK: - Department

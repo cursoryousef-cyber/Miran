@@ -277,8 +277,8 @@ final class AppStore: ObservableObject {
 
     func updateDepartment(id: String, nameAr: String?, capacity: Int?, isActive: Bool?) async throws {
         let body: [String: AnyEncodable] = [
-            "nameAr": nameAr != nil ? AnyEncodable(nameAr!) : AnyEncodable(NSNull()),
-            "capacity": capacity != nil ? AnyEncodable(capacity!) : AnyEncodable(NSNull())
+            "nameAr": AnyEncodable(nameAr),
+            "capacity": AnyEncodable(capacity)
         ]
         let _: APIDataResponse<DepartmentModel> = try await APIClient.shared.request(endpoint: "/rotations/departments/\(id)", method: "PATCH", body: body)
         await fetchHospitalData()

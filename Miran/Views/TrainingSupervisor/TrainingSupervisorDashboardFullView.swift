@@ -251,10 +251,11 @@ struct TraineeReassignmentSheet: View {
                 Section("بيانات إعادة الإسناد") {
                     Picker("المتدرب", selection: $selectedTraineeId) {
                         Text("اختر متدرباً...").tag("")
-                        ForEach(store.hospitalRotationsList) { rot in
-                            if let trainee = rot.traineeProfile {
-                                Text("\(trainee.person?.nameAr ?? trainee.id) (\(rot.department?.nameAr ?? ""))").tag(trainee.id)
-                            }
+                        ForEach(store.hospitalRotationsList.compactMap { rot -> (RotationModel, TraineeProfileModel)? in
+                            guard let t = rot.traineeProfile else { return nil }
+                            return (rot, t)
+                        }, id: \.0.id) { (rot, trainee) in
+                            Text("\(trainee.person?.nameAr ?? trainee.id) (\(rot.department?.nameAr ?? ""))").tag(trainee.id)
                         }
                     }
 
