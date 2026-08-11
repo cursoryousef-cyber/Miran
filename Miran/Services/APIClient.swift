@@ -203,3 +203,18 @@ final class APIClient {
 private struct ServerErrorResponse: Decodable {
     let message: String?
 }
+
+struct AnyEncodable: Encodable {
+    private let encodeClosure: (Encoder) throws -> Void
+
+    init<T: Encodable>(_ value: T) {
+        self.encodeClosure = { encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(value)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try encodeClosure(encoder)
+    }
+}

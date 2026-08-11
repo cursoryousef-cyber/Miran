@@ -778,3 +778,168 @@ struct ClusterTimelineTrainee: Codable, Identifiable {
 
     var id: String { trainee?.id ?? "\(current ?? "c")-\(completionPercentage ?? 0)" }
 }
+
+// MARK: - Operational Shift Model (GET /operations/schedule, POST /operations/shifts)
+struct ShiftItemModel: Codable, Identifiable {
+    let id: String
+    let organizationId: String?
+    let traineeProfileId: String?
+    let departmentId: String?
+    let date: String
+    let shiftType: String // morning, evening, night, call_24h
+    let startTime: String?
+    let endTime: String?
+    let department: DepartmentModel?
+    let traineeProfile: TraineeProfileModel?
+}
+
+// MARK: - Attendance Record Model (GET /operations/attendance, POST /operations/attendance/check-in)
+struct AttendanceItemModel: Codable, Identifiable {
+    let id: String
+    let organizationId: String?
+    let traineeProfileId: String?
+    let shiftId: String?
+    let date: String
+    let checkIn: String?
+    let checkOut: String?
+    let method: String?
+    let isLate: Bool?
+    let lateMinutes: Int?
+    let status: String // present, absent, late, correction_requested, rejected
+    let excuseReason: String?
+    let approvedById: String?
+    let traineeProfile: TraineeProfileModel?
+    let shift: ShiftItemModel?
+}
+
+// MARK: - Clinical Case Log Model (GET /logbook/case-logs, POST /logbook/case-logs)
+struct ClinicalCaseLogItemModel: Codable, Identifiable {
+    let id: String
+    let organizationId: String?
+    let traineeProfileId: String?
+    let trainerProfileId: String?
+    let departmentId: String?
+    let diagnosis: String
+    let specialtyAr: String?
+    let complexity: String? // low, medium, high
+    let participationLevel: String? // observer, assistant, primary
+    let status: String // submitted, approved, rejected, modification_requested
+    let notes: String?
+    let submittedAt: String?
+    let traineeProfile: TraineeProfileModel?
+    let trainerProfile: TrainerProfileModel?
+    let department: DepartmentModel?
+}
+
+// MARK: - Procedure Catalog Item (GET /logbook/procedures)
+struct ProcedureCatalogItemModel: Codable, Identifiable {
+    let id: String
+    let code: String
+    let titleAr: String
+    let titleEn: String?
+    let category: String
+    let minRequired: Int?
+    let descriptionAr: String?
+}
+
+// MARK: - Evaluation Form & Item Models (GET /operations/evaluations)
+struct EvaluationFormItemModel: Codable, Identifiable {
+    let id: String
+    let titleAr: String
+    let titleEn: String?
+    let formType: String // midpoint, final, department
+    let isActive: Bool?
+}
+
+struct EvaluationItemModel: Codable, Identifiable {
+    let id: String
+    let organizationId: String?
+    let formId: String?
+    let evaluatorId: String?
+    let evaluateeId: String?
+    let rotationId: String?
+    let totalScore: Double?
+    let status: String? // submitted, approved
+    let submittedAt: String?
+    let form: EvaluationFormItemModel?
+    let evaluator: UserProfileResponse?
+    let evaluatee: UserProfileResponse?
+    let rotation: RotationModel?
+}
+
+// MARK: - Qualified Trainer Card Model (GET /trainers/qualified-workspace-cards)
+struct TrainerQualifiedCardModel: Codable, Identifiable {
+    let id: String
+    let trainerProfileId: String
+    let nameAr: String
+    let nameEn: String?
+    let email: String?
+    let phone: String?
+    let specialty: String?
+    let departmentName: String?
+    let capacity: Int
+    let occupied: Int
+    let available: Int
+    let occupancyPercentage: Double
+    let activeTrainees: [TraineeProfileModel]?
+}
+
+// MARK: - Request DTOs
+struct CreateRotationRequest: Encodable {
+    let traineeProfileId: String
+    let departmentId: String
+    let trainerProfileId: String
+    let startDate: String
+    let endDate: String
+    let status: String?
+}
+
+struct CreateShiftRequest: Encodable {
+    let traineeProfileId: String
+    let departmentId: String
+    let date: String
+    let shiftType: String
+    let startTime: String?
+    let endTime: String?
+}
+
+struct CreateTaskRequest: Encodable {
+    let assignedToId: String
+    let titleAr: String
+    let description: String?
+    let dueDate: String?
+    let priority: String?
+}
+
+struct CreateCallRequest: Encodable {
+    let callType: String
+    let customTitle: String?
+    let note: String?
+    let location: String?
+    let expectedMinutes: Int?
+    let departmentId: String?
+}
+
+struct CreateClinicalCaseLogRequest: Encodable {
+    let diagnosis: String
+    let specialtyAr: String?
+    let complexity: String
+    let participationLevel: String
+    let procedureId: String?
+    let departmentId: String?
+    let notes: String?
+}
+
+struct SubmitEvaluationRequest: Encodable {
+    let formId: String
+    let evaluateeId: String
+    let rotationId: String
+    let totalScore: Double
+    let notes: String?
+}
+
+struct ReassignTrainerRequest: Encodable {
+    let traineeProfileId: String
+    let targetTrainerProfileId: String
+    let reason: String?
+}

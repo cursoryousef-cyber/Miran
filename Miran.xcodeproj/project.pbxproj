@@ -65,6 +65,8 @@
 		A1B2C3D410000115 /* RotationSchedulerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000115 /* RotationSchedulerEngine.swift */; };
 		A1B2C3D410000116 /* FineGrainedRBACEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000116 /* FineGrainedRBACEngine.swift */; };
 		A1B2C3D410000117 /* WorkflowTimelineComponent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000117 /* WorkflowTimelineComponent.swift */; };
+		A1B2C3D410000118 /* ScheduleBuilderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000118 /* ScheduleBuilderView.swift */; };
+		A1B2C3D410000119 /* TrainerAttendanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000119 /* TrainerAttendanceView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -127,6 +129,8 @@
 		A1B2C3D420000115 /* RotationSchedulerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Services/RotationSchedulerEngine.swift; sourceTree = "<group>"; };
 		A1B2C3D420000116 /* FineGrainedRBACEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Services/FineGrainedRBACEngine.swift; sourceTree = "<group>"; };
 		A1B2C3D420000117 /* WorkflowTimelineComponent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Components/WorkflowTimelineComponent.swift; sourceTree = "<group>"; };
+		A1B2C3D420000118 /* ScheduleBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Components/ScheduleBuilderView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000119 /* TrainerAttendanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Miran/Views/Trainer/TrainerAttendanceView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -203,6 +207,7 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C3D420000007 /* SharedComponents.swift */,
+				A1B2C3D420000118 /* ScheduleBuilderView.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -257,6 +262,7 @@
 				A1B2C3D420000021 /* CallCenterView.swift */,
 				A1B2C3D420000022 /* TraineeDetailView.swift */,
 				A1B2C3D420000023 /* TrainerPlanView.swift */,
+				A1B2C3D420000119 /* TrainerAttendanceView.swift */,
 			);
 			path = Trainer;
 			sourceTree = "<group>";
@@ -421,6 +427,8 @@
 				A1B2C3D410000115 /* RotationSchedulerEngine.swift in Sources */,
 				A1B2C3D410000116 /* FineGrainedRBACEngine.swift in Sources */,
 				A1B2C3D410000117 /* WorkflowTimelineComponent.swift in Sources */,
+				A1B2C3D410000118 /* ScheduleBuilderView.swift in Sources */,
+				A1B2C3D410000119 /* TrainerAttendanceView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

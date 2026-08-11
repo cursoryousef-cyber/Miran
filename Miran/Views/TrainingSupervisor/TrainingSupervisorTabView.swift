@@ -2,12 +2,13 @@
 //  TrainingSupervisorTabView.swift
 //  Miran
 //
-//  SwiftUI Interface for Training Supervisor (مشرف التدريب).
+//  SwiftUI Interface for Hospital Training Admin & Supervisor (مشرف التدريب بالمستشفى).
 //  مخصص لإدارة التدريب والمدربين والجداول وتوزيع المتدربين ومركز النداءات الميدانية.
-//  محجوب منه: إعدادات المنصة الكلية، إدارة التجمعات والجامعات.
 //
 
 import SwiftUI
+
+typealias HospitalSupervisorTabView = TrainingSupervisorTabView
 
 struct TrainingSupervisorTabView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -15,17 +16,17 @@ struct TrainingSupervisorTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // 1. لوحة قيادة مشرف التدريب الميداني
+            // 1. لوحة قيادة مشرف التدريب بالمستشفى
             TrainingSupervisorDashboardFullView()
                 .tabItem {
                     Label("لوحة التحكم", systemImage: "cross.case.circle.fill")
                 }
                 .tag(0)
 
-            // 2. الجداول والتوزيع
-            AssignmentView()
+            // 2. مخطط ومحرك الجداول السريرية (iOS Schedule Builder)
+            ScheduleBuilderView(isReadOnly: false)
                 .tabItem {
-                    Label("الجداول والتوزيع", systemImage: "calendar.badge.clock")
+                    Label("مخطط الجداول", systemImage: "calendar.badge.clock")
                 }
                 .tag(1)
 

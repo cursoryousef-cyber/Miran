@@ -41,6 +41,18 @@ final class AppStore: ObservableObject {
     @Published var apiTraineeProfile: TraineeProfileModel?
     @Published var apiTrainerProfile: TrainerProfileModel?
 
+    // MARK: - البيانات التشغيلية والمزامنة الحية (Production API)
+    @Published var hospitalTrainers: [TrainerQualifiedCardModel] = []
+    @Published var hospitalDepartmentsList: [DepartmentModel] = []
+    @Published var hospitalRotationsList: [RotationModel] = []
+    @Published var hospitalShiftsList: [ShiftItemModel] = []
+    @Published var trainerAssignedTraineesList: [TraineeProfileModel] = []
+    @Published var tasksList: [TaskModel] = []
+    @Published var attendanceList: [AttendanceItemModel] = []
+    @Published var caseLogsList: [ClinicalCaseLogItemModel] = []
+    @Published var procedureCatalogList: [ProcedureCatalogItemModel] = []
+    @Published var evaluationsList: [EvaluationItemModel] = []
+
     // MARK: - طلبات التدريب الواردة للتجمع (Cluster)
 
     @Published var trainingRequests: [TrainingRequestItem] = []
@@ -141,6 +153,255 @@ final class AppStore: ObservableObject {
         } catch {
             print("⚠️ [AppStore] No trainer profile (user may not be a trainer): \(error.localizedDescription)")
         }
+
+        // Fetch operational data based on role
+        await fetchHospitalData()
+        await fetchTrainerData()
+        await fetchTraineeData()
+    }
+
+    // MARK: - Production Operational API Methods (Hospital Admin / Trainer / Trainee)
+
+    /// 1. Hospital Training Admin Data Fetch
+    func fetchHospitalData() async {
+        // Qualified Trainer Cards with Capacity & Occupancy
+        do {
+            let cards: [TrainerQualifiedCardModel] = try await APIClient.shared.request(endpoint: "/trainers/qualified-workspace-cards")
+            self.hospitalTrainers = cards
+        } catch {
+            print("⚠️ [AppStore] fetchHospitalData qualified-workspace-cards: \(error.localizedDescription)")
+        }
+
+        // Departments
+        do {
+            let res: APIListResponse<DepartmentModel> = try await APIClient.shared.request(endpoint: "/rotations/departments")
+            self.hospitalDepartmentsList = res.data
+        } catch {
+            print("⚠️ [AppStore] fetchHospitalData departments: \(error.localizedDescription)")
+        }
+
+        // Hospital Rotations
+        do {
+            let res: APIListResponse<RotationModel> = try await APIClient.shared.request(endpoint: "/rotations")
+            self.hospitalRotationsList = res.data
+        } catch {
+            print("⚠️ [AppStore] fetchHospitalData rotations: \(error.localizedDescription)")
+        }
+
+        // Hospital Shifts
+        do {
+            let res: APIDataResponse<[ShiftItemModel]> = try await APIClient.shared.request(endpoint: "/operations/calendar")
+            self.hospitalShiftsList = res.data
+        } catch {
+            print("⚠️ [AppStore] fetchHospitalData shifts: \(error.localizedDescription)")
+        }
+    }
+
+    /// 2. Trainer Operational Data Fetch
+    func fetchTrainerData() async {
+        // Assigned Trainees
+        do {
+            let res: APIListResponse<TraineeProfileModel> = try await APIClient.shared.request(endpoint: "/operations/trainer/assigned-interns")
+            self.trainerAssignedTraineesList = res.data
+        } catch {
+            print("⚠️ [AppStore] fetchTrainerData assigned-interns: \(error.localizedDescription)")
+        }
+
+        // Trainer Tasks
+        do {
+            let res: APIListResponse<TaskModel> = try await APIClient.shared.request(endpoint: "/operations/tasks")
+            self.tasksList = res.data
+        } catch {
+            print("⚠️ [AppStore] fetchTrainerData tasks: \(error.localizedDescription)")
+        }
+
+        // Active Calls
+        do {
+            let res: APIListResponse<TrainerCallModel> = try await APIClient.shared.request(endpoint: "/calls/active")
+            self.apiCalls = res.data
+        } catch {
+            print("⚠️ [AppStore] fetchTrainerData calls: \(error.localizedDescription)")
+        }
+
+        // Pending Evaluations
+        do {
+            let res: APIListResponse<EvaluationItemModel> = try await APIClient.shared.request(endpoint: "/operations/evaluations/my-pending")
+            self.evaluationsList = res.data
+        } catch {
+            print("⚠️ [AppStore] fetchTrainerData evaluations: \(error.localizedDescription)")
+        }
+    }
+
+    /// 3. Trainee Operational Data Fetch
+    func fetchTraineeData() async {
+        // My Rotations
+        do {
+            let res: APIListResponse<RotationModel> = try await APIClient.shared.request(endpoint: "/rotations/my")
+            self.apiRotations = res.data
+        } catch {
+            print("⚠️ [AppStore] fetchTraineeData rotations: \(error.localizedDescription)")
+        }
+
+        // My Tasks
+        do {
+            let res: APIListResponse<TaskModel> = try await APIClient.shared.request(endpoint: "/operations/tasks")
+            self.tasksList = res.data
+        } catch {
+            print("⚠️ [AppStore] fetchTraineeData tasks: \(error.localizedDescription)")
+        }
+
+        // My Incoming Calls
+        do {
+            let res: APIListResponse<TrainerCallModel> = try await APIClient.shared.request(endpoint: "/calls/my-incoming")
+            self.apiCalls = res.data
+        } catch {
+            print("⚠️ [AppStore] fetchTraineeData calls: \(error.localizedDescription)")
+        }
+
+        // Procedure Catalog
+        do {
+            let res: APIListResponse<ProcedureCatalogItemModel> = try await APIClient.shared.request(endpoint: "/logbook/procedures")
+            self.procedureCatalogList = res.data
+        } catch {
+            print("⚠️ [AppStore] fetchTraineeData procedures: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Operational Mutations (Hospital Admin / Trainer / Trainee)
+
+    func createDepartment(nameAr: String, nameEn: String?, code: String?, capacity: Int) async throws {
+        let req = CreateDepartmentRequest(nameAr: nameAr, nameEn: nameEn, code: code, capacity: capacity, roundLocation: nil, roundTime: nil, meetingRoom: nil)
+        let _: APIDataResponse<DepartmentModel> = try await APIClient.shared.request(endpoint: "/rotations/departments", method: "POST", body: req)
+        await fetchHospitalData()
+    }
+
+    func updateDepartment(id: String, nameAr: String?, capacity: Int?, isActive: Bool?) async throws {
+        let body: [String: AnyEncodable] = [
+            "nameAr": nameAr != nil ? AnyEncodable(nameAr!) : AnyEncodable(NSNull()),
+            "capacity": capacity != nil ? AnyEncodable(capacity!) : AnyEncodable(NSNull())
+        ]
+        let _: APIDataResponse<DepartmentModel> = try await APIClient.shared.request(endpoint: "/rotations/departments/\(id)", method: "PATCH", body: body)
+        await fetchHospitalData()
+    }
+
+    func deleteDepartment(id: String) async throws {
+        try await APIClient.shared.requestVoid(endpoint: "/rotations/departments/\(id)", method: "DELETE")
+        await fetchHospitalData()
+    }
+
+    func createRotation(traineeProfileId: String, departmentId: String, trainerProfileId: String, startDate: String, endDate: String, status: String? = "scheduled") async throws {
+        let req = CreateRotationRequest(traineeProfileId: traineeProfileId, departmentId: departmentId, trainerProfileId: trainerProfileId, startDate: startDate, endDate: endDate, status: status)
+        let _: APIDataResponse<RotationModel> = try await APIClient.shared.request(endpoint: "/rotations", method: "POST", body: req)
+        await fetchHospitalData()
+    }
+
+    func updateRotation(id: String, departmentId: String?, trainerProfileId: String?, startDate: String?, endDate: String?, status: String?) async throws {
+        struct UpdateRotationRequest: Encodable {
+            let departmentId: String?
+            let trainerProfileId: String?
+            let startDate: String?
+            let endDate: String?
+            let status: String?
+        }
+        let req = UpdateRotationRequest(departmentId: departmentId, trainerProfileId: trainerProfileId, startDate: startDate, endDate: endDate, status: status)
+        let _: APIDataResponse<RotationModel> = try await APIClient.shared.request(endpoint: "/rotations/\(id)", method: "PATCH", body: req)
+        await fetchHospitalData()
+    }
+
+    func deleteRotation(id: String) async throws {
+        try await APIClient.shared.requestVoid(endpoint: "/rotations/\(id)", method: "DELETE")
+        await fetchHospitalData()
+    }
+
+    func reassignTrainer(traineeProfileId: String, targetTrainerProfileId: String, reason: String?) async throws {
+        let req = ReassignTrainerRequest(traineeProfileId: traineeProfileId, targetTrainerProfileId: targetTrainerProfileId, reason: reason)
+        let _: APIDataResponse<TraineeProfileModel> = try await APIClient.shared.request(endpoint: "/trainers/reassign", method: "POST", body: req)
+        await fetchHospitalData()
+    }
+
+    func createTask(assignedToId: String, titleAr: String, description: String?, dueDate: String?, priority: String? = "medium") async throws {
+        let req = CreateTaskRequest(assignedToId: assignedToId, titleAr: titleAr, description: description, dueDate: dueDate, priority: priority)
+        let _: APIDataResponse<TaskModel> = try await APIClient.shared.request(endpoint: "/operations/tasks", method: "POST", body: req)
+        await fetchTrainerData()
+    }
+
+    func completeTask(id: String) async throws {
+        let _: APIDataResponse<TaskModel> = try await APIClient.shared.request(endpoint: "/operations/tasks/\(id)/complete", method: "PATCH")
+        await fetchTraineeData()
+    }
+
+    func launchCall(callType: String, customTitle: String?, note: String?, location: String?, expectedMinutes: Int?, departmentId: String?) async throws {
+        let req = CreateCallRequest(callType: callType, customTitle: customTitle, note: note, location: location, expectedMinutes: expectedMinutes, departmentId: departmentId)
+        let _: APIDataResponse<TrainerCallModel> = try await APIClient.shared.request(endpoint: "/calls/launch", method: "POST", body: req)
+        await fetchTrainerData()
+    }
+
+    func ackCall(id: String) async throws {
+        let _: APIDataResponse<CallParticipantModel> = try await APIClient.shared.request(endpoint: "/calls/\(id)/ack", method: "POST")
+        await fetchTraineeData()
+    }
+
+    func onWayCall(id: String) async throws {
+        let _: APIDataResponse<CallParticipantModel> = try await APIClient.shared.request(endpoint: "/calls/\(id)/on-way", method: "POST")
+        await fetchTraineeData()
+    }
+
+    func arrivedCall(id: String) async throws {
+        let _: APIDataResponse<CallParticipantModel> = try await APIClient.shared.request(endpoint: "/calls/\(id)/arrived", method: "POST")
+        await fetchTraineeData()
+    }
+
+    func approveAttendance(id: String) async throws {
+        let _: APIDataResponse<AttendanceItemModel> = try await APIClient.shared.request(endpoint: "/operations/attendance/\(id)/approve", method: "PATCH")
+        await fetchTrainerData()
+    }
+
+    func rejectAttendance(id: String, reason: String?) async throws {
+        struct RejectReasonBody: Encodable { let reason: String? }
+        let _: APIDataResponse<AttendanceItemModel> = try await APIClient.shared.request(endpoint: "/operations/attendance/\(id)/reject", method: "PATCH", body: RejectReasonBody(reason: reason))
+        await fetchTrainerData()
+    }
+
+    func checkIn(geoLat: Double?, geoLng: Double?, method: String = "mobile_gps") async throws {
+        struct CheckInReq: Encodable { let geoLat: Double?; let geoLng: Double?; let method: String }
+        let _: APIDataResponse<AttendanceItemModel> = try await APIClient.shared.request(endpoint: "/operations/attendance/check-in", method: "POST", body: CheckInReq(geoLat: geoLat, geoLng: geoLng, method: method))
+        await fetchTraineeData()
+    }
+
+    func checkOut(id: String) async throws {
+        let _: APIDataResponse<AttendanceItemModel> = try await APIClient.shared.request(endpoint: "/operations/attendance/\(id)/check-out", method: "POST")
+        await fetchTraineeData()
+    }
+
+    func requestAttendanceCorrection(id: String, reason: String) async throws {
+        struct CorrectionReq: Encodable { let reason: String }
+        let _: APIDataResponse<AttendanceItemModel> = try await APIClient.shared.request(endpoint: "/operations/attendance/\(id)/correction-request", method: "POST", body: CorrectionReq(reason: reason))
+        await fetchTraineeData()
+    }
+
+    func submitCaseLog(diagnosis: String, specialtyAr: String?, complexity: String, participationLevel: String, procedureId: String?, departmentId: String?, notes: String?) async throws {
+        let req = CreateClinicalCaseLogRequest(diagnosis: diagnosis, specialtyAr: specialtyAr, complexity: complexity, participationLevel: participationLevel, procedureId: procedureId, departmentId: departmentId, notes: notes)
+        let _: APIDataResponse<ClinicalCaseLogItemModel> = try await APIClient.shared.request(endpoint: "/logbook/case-logs", method: "POST", body: req)
+        await fetchTraineeData()
+    }
+
+    func completeMidpointMeeting(rotationId: String, notes: String?) async throws {
+        struct MidpointNotesReq: Encodable { let notes: String? }
+        let _: APIDataResponse<RotationModel> = try await APIClient.shared.request(endpoint: "/operations/evaluations/midpoint/\(rotationId)/complete", method: "PATCH", body: MidpointNotesReq(notes: notes))
+        await fetchTrainerData()
+    }
+
+    func submitEvaluation(formId: String, evaluateeId: String, rotationId: String, totalScore: Double, notes: String?) async throws {
+        let req = SubmitEvaluationRequest(formId: formId, evaluateeId: evaluateeId, rotationId: rotationId, totalScore: totalScore, notes: notes)
+        let _: APIDataResponse<EvaluationItemModel> = try await APIClient.shared.request(endpoint: "/operations/evaluations", method: "POST", body: req)
+        await fetchTrainerData()
+    }
+
+    func submitDepartmentEvaluation(departmentId: String, score: Double, notes: String?) async throws {
+        struct DeptEvalReq: Encodable { let departmentId: String; let score: Double; let notes: String? }
+        let _: APIDataResponse<EvaluationItemModel> = try await APIClient.shared.request(endpoint: "/operations/evaluations/department", method: "POST", body: DeptEvalReq(departmentId: departmentId, score: score, notes: notes))
+        await fetchTraineeData()
+    }
     }
 
     // MARK: - طلبات التدريب الواردة (Cluster)
