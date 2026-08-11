@@ -36,7 +36,7 @@ enum AppThemeMode: String, CaseIterable, Codable {
 final class ThemeManager: ObservableObject {
     static let shared = ThemeManager()
 
-    @AppStorage("miran_theme_mode") var currentMode: AppThemeMode = .dark {
+    @AppStorage("miran_theme_mode") var currentMode: AppThemeMode = .light {
         didSet {
             objectWillChange.send()
         }
