@@ -107,10 +107,12 @@ jobs:
           echo "================ Archive Toolchain ================"
           xcrun xcodebuild -version
 
-      - name: Build & Verify iOS Native App
+      - name: Build & Archive iOS Native App
         run: |
+          mkdir -p build
           xcodebuild -project Miran.xcodeproj \
             -scheme Miran \
             -destination 'generic/platform=iOS' \
+            -archivePath build/Miran.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            archive
