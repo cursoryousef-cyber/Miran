@@ -132,6 +132,8 @@ const HOSPITAL_TRAINING_NAV: NavSection[] = [
     items: [
       { name: 'لوحة التدريب بالمستشفى', path: '/', icon: Stethoscope },
       { name: 'مساحة عمل المستشفى', path: '/hospital', icon: BedDouble, requires: ['training.operate'] },
+      { name: 'منشئ الجداول', path: '/hospital?tab=schedules', icon: LayoutDashboard, requires: ['schedule.view'] },
+      { name: 'أعضاء الجهة', path: '/org-members', icon: UsersRound, requires: ['org_member.view'] },
     ],
   },
   {
@@ -145,15 +147,17 @@ const HOSPITAL_TRAINING_NAV: NavSection[] = [
         name: 'بطاقات المدربين', path: '/hospital?tab=trainers', icon: UsersRound,
         requires: ['trainer.manage'],
       },
+      { name: 'الدفعات الأكاديمية', path: '/intakes', icon: ClipboardList },
     ],
   },
   {
-    title: 'المتدربون',
+    title: 'المتدربون والمتابعة',
     items: [
       {
         name: 'طلبات التدريب الواردة', path: '/hospital?tab=requests', icon: Inbox,
         requires: ['trainee.view.hospital'],
       },
+      { name: 'السجل السريري', path: '/logbook', icon: BookOpen, requires: ['logbook.view'] },
       { name: 'البلاغات', path: '/incidents', icon: AlertTriangle, requires: ['incident.view'] },
     ],
   },

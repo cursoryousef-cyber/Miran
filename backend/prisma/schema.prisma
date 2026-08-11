@@ -121,6 +121,9 @@ model Organization {
   webhookSubscriptions                WebhookSubscription[]
   workflowDefinitions                 WorkflowDefinition[]
   workflowInstances                   WorkflowInstance[]
+  trainingSchedules                   TrainingSchedule[]
+  scheduleTemplates                   ScheduleTemplate[]
+  scheduleSessions                    ScheduleSession[]
 
   @@index([parentId])
   @@index([organizationTypeId])
@@ -287,6 +290,8 @@ model UserAccount {
   traineeCardIssued      TraineeProfile[]         @relation("CardIssuer")
   traineePhotoApproved   TraineeProfile[]         @relation("PhotoApprover")
   trainingPlansCreated   TrainingPlan[]
+  createdSchedules       TrainingSchedule[]     @relation("ScheduleCreator")
+  publishedRevisions     ScheduleRevision[]
   createdBy              UserAccount?             @relation("AccountCreator", fields: [createdById], references: [id])
   createdAccounts        UserAccount[]            @relation("AccountCreator")
   approvedIntakes        AcademicIntake[]         @relation("IntakeApprover")
@@ -572,6 +577,9 @@ model Department {
   trainerReassignments    TrainerReassignment[]
   trainingRequestTrainees TrainingRequestTrainee[]
   traineeAllocations      TraineeAllocation[]
+  trainingSchedules       TrainingSchedule[]
+  scheduleTemplates       ScheduleTemplate[]
+  scheduleSessions        ScheduleSession[]
 
   @@index([organizationId])
   @@map("departments")
@@ -922,6 +930,8 @@ model TraineeProfile {
   objectiveProgress      ObjectiveProgress[]
   rotations              Rotation[]
   shifts                 Shift[]
+  scheduleSessions       ScheduleSession[]
+  scheduleParticipations ScheduleParticipant[]
   academicIntake         AcademicIntake?              @relation(fields: [academicIntakeId], references: [id])
   cardIssuedBy           UserAccount?                 @relation("CardIssuer", fields: [cardIssuedById], references: [id])
   organization           Organization                 @relation(fields: [organizationId], references: [id])
@@ -981,6 +991,7 @@ model TrainerProfile {
   reassignmentsFrom       TrainerReassignment[]    @relation("ReassignmentFrom")
   trainingRequestTrainees TrainingRequestTrainee[]
   traineeAllocations      TraineeAllocation[]
+  scheduleSessions        ScheduleSession[]
 
   @@map("trainer_profiles")
 }
@@ -1879,4 +1890,115 @@ model TrainerReassignmentTrainee {
 
   @@index([reassignmentId])
   @@map("trainer_reassignment_trainees")
+}
+
+/// الخطة والجدول التدريبي — الإطار التنظيمي العام للجدول
+model TrainingSchedule {
+  id               String                @id @default(uuid()) @db.Uuid
+  organizationId   String                @map("organization_id") @db.Uuid
+  departmentId     String?               @map("department_id") @db.Uuid
+  titleAr          String                @map("title_ar") @db.VarChar(300)
+  titleEn          String?               @map("title_en") @db.VarChar(300)
+  startDate        DateTime              @map("start_date") @db.Date
+  endDate          DateTime              @map("end_date") @db.Date
+  status           String                @default("draft") @db.VarChar(20) // draft | review | approved | published | locked | archived
+  totalHours       Int                   @default(0) @map("total_hours")
+  notes            String?
+  createdById      String?               @map("created_by") @db.Uuid
+  updatedById      String?               @map("updated_by") @db.Uuid
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization     Organization          @relation(fields: [organizationId], references: [id])
+  department       Department?           @relation(fields: [departmentId], references: [id])
+  createdBy        UserAccount?          @relation("ScheduleCreator", fields: [createdById], references: [id])
+  participants     ScheduleParticipant[]
+  sessions         ScheduleSession[]
+  revisions        ScheduleRevision[]
+
+  @@index([organizationId, status])
+  @@map("training_schedules")
+}
+
+/// مشاركو الجدول — ربط الجدول بمتدرب واحد أو مجموعة متدربين
+model ScheduleParticipant {
+  id               String           @id @default(uuid()) @db.Uuid
+  scheduleId       String           @map("schedule_id") @db.Uuid
+  traineeProfileId String           @map("trainee_profile_id") @db.Uuid
+  joinedAt         DateTime         @default(now()) @map("joined_at") @db.Timestamptz(6)
+
+  schedule         TrainingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  traineeProfile   TraineeProfile   @relation(fields: [traineeProfileId], references: [id])
+
+  @@unique([scheduleId, traineeProfileId])
+  @@map("schedule_participants")
+}
+
+/// قالب الجداول والشيفتات — لإعادة الاستخدام في الأقسام
+model ScheduleTemplate {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  departmentId   String?      @map("department_id") @db.Uuid
+  nameAr         String       @map("name_ar") @db.VarChar(200)
+  nameEn         String?      @map("name_en") @db.VarChar(200)
+  structureJson  Json         @default("[]") @map("structure_json")
+  isActive       Boolean      @default(true) @map("is_active")
+  createdById    String?      @map("created_by") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  department     Department?  @relation(fields: [departmentId], references: [id])
+
+  @@map("schedule_templates")
+}
+
+/// جلسة تدريبية فعليّة ضمن الجدول
+model ScheduleSession {
+  id               String           @id @default(uuid()) @db.Uuid
+  scheduleId       String           @map("schedule_id") @db.Uuid
+  organizationId   String           @map("organization_id") @db.Uuid
+  departmentId     String           @map("department_id") @db.Uuid
+  trainerProfileId String?          @map("trainer_profile_id") @db.Uuid
+  traineeProfileId String?          @map("trainee_profile_id") @db.Uuid
+  date             DateTime         @db.Date
+  startTime        String           @map("start_time") @db.VarChar(10) // "08:00"
+  endTime          String           @map("end_time") @db.VarChar(10)   // "16:00"
+  durationHours    Decimal          @map("duration_hours") @db.Decimal(4, 2)
+  sessionType      String           @default("clinical_round") @map("session_type") @db.VarChar(50) // clinical_round | emergency_shift | lecture | workshop | call
+  shiftType        String           @default("morning") @map("shift_type") @db.VarChar(20) // morning | evening | night | 24h
+  location         String?          @db.VarChar(200)
+  capacity         Int              @default(1)
+  status           String           @default("scheduled") @db.VarChar(20) // scheduled | completed | cancelled
+  notes            String?
+
+  schedule         TrainingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  organization     Organization     @relation(fields: [organizationId], references: [id])
+  department       Department       @relation(fields: [departmentId], references: [id])
+  trainerProfile   TrainerProfile?  @relation(fields: [trainerProfileId], references: [id])
+  traineeProfile   TraineeProfile?  @relation(fields: [traineeProfileId], references: [id])
+
+  @@index([scheduleId])
+  @@index([organizationId, date])
+  @@index([trainerProfileId, date])
+  @@index([traineeProfileId, date])
+  @@map("schedule_sessions")
+}
+
+/// سجل تعديلات وإصدارات الجداول المنشورة — Version Snapshot
+model ScheduleRevision {
+  id            String           @id @default(uuid()) @db.Uuid
+  scheduleId    String           @map("schedule_id") @db.Uuid
+  revision      Int              @default(1)
+  snapshot      Json             @map("snapshot")
+  oldValues     Json?            @map("old_values")
+  newValues     Json?            @map("new_values")
+  changeReason  String?          @map("change_reason")
+  publishedById String?          @map("published_by") @db.Uuid
+  publishedAt   DateTime         @default(now()) @map("published_at") @db.Timestamptz(6)
+
+  schedule      TrainingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  publishedBy   UserAccount?     @relation(fields: [publishedById], references: [id])
+
+  @@map("schedule_revisions")
 }

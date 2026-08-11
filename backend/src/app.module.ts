@@ -39,6 +39,8 @@ import { TrainingPlansModule } from './modules/training-plans/training-plans.mod
 import { TimelineModule } from './modules/timeline/timeline.module';
 import { AuthzModule } from './common/authz/authz.module';
 
+import { SchedulesModule } from './modules/schedules/schedules.module';
+
 @Module({
   imports: [
     // Configuration
@@ -87,6 +89,7 @@ import { AuthzModule } from './common/authz/authz.module';
     CallsModule,
     NotificationsModule,
     OrgMembersModule,
+    SchedulesModule,
 
     // Observability, Audit, Global Search & Dynamic RBAC & Logbook
     AuditLogsModule,

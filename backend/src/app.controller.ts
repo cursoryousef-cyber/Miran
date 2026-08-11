@@ -23,7 +23,7 @@ export class AppController {
   async getHealth() {
     let dbStatus = 'down';
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      await (this.prisma as any).$queryRaw`SELECT 1`;
       dbStatus = 'up';
     } catch {
       dbStatus = 'down';
