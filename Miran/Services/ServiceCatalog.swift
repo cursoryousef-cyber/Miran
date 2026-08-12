@@ -256,56 +256,119 @@ struct ServiceCatalog {
     ]
 }
 
-// MARK: - محرك حل الخدمات الديناميكية (Service Resolver)
+// MARK: - الشخصيات والخبرات الرئيسية المحلولة (Resolved Personas)
+enum MiranPersona: String, Identifiable {
+    case trainee = "TRAINEE_PERSONA"
+    case trainingOperations = "TRAINING_OPERATIONS_PERSONA"
+    case trainer = "TRAINER_PERSONA"
+    case clusterOperations = "CLUSTER_OPERATIONS_PERSONA"
+    case university = "UNIVERSITY_PERSONA"
+    case platform = "PLATFORM_PERSONA"
+
+    var id: String { rawValue }
+
+    var titleAr: String {
+        switch self {
+        case .trainee: return "رحلتي التدريبية"
+        case .trainingOperations: return "ما يحتاج إجراء"
+        case .trainer: return "المتدربون والإجراءات"
+        case .clusterOperations: return "الطلبات والطاقة الاستيعابية"
+        case .university: return "طلبات التدريب"
+        case .platform: return "مركز التحكم"
+        }
+    }
+}
+
+// MARK: - محرك حل الخدمات الديناميكية والشخصيات (Service Resolver)
 struct ServiceResolver {
-    /// يعيد جميع الخدمات المصرح بها للمستخدم بناءً على أدواره وصلاحياته الحقيقية القادمة من /auth/me
+    /// حل الشخصية وتجربة المستخدم الرئيسية بناءً على الصلاحيات والتطاق أولاً، ودور المستخدم كعامل مساعد فقط
+    static func resolvePersona(for user: UserProfileResponse) -> MiranPersona {
+        let caps = Set(user.capabilities + user.permissions)
+        let roles = Set(user.roles + [user.primaryRole])
+
+        // 1. PLATFORM PERSONA (مركز التحكم)
+        if caps.contains("platform.manage") || caps.contains("org.manage_all") || roles.contains("platform_owner") || roles.contains("system_admin") {
+            return .platform
+        }
+
+        // 2. UNIVERSITY PERSONA (طلبات التدريب الجامعية)
+        if caps.contains("university.view_scope") || caps.contains("training_request.create") || roles.contains("university_administrator") || roles.contains("university_admin") {
+            return .university
+        }
+
+        // 3. CLUSTER OPERATIONS PERSONA (الطلبات والطاقة الاستيعابية على مستوى التجمع)
+        if caps.contains("hospital.view_cluster") || caps.contains("cluster.view_scope") || (caps.contains("capacity.manage") && user.activeOrganization.code?.contains("cluster") == true) || roles.contains("cluster_administrator") || roles.contains("cluster_manager") {
+            return .clusterOperations
+        }
+
+        // 4. TRAINING OPERATIONS PERSONA (ما يحتاج إجراء — إدارة عمليات التدريب بالمستشفى)
+        if caps.contains("trainee.view_hospital") || caps.contains("training.operate") || caps.contains("department.manage") || caps.contains("allocation.hospital_assign") || roles.contains("hospital_training_admin") || roles.contains("hospital_administrator") || roles.contains("training_supervisor") {
+            return .trainingOperations
+        }
+
+        // 5. TRAINER PERSONA (المتدربون والإجراءات — المدرب المباشر)
+        if caps.contains("trainee.view_assigned") || caps.contains("logbook.approve") || caps.contains("evaluation.submit") || roles.contains("trainer") {
+            return .trainer
+        }
+
+        // 6. TRAINEE PERSONA (رحلتي التدريبية)
+        return .trainee
+    }
+
+    /// يعيد جميع الخدمات المصرح بها للمستخدم بناءً على الصلاحيات الأساسية والتطاق
     static func authorizedServices(for user: UserProfileResponse) -> [ServiceDefinition] {
+        let userCaps = Set(user.capabilities + user.permissions)
         return ServiceCatalog.allServices.filter { service in
-            let roleAllowed = service.allowedRoles.isEmpty || service.allowedRoles.contains { user.roles.contains($0) }
-            let capabilityAllowed = service.requiredCapabilities.isEmpty || service.requiredCapabilities.contains { cap in
-                user.capabilities.contains(cap) || user.permissions.contains(cap)
+            if service.requiredCapabilities.isEmpty {
+                return service.allowedRoles.isEmpty || service.allowedRoles.contains { user.roles.contains($0) || user.primaryRole == $0 }
             }
-            return roleAllowed && (capabilityAllowed || service.requiredCapabilities.isEmpty)
+            // Capabilities are primary
+            let hasCapability = service.requiredCapabilities.contains { userCaps.contains($0) }
+            return hasCapability
         }
     }
 
-    /// التبويبات الرئيسية المخصصة لدور المستخدم (Main Bottom Tabs)
+    /// التبويبات الرئيسية المخصصة لـ Resolved Persona المعتمدة على Capabilities
     static func mainTabs(for user: UserProfileResponse) -> [ServiceDefinition] {
         let authorized = authorizedServices(for: user)
-        let primaryRole = user.primaryRole
+        let persona = resolvePersona(for: user)
 
-        switch primaryRole {
-        case "trainee":
+        switch persona {
+        case .trainee:
             let ids = ["dashboard", "schedule", "logbook", "competencies", "servicesGrid"]
             return ids.compactMap { id in authorized.first { $0.id == id } }
 
-        case "trainer":
+        case .trainer:
             let ids = ["trainees", "evaluations", "signoffs", "schedule", "logbook", "servicesGrid"]
             return ids.compactMap { id in authorized.first { $0.id == id } }
 
-        case "hospital_training_admin", "hospital_administrator", "hospital_supervisor", "training_supervisor":
+        case .trainingOperations:
             let ids = ["requests", "trainees", "trainers", "schedule", "incidents", "reports", "servicesGrid"]
             return ids.compactMap { id in authorized.first { $0.id == id } }
 
-        case "training_director", "cluster_administrator", "cluster_manager", "org_manager":
+        case .clusterOperations:
             let ids = ["hospitals", "programs", "capacity", "reports", "incidents"]
             return ids.compactMap { id in authorized.first { $0.id == id } }
 
-        default:
-            return authorized.filter { $0.isMainTab }
+        case .university:
+            let ids = ["requests", "programs", "reports", "servicesGrid"]
+            return ids.compactMap { id in authorized.first { $0.id == id } }
+
+        case .platform:
+            let ids = ["hospitals", "programs", "capacity", "reports", "servicesGrid"]
+            return ids.compactMap { id in authorized.first { $0.id == id } }
         }
     }
 
-    /// الخدمات الإضافية المعروضة داخل شبكة "الخدمات" (Services Grid Drawer)
+    /// الخدمات الإضافية المعروضة داخل شبكة "الخدمات"
     static func extraServices(for user: UserProfileResponse) -> [ServiceDefinition] {
         let authorized = authorizedServices(for: user)
         let mainTabIds = Set(mainTabs(for: user).map { $0.id })
         
-        // يعرض الخدمات المسموحة التي ليست ضمن التبويبات الرئيسية بالإضافة للخدمات الإضافية المحتشدة
         var extras = authorized.filter { !mainTabIds.contains($0.id) && $0.id != "servicesGrid" && $0.id != "dashboard" }
+        let persona = resolvePersona(for: user)
         
-        // إكمال الخدمات حسب الدور لإثراء واجهة الخدمات
-        if user.isTrainee {
+        if persona == .trainee {
             let traineeExtras = ["notifications", "incidents", "digitalCard", "evaluations"]
             let map = Set(extras.map { $0.id })
             for id in traineeExtras {
@@ -313,7 +376,7 @@ struct ServiceResolver {
                     extras.append(def)
                 }
             }
-        } else if user.isTrainer {
+        } else if persona == .trainer {
             let trainerExtras = ["notifications", "incidents"]
             let map = Set(extras.map { $0.id })
             for id in trainerExtras {
@@ -326,3 +389,4 @@ struct ServiceResolver {
         return extras
     }
 }
+

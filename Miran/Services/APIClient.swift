@@ -214,6 +214,106 @@ final class APIClient {
             return false
         }
     }
+
+    // MARK: - Hospital Candidate Review & Onboarding APIs
+    func fetchHospitalReviewTrainees() async throws -> [TrainingRequestTraineeRow] {
+        let res: APIListResponse<TrainingRequestTraineeRow> = try await request(endpoint: "/training-requests/hospital-review")
+        return res.data
+    }
+
+    func approveCandidateRow(rowId: String) async throws {
+        try await requestVoid(endpoint: "/training-requests/trainees/\(rowId)/approve", method: "POST")
+    }
+
+    func rejectCandidateRow(rowId: String, reason: String) async throws {
+        let body = ["reason": reason]
+        try await requestVoid(endpoint: "/training-requests/trainees/\(rowId)/reject", method: "POST", body: body)
+    }
+
+    func returnCandidateRowToUniversity(rowId: String, notes: String) async throws {
+        let body = ["notes": notes]
+        try await requestVoid(endpoint: "/training-requests/trainees/\(rowId)/return", method: "POST", body: body)
+    }
+
+    func reviewCandidateDocument(docId: String, action: String, notes: String? = nil) async throws {
+        var body: [String: String] = ["action": action]
+        if let notes = notes { body["notes"] = notes }
+        try await requestVoid(endpoint: "/trainee-documents/\(docId)/review", method: "POST", body: body)
+    }
+
+    // MARK: - Trainee Documents Multipart Upload API
+    struct TraineeDocumentResponse: Decodable {
+        let id: String
+        let documentType: String
+        let titleAr: String?
+        let storageKey: String
+    }
+
+    private struct TraineeDocumentEnvelope: Decodable {
+        let data: TraineeDocumentResponse
+        let success: Bool?
+    }
+
+    func uploadTraineeDocument(
+        fileData: Data,
+        fileName: String,
+        documentType: String,
+        trainingRequestTraineeId: String,
+        titleAr: String = "خطاب الامتياز الرسمي",
+        isMandatory: Bool = true,
+        mimeType: String = "application/pdf"
+    ) async throws -> TraineeDocumentResponse {
+        let cleanEndpoint = "/trainee-documents/upload"
+        guard let url = URL(string: "\(baseURL)\(cleanEndpoint)") else {
+            throw APIError.invalidURL
+        }
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        if let token = KeychainService.shared.get(forKey: "access_token") {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        if let orgId = KeychainService.shared.get(forKey: "active_org_id") {
+            req.setValue(orgId, forHTTPHeaderField: "X-Organization-Id")
+        }
+
+        var body = Data()
+
+        func appendFormField(name: String, value: String) {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(value)\r\n".data(using: .utf8)!)
+        }
+
+        appendFormField(name: "documentType", value: documentType)
+        appendFormField(name: "trainingRequestTraineeId", value: trainingRequestTraineeId)
+        appendFormField(name: "titleAr", value: titleAr)
+        appendFormField(name: "isMandatory", value: isMandatory ? "true" : "false")
+
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+        body.append(fileData)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+
+        req.httpBody = body
+
+        let (data, response) = try await session.data(for: req)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse(statusCode: 0)
+        }
+
+        if !(200...299).contains(httpResponse.statusCode) {
+            let errorMsg = try? JSONDecoder().decode(ServerErrorResponse.self, from: data).message
+            throw APIError.serverError(message: errorMsg ?? "فشل رفع مستند المتدرب إلى السيرفر (\(httpResponse.statusCode))")
+        }
+
+        let envelope = try JSONDecoder().decode(TraineeDocumentEnvelope.self, from: data)
+        return envelope.data
+    }
 }
 
 private struct ServerErrorResponse: Decodable {

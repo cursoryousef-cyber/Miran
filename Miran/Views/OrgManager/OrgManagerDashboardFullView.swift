@@ -80,7 +80,7 @@ struct OrgManagerDashboardFullView: View {
                                 }
 
                                 NavigationLink(destination: OrgMembersView()) {
-                                    AdminActionRow(title: "أعضاء التجمع الصحي والجهات المعتمدة", subtitle: "إدارة المدربين والمتربين المسندين للتجمع", icon: "person.crop.rectangle.stack.fill", color: MiranTheme.emerald)
+                                    AdminActionRow(title: "أعضاء التجمع الصحي والجهات المعتمدة", subtitle: "إدارة المدربين والمتدربين المسندين للتجمع", icon: "person.crop.rectangle.stack.fill", color: MiranTheme.emerald)
                                 }
                             }
                             .padding(.horizontal)
@@ -1280,23 +1280,71 @@ private func displayDate(_ iso: String?) -> String? {
 struct CreateTrainingRequestSheet: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var store: AppStore
+    @Environment(\.colorScheme) var systemColorScheme
 
-    @State private var specialty = ""
-    @State private var studentCountStr = "10"
+    @State private var requestMode: String = "batch" // "batch" (Primary Excel Import) or "single" (Helper)
+    @State private var specialty = "internal_medicine"
+    @State private var studentCountStr = "1"
     @State private var targetHospitalId = ""
     @State private var startDate = Date()
     @State private var endDate = Calendar.current.date(byAdding: .month, value: 3, to: Date()) ?? Date()
     @State private var notes = ""
+
+    // Batch Excel / CSV / JSON Roster Text Input & Preview
+    @State private var excelRosterText = ""
+    @State private var parsedBatchRows: [CandidateTraineeInputDtoHelper] = []
+    @State private var batchValidationErrors: [String] = []
+
+    // Individual Trainee Candidate Fields (Secondary Helper)
+    @State private var candidateNameAr = ""
+    @State private var candidateNationalId = ""
+    @State private var candidateAcademicNumber = ""
+    @State private var candidateUniversity = ""
+    @State private var candidateMobile = ""
+    @State private var candidateEmail = ""
+    @State private var internshipLetterUrl = ""
+
+    // PDF Real File Attachment State
+    @State private var isSelectingPdf = false
+    @State private var isUploadingPdf = false
+    @State private var uploadedFileName = ""
+    @State private var uploadErrorMsg = ""
+    @State private var selectedPdfData: Data? = nil
+
     @State private var isLoading = false
     @State private var errorMsg = ""
+
+    struct CandidateTraineeInputDtoHelper: Identifiable, Codable {
+        var id: String { academicNumber + nationalId }
+        let academicNumber: String
+        let nationalId: String
+        let nameAr: String
+        let nameEn: String?
+        let gender: String?
+        let specialty: String?
+        let university: String?
+        let email: String?
+        let mobile: String?
+        let startDate: String?
+        let endDate: String?
+    }
 
     var body: some View {
         NavigationView {
             Form {
+                Section("نوع تقديم الطلب") {
+                    Picker("نمط التقديم", selection: $requestMode) {
+                        Text("استيراد كشف الإكسل (أساسي)").tag("batch")
+                        Text("متدرب فردي (مساعد)").tag("single")
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                }
+
                 Section("تفاصيل الطلب والجهة") {
-                    TextField("التخصص الطبي (مثال: طب باطني)", text: $specialty)
-                    TextField("عدد المتدربين", text: $studentCountStr)
-                        .keyboardType(.numberPad)
+                    Picker("التخصص الطبي", selection: $specialty) {
+                        Text("الباطنة العامة (internal_medicine)").tag("internal_medicine")
+                        Text("طب الأطفال (paediatrics)").tag("paediatrics")
+                    }
 
                     Picker("المستشفى المستهدف", selection: $targetHospitalId) {
                         Text("اختر المستشفى...").tag("")
@@ -1306,7 +1354,144 @@ struct CreateTrainingRequestSheet: View {
                     }
                 }
 
-                Section("فترة التدريب") {
+                if requestMode == "batch" {
+                    Section("استيراد كشف المتدربين عبر Excel / CSV") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Image(systemName: "arrow.down.doc.fill")
+                                    .foregroundColor(MiranTheme.emerald)
+                                Text("قالب Excel المعتمد يحوي الأعمدة التالية:")
+                                    .font(.caption.bold())
+                                    .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
+                            }
+                            Text("academicNumber | nationalId | nameAr | nameEn | gender | specialty | university | email | mobile | startDate | endDate")
+                                .font(.caption2)
+                                .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
+                        }
+                        .padding(.vertical, 4)
+
+                        TextEditor(text: $excelRosterText)
+                            .frame(height: 110)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                            )
+                            .onChange(of: excelRosterText) { newValue in
+                                parseAndValidateExcelRoster(newValue)
+                            }
+
+                        if !excelRosterText.isEmpty {
+                            Button("التحقق من صحة كشف Excel") {
+                                parseAndValidateExcelRoster(excelRosterText)
+                            }
+                            .font(.caption.bold())
+                        }
+                    }
+
+                    if !parsedBatchRows.isEmpty {
+                        Section("معاينة كشف المتدربين المستورد (\(parsedBatchRows.count) متدرب)") {
+                            ForEach(parsedBatchRows) { row in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack {
+                                        Text(row.nameAr.isEmpty ? "اسم غير مدخل" : row.nameAr)
+                                            .font(.subheadline.bold())
+                                        Spacer()
+                                        Text(row.academicNumber)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    HStack(spacing: 8) {
+                                        Text("الهوية: \(row.nationalId)")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                        if let sp = row.specialty {
+                                            Text("• \(sp)")
+                                                .font(.caption2)
+                                                .foregroundColor(MiranTheme.emerald)
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
+
+                    if !batchValidationErrors.isEmpty {
+                        Section("تنبيهات التحقق من الكشف") {
+                            ForEach(batchValidationErrors, id: \.self) { err in
+                                Label(err, systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                            }
+                        }
+                    }
+                }
+
+                if requestMode == "single" {
+                    Section("بيانات المتدرب الفردية (إدخال مساعد)") {
+                        TextField("الاسم الكامل بالعربية", text: $candidateNameAr)
+                        TextField("رقم الهوية الوطنية (10 أرقام)", text: $candidateNationalId)
+                            .keyboardType(.numberPad)
+                        TextField("الرقم الأكاديمي (الجامعي)", text: $candidateAcademicNumber)
+                        TextField("الجامعة / الجهة التعليمية", text: $candidateUniversity)
+                        TextField("رقم الجوال", text: $candidateMobile)
+                            .keyboardType(.phonePad)
+                        TextField("البريد الإلكتروني", text: $candidateEmail)
+                            .keyboardType(.emailAddress)
+                    }
+                }
+
+                Section("خطاب موافقة / عدم ممانعة الجامعة (internship_letter)") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Button(action: { isSelectingPdf = true }) {
+                                Label("اختر وثيقة PDF لرفعها", systemImage: "doc.badge.plus")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(MiranTheme.emerald)
+                            }
+                            Spacer()
+                            if isUploadingPdf {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            }
+                        }
+
+                        HStack {
+                            Text("حالة المرفق:")
+                                .font(.caption)
+                                .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
+                            Spacer()
+                            if isUploadingPdf {
+                                Label("جاري الرفع والسكون بالخادم...", systemImage: "arrow.up.circle")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                            } else if !internshipLetterUrl.isEmpty {
+                                Label("تم إرفاق خطاب عدم الممانعة", systemImage: "checkmark.seal.fill")
+                                    .font(.caption.bold())
+                                    .foregroundColor(MiranTheme.emerald)
+                            } else {
+                                Label("لم يتم إرفاق الخطاب", systemImage: "xmark.circle")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+                        }
+
+                        if !uploadedFileName.isEmpty {
+                            Text("الملف المرفوع: \(uploadedFileName)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+
+                        if !uploadErrorMsg.isEmpty {
+                            Text(uploadErrorMsg)
+                                .font(.caption2)
+                                .foregroundColor(.red)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Section("فترة التدريب العامة") {
                     DatePicker("تاريخ بداية التدريب", selection: $startDate, displayedComponents: .date)
                     DatePicker("تاريخ نهاية التدريب", selection: $endDate, displayedComponents: .date)
                 }
@@ -1321,7 +1506,7 @@ struct CreateTrainingRequestSheet: View {
                     }
                 }
             }
-            .navigationTitle("إنشاء طلب تدريب جديد")
+            .navigationTitle(requestMode == "batch" ? "استيراد طلب دفعة Excel" : "إدخال متدرب فردي")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -1331,8 +1516,8 @@ struct CreateTrainingRequestSheet: View {
                     if isLoading {
                         ProgressView()
                     } else {
-                        Button("إرسال ونشر") { Task { await submitRequest() } }
-                            .disabled(specialty.trimmingCharacters(in: .whitespaces).isEmpty || targetHospitalId.isEmpty || (Int(studentCountStr) ?? 0) <= 0)
+                        Button("إرسال واستيراد") { Task { await submitRequest() } }
+                            .disabled(isSubmitDisabled)
                     }
                 }
             }
@@ -1341,11 +1526,107 @@ struct CreateTrainingRequestSheet: View {
                     targetHospitalId = store.hospitalCards.first?.id ?? ""
                 }
             }
+            .fileImporter(
+                isPresented: $isSelectingPdf,
+                allowedContentTypes: [.pdf],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    guard let selectedUrl = urls.first else { return }
+                    Task { await uploadPdfFile(url: selectedUrl) }
+                case .failure(let err):
+                    uploadErrorMsg = "تعذر اختيار الملف: \(err.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func uploadPdfFile(url: URL) async {
+        guard url.startAccessingSecurityScopedResource() else {
+            uploadErrorMsg = "تعذر الوصول للملف المختار"
+            return
+        }
+        defer { url.stopAccessingSecurityScopedResource() }
+
+        isUploadingPdf = true
+        uploadErrorMsg = ""
+
+        do {
+            let data = try Data(contentsOf: url)
+            let fileName = url.lastPathComponent
+            selectedPdfData = data
+            uploadedFileName = fileName
+            internshipLetterUrl = "pdf_ready:\(fileName)"
+        } catch {
+            uploadErrorMsg = "فشل قراءة الملف: \(error.localizedDescription)"
+        }
+        isUploadingPdf = false
+    }
+
+    private func parseAndValidateExcelRoster(_ text: String) {
+        batchValidationErrors.removeAll()
+        parsedBatchRows.removeAll()
+
+        let lines = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        if lines.isEmpty { return }
+
+        var count = 0
+        for line in lines {
+            count += 1
+            // Support CSV, Tab-delimited, or JSON-like object text from Excel paste
+            let parts = line.components(separatedBy: CharacterSet(charactersIn: ",\t|")).map { $0.trimmingCharacters(in: .whitespaces) }
+            if parts.count >= 3 {
+                let acad = parts[0]
+                let nid = parts[1]
+                let name = parts[2]
+                let enName = parts.count > 3 ? parts[3] : nil
+                let gender = parts.count > 4 ? parts[4] : nil
+                let spec = parts.count > 5 ? parts[5] : specialty
+                let uni = parts.count > 6 ? parts[6] : nil
+                let email = parts.count > 7 ? parts[7] : nil
+                let mobile = parts.count > 8 ? parts[8] : nil
+                let start = parts.count > 9 ? parts[9] : nil
+                let end = parts.count > 10 ? parts[10] : nil
+
+                // Validation rules
+                if acad.isEmpty { batchValidationErrors.append("سطر \(count): الرقم الأكاديمي مفقود") }
+                if nid.count != 10 || !nid.allSatisfy(\.isNumber) {
+                    batchValidationErrors.append("سطر \(count): رقم الهوية (\(nid)) يجب أن يتكون من 10 أرقام")
+                }
+                if name.isEmpty { batchValidationErrors.append("سطر \(count): الاسم بالعربية مفقود") }
+
+                let row = CandidateTraineeInputDtoHelper(
+                    academicNumber: acad,
+                    nationalId: nid,
+                    nameAr: name,
+                    nameEn: enName,
+                    gender: gender,
+                    specialty: spec.isEmpty ? specialty : spec,
+                    university: uni,
+                    email: email,
+                    mobile: mobile,
+                    startDate: start,
+                    endDate: end
+                )
+                parsedBatchRows.append(row)
+            }
+        }
+        studentCountStr = "\(max(1, parsedBatchRows.count))"
+    }
+
+    private var isSubmitDisabled: Bool {
+        if specialty.trimmingCharacters(in: .whitespaces).isEmpty || targetHospitalId.isEmpty { return true }
+        if requestMode == "single" {
+            return candidateNameAr.isEmpty || candidateNationalId.isEmpty || candidateAcademicNumber.isEmpty
+        } else {
+            return (Int(studentCountStr) ?? 0) <= 0
         }
     }
 
     private func submitRequest() async {
-        guard let count = Int(studentCountStr), count > 0 else {
+        let count = requestMode == "single" ? 1 : (Int(studentCountStr) ?? 1)
+        guard count > 0 else {
             errorMsg = "الرجاء أدخل عدد متدربين صحيح"
             return
         }
@@ -1360,6 +1641,17 @@ struct CreateTrainingRequestSheet: View {
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd"
 
+        struct TraineeInputBody: Encodable {
+            let academicNumber: String
+            let nationalId: String
+            let nameAr: String
+            let specialty: String?
+            let email: String?
+            let mobile: String?
+            let startDate: String?
+            let endDate: String?
+        }
+
         struct CreateReqBody: Encodable {
             let requestType: String
             let targetOrgId: String
@@ -1369,6 +1661,37 @@ struct CreateTrainingRequestSheet: View {
             let trainingStartDate: String
             let trainingEndDate: String
             let notes: String
+            let clusterLetterUrl: String?
+            let trainees: [TraineeInputBody]?
+        }
+
+        var traineesList: [TraineeInputBody]? = nil
+        if requestMode == "single" {
+            traineesList = [
+                TraineeInputBody(
+                    academicNumber: candidateAcademicNumber.trimmingCharacters(in: .whitespaces),
+                    nationalId: candidateNationalId.trimmingCharacters(in: .whitespaces),
+                    nameAr: candidateNameAr.trimmingCharacters(in: .whitespaces),
+                    specialty: specialty.trimmingCharacters(in: .whitespaces),
+                    email: candidateEmail.isEmpty ? nil : candidateEmail.trimmingCharacters(in: .whitespaces),
+                    mobile: candidateMobile.isEmpty ? nil : candidateMobile.trimmingCharacters(in: .whitespaces),
+                    startDate: fmt.string(from: startDate),
+                    endDate: fmt.string(from: endDate)
+                )
+            ]
+        } else if requestMode == "batch" && !parsedBatchRows.isEmpty {
+            traineesList = parsedBatchRows.map { row in
+                TraineeInputBody(
+                    academicNumber: row.academicNumber,
+                    nationalId: row.nationalId,
+                    nameAr: row.nameAr,
+                    specialty: row.specialty ?? specialty,
+                    email: row.email,
+                    mobile: row.mobile,
+                    startDate: row.startDate ?? fmt.string(from: startDate),
+                    endDate: row.endDate ?? fmt.string(from: endDate)
+                )
+            }
         }
 
         let body = CreateReqBody(
@@ -1379,11 +1702,37 @@ struct CreateTrainingRequestSheet: View {
             studentCount: count,
             trainingStartDate: fmt.string(from: startDate),
             trainingEndDate: fmt.string(from: endDate),
-            notes: notes.isEmpty ? "طلب تدريب داخلي محدد من التجمع الصحي" : notes
+            notes: notes.isEmpty ? (requestMode == "single" ? "طلب إدخال متدرب فردي مباشر" : "طلب تدريب دفعة عبر استيراد الإكسل") : notes,
+            clusterLetterUrl: internshipLetterUrl.isEmpty ? nil : internshipLetterUrl.trimmingCharacters(in: .whitespaces),
+            trainees: traineesList
         )
 
+        struct CreateReqResponseData: Decodable {
+            let id: String
+        }
+        struct CreateReqResponseEnvelope: Decodable {
+            let data: CreateReqResponseData
+        }
+
         do {
-            let _: EmptyResponse = try await APIClient.shared.request(endpoint: "/training-requests", method: "POST", body: body)
+            let resEnv: CreateReqResponseEnvelope = try await APIClient.shared.request(endpoint: "/training-requests", method: "POST", body: body)
+            let createdReqId = resEnv.data.id
+
+            // If PDF file was selected, upload TraineeDocument for created trainees so ValidationEngine passes
+            if let pdfData = selectedPdfData {
+                let traineesRows: APIListResponse<TrainingRequestTraineeRow> = try await APIClient.shared.request(endpoint: "/training-requests/\(createdReqId)/trainees")
+                for row in traineesRows.data {
+                    _ = try? await APIClient.shared.uploadTraineeDocument(
+                        fileData: pdfData,
+                        fileName: uploadedFileName.isEmpty ? "internship_letter.pdf" : uploadedFileName,
+                        documentType: "internship_letter",
+                        trainingRequestTraineeId: row.id,
+                        titleAr: "خطاب الامتياز الرسمي",
+                        isMandatory: true
+                    )
+                }
+            }
+
             await store.fetchTrainingRequests()
             dismiss()
         } catch {

@@ -131,19 +131,13 @@ struct ScheduleBuilderView: View {
                     let filteredRotations = getFilteredRotations()
 
                     if filteredRotations.isEmpty {
-                        VStack(spacing: 12) {
-                            Image(systemName: "calendar.badge.clock")
-                                .font(.system(size: 48))
-                                .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
-                            Text("لا توجد جلسات أو روتيشنات مجدولة لهذا التاريخ")
-                                .font(.headline)
-                                .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
-                            Text("استخدم زر «جلسة جديدة» لإضافة روتيشن أو شفت لمتدرب.")
-                                .font(.caption)
-                                .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
+                        MiranEmptyStateView(
+                            titleAr: "لا توجد جلسات أو روتيشنات مجدولة",
+                            subtitleAr: isReadOnly ? "لم يتم جدولتها بعد لهذا التاريخ." : "استخدم زر «جلسة جديدة» لإضافة روتيشن أو مناوبة لمتدرب.",
+                            icon: "calendar.badge.clock",
+                            buttonTitleAr: isReadOnly ? nil : "جلسة جديدة",
+                            action: isReadOnly ? nil : { showingCreateSheet = true }
+                        )
                     } else {
                         LazyVStack(spacing: 12) {
                             ForEach(filteredRotations) { rotation in
@@ -168,6 +162,7 @@ struct ScheduleBuilderView: View {
         }
         .task {
             await store.fetchHospitalData()
+            await store.fetchTrainerData()
             await store.fetchTraineeData()
         }
     }
@@ -239,11 +234,13 @@ struct WeekStripView: View {
             ForEach(days, id: \.self) { day in
                 let isSelected = Calendar.current.isDate(day, inSameDayAs: selectedDate)
                 let isToday = Calendar.current.isDateInToday(day)
+                let weekday = Calendar.current.component(.weekday, from: day) // 6 = Friday, 7 = Saturday
+                let isWeekend = (weekday == 6 || weekday == 7)
 
                 VStack(spacing: 6) {
                     Text(dayName(day))
                         .font(.caption2.bold())
-                        .foregroundColor(isSelected ? .white : MiranTheme.secondaryText(for: systemColorScheme))
+                        .foregroundColor(isSelected ? .white : (isWeekend ? .secondary : MiranTheme.secondaryText(for: systemColorScheme)))
 
                     Text("\(Calendar.current.component(.day, from: day))")
                         .font(.headline.bold())
@@ -251,7 +248,7 @@ struct WeekStripView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
-                .background(isSelected ? MiranTheme.emerald : (isToday ? MiranTheme.emerald.opacity(0.12) : MiranTheme.cardBackground(for: systemColorScheme)))
+                .background(isSelected ? MiranTheme.emerald : (isWeekend ? Color.gray.opacity(0.08) : (isToday ? MiranTheme.emerald.opacity(0.12) : MiranTheme.cardBackground(for: systemColorScheme))))
                 .cornerRadius(12)
                 .onTapGesture {
                     withAnimation { selectedDate = day }
@@ -318,9 +315,16 @@ struct RotationScheduleCard: View {
 
                 if !isReadOnly {
                     Button(action: onEdit) {
-                        Image(systemName: "ellipsis.circle.fill")
-                            .font(.title3)
-                            .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
+                        HStack(spacing: 4) {
+                            Image(systemName: "pencil")
+                            Text("تعديل")
+                        }
+                        .font(.caption.bold())
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(MiranTheme.emerald.opacity(0.12))
+                        .foregroundColor(MiranTheme.emerald)
+                        .cornerRadius(6)
                     }
                 }
             }
@@ -394,10 +398,15 @@ struct CreateSessionSheet: View {
     @State private var startDate: Date = Date()
     @State private var endDate: Date = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
     @State private var status: String = "scheduled"
-    @State private var isRecurring: Bool = false
     @State private var isSubmitting: Bool = false
     @State private var errorMessage: String?
-    @State private var warningMessage: String?
+
+    var isWeekendSelected: Bool {
+        let cal = Calendar.current
+        let w1 = cal.component(.weekday, from: startDate)
+        let w2 = cal.component(.weekday, from: endDate)
+        return (w1 == 6 || w1 == 7 || w2 == 6 || w2 == 7)
+    }
 
     var body: some View {
         NavigationView {
@@ -434,15 +443,15 @@ struct CreateSessionSheet: View {
                         Text("نشط").tag("active")
                         Text("مسودة").tag("draft")
                     }
-
-                    Toggle("جدول متكرر (تكرار شهري)", isOn: $isRecurring)
                 }
 
-                if let warningMessage {
+                if isWeekendSelected {
                     Section {
-                        HStack {
+                        HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
-                            Text(warningMessage).font(.caption).foregroundColor(.orange)
+                            Text("تنبيه: يوم الجمعة والسبت أيّام راحة افتراضية. يرجى التأكد من الترخيص الصريح للتدريب.")
+                                .font(.caption)
+                                .foregroundColor(.orange)
                         }
                     }
                 }
@@ -505,29 +514,56 @@ struct CreateSessionSheet: View {
     }
 }
 
-// MARK: - Edit Session Sheet
+// MARK: - Edit Session Sheet (Trainer & Authorized Edit)
 struct EditSessionSheet: View {
     let rotation: RotationModel
     @EnvironmentObject var store: AppStore
     @Environment(\.dismiss) var dismiss
+    @Environment(\.colorScheme) var systemColorScheme
 
     @State private var selectedDepartmentId: String
     @State private var selectedTrainerId: String
+    @State private var startDate: Date
+    @State private var endDate: Date
     @State private var status: String
     @State private var isSubmitting = false
     @State private var errorMessage: String?
+    @State private var conflictWarning: String?
 
     init(rotation: RotationModel) {
         self.rotation = rotation
         _selectedDepartmentId = State(initialValue: rotation.department?.id ?? "")
         _selectedTrainerId = State(initialValue: rotation.trainerProfile?.id ?? "")
         _status = State(initialValue: rotation.status)
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate]
+        let s = formatter.date(from: rotation.startDate) ?? Date()
+        let e = formatter.date(from: rotation.endDate) ?? Date()
+        _startDate = State(initialValue: s)
+        _endDate = State(initialValue: e)
+    }
+
+    var isWeekendSelected: Bool {
+        let cal = Calendar.current
+        let w1 = cal.component(.weekday, from: startDate)
+        let w2 = cal.component(.weekday, from: endDate)
+        return (w1 == 6 || w1 == 7 || w2 == 6 || w2 == 7)
     }
 
     var body: some View {
         NavigationView {
             Form {
-                Section("تعديل الروتيشن والجلسة") {
+                Section("تفاصيل المتدرب والقسم الحالي") {
+                    HStack {
+                        Text("المتدرب:")
+                            .font(.caption)
+                            .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
+                        Spacer()
+                        Text(rotation.traineeProfile?.person?.nameAr ?? "متدرب")
+                            .font(.subheadline.bold())
+                    }
+
                     Picker("القسم السريري", selection: $selectedDepartmentId) {
                         ForEach(store.hospitalDepartmentsList) { dept in
                             Text(dept.nameAr).tag(dept.id)
@@ -539,11 +575,36 @@ struct EditSessionSheet: View {
                             Text(tr.nameAr).tag(tr.trainerProfileId)
                         }
                     }
+                }
+
+                Section("تعديل التواريخ والمواعيد") {
+                    DatePicker("تاريخ البداية", selection: $startDate, displayedComponents: .date)
+                    DatePicker("تاريخ النهاية", selection: $endDate, displayedComponents: .date)
 
                     Picker("حالة الجلسة", selection: $status) {
                         Text("مجدول").tag("scheduled")
                         Text("نشط").tag("active")
                         Text("مكتمل").tag("completed")
+                    }
+                }
+
+                if isWeekendSelected {
+                    Section {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                            Text("تنبيه: الجمعة والسبت أيّام راحة افتراضية للتدريب. يرجى التأكد من التكليف الصريح.")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
+                    }
+                }
+
+                if let conflictWarning {
+                    Section {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                            Text(conflictWarning).font(.caption).foregroundColor(.orange)
+                        }
                     }
                 }
 
@@ -554,8 +615,17 @@ struct EditSessionSheet: View {
                 }
 
                 Section {
-                    Button("حفظ التعديلات") {
+                    Button {
                         Task { await handleSave() }
+                    } label: {
+                        if isSubmitting {
+                            ProgressView().frame(maxWidth: .infinity)
+                        } else {
+                            Text("حفظ التعديلات")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .foregroundColor(MiranTheme.emerald)
+                        }
                     }
                     .disabled(isSubmitting)
 
@@ -565,7 +635,7 @@ struct EditSessionSheet: View {
                     .disabled(isSubmitting)
                 }
             }
-            .navigationTitle("تعديل الجلسة")
+            .navigationTitle("تعديل جدول الجلسة")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -577,8 +647,25 @@ struct EditSessionSheet: View {
 
     private func handleSave() async {
         isSubmitting = true
+        errorMessage = nil
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate]
+        let sStr = formatter.string(from: startDate)
+        let eStr = formatter.string(from: endDate)
+
         do {
-            try await store.updateRotation(id: rotation.id, departmentId: selectedDepartmentId, trainerProfileId: selectedTrainerId, startDate: nil, endDate: nil, status: status)
+            try await store.updateRotation(
+                id: rotation.id,
+                departmentId: selectedDepartmentId,
+                trainerProfileId: selectedTrainerId,
+                startDate: sStr,
+                endDate: eStr,
+                status: status
+            )
+            // Reload hospital and trainer data
+            await store.fetchHospitalData()
+            await store.fetchTrainerData()
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
@@ -590,6 +677,8 @@ struct EditSessionSheet: View {
         isSubmitting = true
         do {
             try await store.deleteRotation(id: rotation.id)
+            await store.fetchHospitalData()
+            await store.fetchTrainerData()
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
@@ -597,3 +686,4 @@ struct EditSessionSheet: View {
         isSubmitting = false
     }
 }
+

@@ -15,6 +15,16 @@ struct TraineeJourneyHomeView: View {
 
     var user: UserProfileResponse? { authViewModel.currentUser }
 
+    private var traineeRotations: [RotationModel] {
+        store.apiRotations.isEmpty ? store.hospitalRotationsList : store.apiRotations
+    }
+
+    private var totalRotations: Int { max(1, traineeRotations.count) }
+    private var completedRotations: Int { traineeRotations.filter { $0.status == "completed" || $0.status == "passed" }.count }
+    private var activeRotation: RotationModel? { traineeRotations.first(where: { $0.status == "active" || $0.status == "in_progress" }) }
+    private var currentStageNumber: Int { min(totalRotations, completedRotations + (activeRotation != nil ? 1 : 0)) }
+    private var progressPercentage: Double { Double(currentStageNumber) / Double(totalRotations) }
+
     var body: some View {
         NavigationView {
             ZStack {
@@ -50,7 +60,7 @@ struct TraineeJourneyHomeView: View {
                                     .font(.headline.weight(.bold))
                                     .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
                                 Spacer()
-                                Text("المرحلة 7 من 15")
+                                Text("المرحلة \(currentStageNumber) من \(totalRotations)")
                                     .font(.caption.weight(.bold))
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 4)
@@ -61,11 +71,11 @@ struct TraineeJourneyHomeView: View {
 
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
-                                    Text("التدريب السريري الفعّال")
+                                    Text(activeRotation?.department?.nameAr ?? "التدريب السريري الفعّال")
                                         .font(.title3.bold())
                                         .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
                                     Spacer()
-                                    Text("65%")
+                                    Text("\(Int(progressPercentage * 100))%")
                                         .font(.headline.bold())
                                         .foregroundColor(MiranTheme.emerald)
                                 }
@@ -77,7 +87,7 @@ struct TraineeJourneyHomeView: View {
                                             .frame(height: 8)
                                         RoundedRectangle(cornerRadius: 6)
                                             .fill(LinearGradient(colors: [MiranTheme.emerald, MiranTheme.teal], startPoint: .leading, endPoint: .trailing))
-                                            .frame(width: geo.size.width * 0.65, height: 8)
+                                            .frame(width: max(0, min(geo.size.width, geo.size.width * CGFloat(progressPercentage))), height: 8)
                                     }
                                 }
                                 .frame(height: 8)

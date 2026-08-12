@@ -48,16 +48,20 @@ struct DynamicMainTabView: View {
         switch tab.destination {
         case .dashboard:
             if let user = user {
-                if user.isTrainee {
+                let persona = ServiceResolver.resolvePersona(for: user)
+                switch persona {
+                case .trainee:
                     TraineeJourneyHomeView()
-                } else if user.isTrainer {
+                case .trainer:
                     TrainerDashboardFullView()
-                } else if user.isHospitalTrainingAdmin {
+                case .trainingOperations:
                     HospitalWorkQueueHomeView()
-                } else if user.isTrainingDirector {
+                case .clusterOperations:
                     OrgManagerDashboardFullView()
-                } else {
-                    TraineeJourneyHomeView()
+                case .university:
+                    UniversityAdminTabView()
+                case .platform:
+                    SystemAdminTabView()
                 }
             } else {
                 TraineeJourneyHomeView()
