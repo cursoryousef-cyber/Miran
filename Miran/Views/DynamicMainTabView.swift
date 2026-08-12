@@ -49,18 +49,18 @@ struct DynamicMainTabView: View {
         case .dashboard:
             if let user = user {
                 if user.isTrainee {
-                    TraineeDashboardFullView()
+                    TraineeJourneyHomeView()
                 } else if user.isTrainer {
                     TrainerDashboardFullView()
                 } else if user.isHospitalTrainingAdmin {
-                    TrainingSupervisorDashboardFullView()
+                    HospitalWorkQueueHomeView()
                 } else if user.isTrainingDirector {
                     OrgManagerDashboardFullView()
                 } else {
-                    TraineeDashboardFullView()
+                    TraineeJourneyHomeView()
                 }
             } else {
-                TraineeDashboardFullView()
+                TraineeJourneyHomeView()
             }
 
         case .schedule:

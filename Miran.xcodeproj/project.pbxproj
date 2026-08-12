@@ -62,6 +62,9 @@
 		A1B2C3D410000120 /* ServiceCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000120 /* ServiceCatalog.swift */; };
 		A1B2C3D410000121 /* DynamicServicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000121 /* DynamicServicesView.swift */; };
 		A1B2C3D410000122 /* DynamicMainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000122 /* DynamicMainTabView.swift */; };
+		A1B2C3D410000123 /* MiranEmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000123 /* MiranEmptyStateView.swift */; };
+		A1B2C3D410000124 /* TraineeJourneyHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000124 /* TraineeJourneyHomeView.swift */; };
+		A1B2C3D410000125 /* HospitalWorkQueueHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000125 /* HospitalWorkQueueHomeView.swift */; };
 		A1B2C3D410000112 /* TrainerDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000112 /* TrainerDashboardFullView.swift */; };
 		A1B2C3D410000113 /* TraineeDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000113 /* TraineeDashboardFullView.swift */; };
 		A1B2C3D410000114 /* WorkflowEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000114 /* WorkflowEngine.swift */; };
@@ -129,6 +132,9 @@
 		A1B2C3D420000120 /* ServiceCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceCatalog.swift; sourceTree = "<group>"; };
 		A1B2C3D420000121 /* DynamicServicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicServicesView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000122 /* DynamicMainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicMainTabView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000123 /* MiranEmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiranEmptyStateView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000124 /* TraineeJourneyHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraineeJourneyHomeView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000125 /* HospitalWorkQueueHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HospitalWorkQueueHomeView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000112 /* TrainerDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainerDashboardFullView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000113 /* TraineeDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraineeDashboardFullView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000114 /* WorkflowEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowEngine.swift; sourceTree = "<group>"; };
@@ -215,6 +221,7 @@
 				A1B2C3D420000007 /* SharedComponents.swift */,
 				A1B2C3D420000117 /* WorkflowTimelineComponent.swift */,
 				A1B2C3D420000118 /* ScheduleBuilderView.swift */,
+				A1B2C3D420000123 /* MiranEmptyStateView.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -262,6 +269,7 @@
 				A1B2C3D420000099 /* ClinicalLogbookView.swift */,
 				A1B2C3D420000038 /* DigitalIDCardView.swift */,
 				A1B2C3D420000113 /* TraineeDashboardFullView.swift */,
+				A1B2C3D420000124 /* TraineeJourneyHomeView.swift */,
 			);
 			path = Trainee;
 			sourceTree = "<group>";
@@ -321,6 +329,7 @@
 			children = (
 				A1B2C3D420000104 /* TrainingSupervisorTabView.swift */,
 				A1B2C3D420000111 /* TrainingSupervisorDashboardFullView.swift */,
+				A1B2C3D420000125 /* HospitalWorkQueueHomeView.swift */,
 			);
 			path = TrainingSupervisor;
 			sourceTree = "<group>";
@@ -482,6 +491,9 @@
 				A1B2C3D410000120 /* ServiceCatalog.swift in Sources */,
 				A1B2C3D410000121 /* DynamicServicesView.swift in Sources */,
 				A1B2C3D410000122 /* DynamicMainTabView.swift in Sources */,
+				A1B2C3D410000123 /* MiranEmptyStateView.swift in Sources */,
+				A1B2C3D410000124 /* TraineeJourneyHomeView.swift in Sources */,
+				A1B2C3D410000125 /* HospitalWorkQueueHomeView.swift in Sources */,
 				A1B2C3D410000112 /* TrainerDashboardFullView.swift in Sources */,
 				A1B2C3D410000113 /* TraineeDashboardFullView.swift in Sources */,
 				A1B2C3D410000114 /* WorkflowEngine.swift in Sources */,
