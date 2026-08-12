@@ -45,10 +45,11 @@ export class TimelineController {
    * this, so their numbers are computed once and cannot diverge.
    */
   @Get('dashboard')
+  @RequireCapability(CAPABILITIES.TIMELINE_VIEW)
   @RequireRoles(
     'platform_owner', 'system_admin', 'org_manager',
     'cluster_administrator', 'cluster_manager', 'training_director',
-    'hospital_administrator', 'training_supervisor',
+    'hospital_administrator', 'hospital_training_admin', 'hospitalAdmin', 'training_supervisor',
     'university_administrator', 'academic_supervisor',
   )
   @ApiOperation({ summary: 'ملخص الخطوط الزمنية للوحات المستشفى والجامعة والتجمع' })
@@ -85,10 +86,11 @@ export class TimelineController {
   }
 
   @Get(':traineeProfileId/readiness')
+  @RequireCapability(CAPABILITIES.TIMELINE_VIEW)
   @RequireRoles(
     'platform_owner', 'system_admin', 'org_manager',
     'cluster_administrator', 'cluster_manager', 'training_director',
-    'hospital_administrator', 'training_supervisor', 'trainer',
+    'hospital_administrator', 'hospital_training_admin', 'hospitalAdmin', 'training_supervisor', 'trainer',
     'university_administrator', 'academic_supervisor',
   )
   @ApiOperation({ summary: 'جاهزية المتدرب للتخرج ومتطلباته المتبقية' })
@@ -97,10 +99,11 @@ export class TimelineController {
   }
 
   @Get(':traineeProfileId')
+  @RequireCapability(CAPABILITIES.TIMELINE_VIEW)
   @RequireRoles(
     'platform_owner', 'system_admin', 'org_manager',
     'cluster_administrator', 'cluster_manager', 'training_director',
-    'hospital_administrator', 'training_supervisor', 'trainer',
+    'hospital_administrator', 'hospital_training_admin', 'hospitalAdmin', 'training_supervisor', 'trainer',
     'university_administrator', 'academic_supervisor',
   )
   @ApiOperation({ summary: 'الخط الزمني الكامل للمتدرب مع تقدم كل روتيشن' })

@@ -19,7 +19,7 @@ export class ProgramsController {
   @RequireRoles(
     'platform_owner', 'system_admin', 'org_manager',
     'cluster_administrator', 'cluster_manager', 'training_director',
-    'hospital_administrator', 'training_supervisor', 'trainer',
+    'hospital_administrator', 'hospital_training_admin', 'hospitalAdmin', 'training_supervisor', 'trainer',
     'university_administrator', 'academic_supervisor', 'trainee',
   )
   @ApiOperation({ summary: 'كتالوج البرامج التدريبية الوطني' })
@@ -37,7 +37,7 @@ export class ProgramsController {
   @RequireRoles(
     'platform_owner', 'system_admin', 'org_manager',
     'cluster_administrator', 'cluster_manager', 'training_director',
-    'hospital_administrator', 'training_supervisor', 'trainer',
+    'hospital_administrator', 'hospital_training_admin', 'hospitalAdmin', 'training_supervisor', 'trainer',
     'university_administrator', 'academic_supervisor', 'trainee',
   )
   @ApiOperation({ summary: 'تفاصيل برنامج تدريبي' })

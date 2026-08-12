@@ -27,10 +27,10 @@ export const NotificationCenter: React.FC = () => {
     refetchInterval: (query) => (query.state.status === 'error' || !hasToken ? false : 30000),
   });
 
-  const { data: notificationsData, isLoading } = useQuery({
+  const { data: notificationsData, isLoading, error, refetch } = useQuery({
     queryKey: ['notifications-list'],
     queryFn: async () => {
-      const res = await apiClient.get('/notifications', { params: { limit: 10 } }).catch(() => ({ data: { data: [] } }));
+      const res = await apiClient.get('/notifications', { params: { limit: 10 } });
       return res.data?.data || [];
     },
     enabled: open && hasToken,
@@ -133,6 +133,11 @@ export const NotificationCenter: React.FC = () => {
           {isLoading ? (
             <div style={{ padding: '32px', textAlign: 'center' }}>
               <CircularProgress size={24} style={{ color: '#0F766E' }} />
+            </div>
+          ) : error ? (
+            <div style={{ padding: '32px 20px', textAlign: 'center', color: '#B91C1C', fontSize: '13px' }}>
+              <div style={{ marginBottom: '12px' }}>تعذر تحميل الإشعارات — حاول مرة أخرى</div>
+              <Button size="small" variant="outlined" onClick={() => refetch()}>إعادة المحاولة</Button>
             </div>
           ) : notifications.length > 0 ? (
             notifications.map((n: any) => (

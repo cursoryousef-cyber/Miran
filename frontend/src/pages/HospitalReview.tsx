@@ -156,11 +156,20 @@ export const HospitalReview: React.FC = () => {
     setDialog(type);
   };
 
+  const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'accepted' | 'rejected'>('all');
+
   const pendingRows = rows.filter((r: any) => ['allocated', 'hospital_review'].includes(r.status)).length;
   const onHold = rows.filter((r: any) => r.status === 'on_hold').length;
-  const acceptedRows = rows.filter((r: any) => ['accepted', 'active', 'cluster_approved'].includes(r.status)).length;
-  const rejectedRows = rows.filter((r: any) => ['rejected', 'returned'].includes(r.status)).length;
+  const acceptedRows = rows.filter((r: any) => ['accepted', 'active', 'cluster_approved', 'hospital_administrator_accepted', 'supervisor_accepted', 'training_supervisor_accepted', 'trainer_accepted'].includes(r.status)).length;
+  const rejectedRows = rows.filter((r: any) => ['rejected', 'returned', 'hospital_returned_to_cluster'].includes(r.status)).length;
   const missingDocs = rows.filter((r: any) => (r.requiredDocuments?.length ?? 0) > 0).length;
+
+  const filteredRows = rows.filter((r: any) => {
+    if (filterTab === 'pending') return ['allocated', 'hospital_review', 'on_hold'].includes(r.status);
+    if (filterTab === 'accepted') return ['accepted', 'active', 'cluster_approved', 'hospital_administrator_accepted', 'supervisor_accepted', 'training_supervisor_accepted', 'trainer_accepted'].includes(r.status);
+    if (filterTab === 'rejected') return ['rejected', 'returned', 'hospital_returned_to_cluster'].includes(r.status);
+    return true;
+  });
 
   return (
     <DataPageShell
@@ -168,25 +177,64 @@ export const HospitalReview: React.FC = () => {
         subtitle={<>{user?.activeOrganization?.nameAr} — إسناد المتدربين الموزَّعين للأقسام والمدربين وإدارة التوزيع الداخلي</>}
         loading={isLoading}
         stats={[
-          { label: 'إجمالي الصفوف', value: rows.length, icon: Inbox, tone: 'primary' },
-          { label: 'بانتظار المراجعة', value: pendingRows, icon: Clock3, tone: pendingRows ? 'warning' : 'success' },
-          { label: 'مقبولون', value: acceptedRows, icon: CheckCircle2, tone: 'success' },
-          { label: 'معلّقون', value: onHold, icon: PauseCircle, tone: onHold ? 'warning' : 'neutral' },
+          { label: 'إجمالي السجلات بالمستشفى', value: rows.length, icon: Inbox, tone: 'primary' },
+          { label: 'بانتظار إجراء المستشفى', value: pendingRows + onHold, icon: Clock3, tone: (pendingRows + onHold) ? 'warning' : 'success' },
+          { label: 'مقبولون ونشطون', value: acceptedRows, icon: CheckCircle2, tone: 'success' },
+          { label: 'معلّقون مؤقتاً', value: onHold, icon: PauseCircle, tone: onHold ? 'warning' : 'neutral' },
           { label: 'مرفوضون/مُعادون', value: rejectedRows, icon: XCircle, tone: rejectedRows ? 'danger' : 'neutral' },
           { label: 'تنتظر مستندات', value: missingDocs, icon: FileWarning, tone: missingDocs ? 'warning' : 'neutral' },
         ]}
     >
-      <div style={{ marginBottom: '16px' }}><ViewToggle value={view} onChange={setView} /></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <Button
+            variant={filterTab === 'all' ? 'contained' : 'outlined'}
+            size="small"
+            onClick={() => setFilterTab('all')}
+            style={{ borderRadius: '20px' }}
+          >
+            الكل ({rows.length})
+          </Button>
+          <Button
+            variant={filterTab === 'pending' ? 'contained' : 'outlined'}
+            size="small"
+            color="warning"
+            onClick={() => setFilterTab('pending')}
+            style={{ borderRadius: '20px' }}
+          >
+            بانتظار إجراء المستشفى ({pendingRows + onHold})
+          </Button>
+          <Button
+            variant={filterTab === 'accepted' ? 'contained' : 'outlined'}
+            size="small"
+            color="success"
+            onClick={() => setFilterTab('accepted')}
+            style={{ borderRadius: '20px' }}
+          >
+            المقبولون والنشطون ({acceptedRows})
+          </Button>
+          <Button
+            variant={filterTab === 'rejected' ? 'contained' : 'outlined'}
+            size="small"
+            color="error"
+            onClick={() => setFilterTab('rejected')}
+            style={{ borderRadius: '20px' }}
+          >
+            المرفوضون والمعادون ({rejectedRows})
+          </Button>
+        </div>
+        <ViewToggle value={view} onChange={setView} />
+      </div>
 
       {successMsg && <Alert severity="success" onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
 
       {view === 'cards' ? (
-        (rows).length === 0 ? (
-          <div className="glass-card"><EmptyState icon={Inbox} title="لا توجد طلبات تدريب واردة للمراجعة حالياً" hint="سيتم ظهور الطلبات المحالة من التجمع الصحي تلقائياً فور إرسالها." /></div>
+        filteredRows.length === 0 ? (
+          <div className="glass-card"><EmptyState icon={Inbox} title="لا توجد سجلات تطابق الفلتر الحالي" hint="تأكد من اختيار التبويب المناسب أو انتظار تحويل طلبات جديدة من التجمع الصحي." /></div>
         ) : (
           <CardGrid>
-            {rows.map((row: any) => {
+            {filteredRows.map((row: any) => {
               const st = STATUS_LABELS[row.status] || { label: row.status };
               const req = row.trainingRequest;
               const specialtyName = row.specialty || req?.specialtyAr || req?.specialtyEn || 'غير محدد';
@@ -270,10 +318,10 @@ export const HospitalReview: React.FC = () => {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={6} align="center"><CircularProgress size={24} /></TableCell></TableRow>
-            ) : rows.length === 0 ? (
-              <TableRow><TableCell colSpan={6} align="center" style={{ color: '#64748B', padding: '32px' }}>لا توجد طلبات تدريب واردة للمراجعة حالياً</TableCell></TableRow>
+            ) : filteredRows.length === 0 ? (
+              <TableRow><TableCell colSpan={6} align="center" style={{ color: '#64748B', padding: '32px' }}>لا توجد سجلات تطابق الفلتر الحالي</TableCell></TableRow>
             ) : (
-              rows.map((row: any) => {
+              filteredRows.map((row: any) => {
                 const st = STATUS_LABELS[row.status] || { label: row.status, color: 'default' as const };
                 const req = row.trainingRequest;
                 const specialtyName = row.specialty || req?.specialtyAr || req?.specialtyEn || 'غير محدد';
