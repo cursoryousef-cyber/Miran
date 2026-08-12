@@ -26,12 +26,16 @@ const MANDATORY_DOCUMENT_TYPES = [
 /**
  * محرك التحقق لمرحلة مراجعة التجمع الصحي (Stage 2).
  * يفحص كل صف متدرب ضمن الدفعة ويكتب الأخطاء في validationErrors.
+ *
+ * isDirectRequest — عند تمريرها true (طلب تجمع مباشر)، تُعفى الصفوف من اشتراط
+ * universityOrgId لأن التجمع نفسه هو الجهة المُرسِلة ولا توجد جامعة راعية.
+ * طلبات الجامعات تستمر في اشتراط universityOrgId صالح.
  */
 @Injectable()
 export class ValidationEngineService {
   constructor(private prisma: PrismaService) {}
 
-  async validateTrainees(trainingRequestId: string): Promise<RowValidationResult[]> {
+  async validateTrainees(trainingRequestId: string, isDirectRequest = false): Promise<RowValidationResult[]> {
     const rows = await this.prisma.trainingRequestTrainee.findMany({
       where: {
         trainingRequestId,
@@ -168,14 +172,19 @@ export class ValidationEngineService {
       }
 
       // ── الجامعة ──
-      if (!row.universityOrgId) {
-        errors.push({ code: 'missing_university', field: 'universityOrgId', messageAr: 'الجامعة غير محددة' });
-      } else if (row.university?.organizationType?.code !== 'university') {
-        errors.push({
-          code: 'invalid_university',
-          field: 'universityOrgId',
-          messageAr: 'الجهة المحددة ليست جامعة معتمدة في النظام',
-        });
+      // Direct Cluster Requests (requestType = cluster_request) intentionally have
+      // no sponsoring university — universityOrgId = NULL is valid and expected.
+      // Only University Requests must supply a verified universityOrgId.
+      if (!isDirectRequest) {
+        if (!row.universityOrgId) {
+          errors.push({ code: 'missing_university', field: 'universityOrgId', messageAr: 'الجامعة غير محددة' });
+        } else if (row.university?.organizationType?.code !== 'university') {
+          errors.push({
+            code: 'invalid_university',
+            field: 'universityOrgId',
+            messageAr: 'الجهة المحددة ليست جامعة معتمدة في النظام',
+          });
+        }
       }
 
       results.push({ rowId: row.id, nationalId: row.nationalId, nameAr: row.nameAr, errors });
