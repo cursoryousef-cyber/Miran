@@ -79,6 +79,7 @@ model Organization {
   generatedReports                    GeneratedReport[]
   improvementPlans                    ImprovementPlan[]
   incidents                           Incident[]
+  targetIncidents                     Incident[]                @relation("IncidentTargetOrg")
   integrationConfigs                  IntegrationConfig[]
   notifications                       Notification[]
   objectives                          Objective[]
@@ -277,7 +278,9 @@ model UserAccount {
   improvementCreated     ImprovementPlan[]        @relation("PlanCreator")
   improvementSupervised  ImprovementPlan[]        @relation("PlanSupervisor")
   incidentsReported      Incident[]               @relation("IncidentReporter")
+  incidentsAssigned      Incident[]               @relation("IncidentAssignee")
   incidentsResolved      Incident[]               @relation("IncidentResolver")
+  incidentComments       IncidentComment[]
   logbookSignoffs        LogbookSignoff[]
   notifications          Notification[]
   objectivesVerified     ObjectiveProgress[]      @relation("ObjectiveVerifier")
@@ -1671,22 +1674,47 @@ model Task {
 }
 
 model Incident {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @map("organization_id") @db.Uuid
-  reportedById   String       @map("reported_by") @db.Uuid
-  incidentType   String       @map("incident_type") @db.VarChar(50)
-  description    String
-  severity       String       @default("low") @db.VarChar(20)
-  status         String       @default("open") @db.VarChar(20)
-  resolution     String?
-  resolvedById   String?      @map("resolved_by") @db.Uuid
-  resolvedAt     DateTime?    @map("resolved_at") @db.Timestamptz(6)
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  reportedBy     UserAccount  @relation("IncidentReporter", fields: [reportedById], references: [id])
-  resolvedBy     UserAccount? @relation("IncidentResolver", fields: [resolvedById], references: [id])
+  id                   String            @id @default(uuid()) @db.Uuid
+  organizationId       String            @map("organization_id") @db.Uuid
+  targetOrganizationId String?           @map("target_organization_id") @db.Uuid
+  reportedById         String            @map("reported_by") @db.Uuid
+  assignedToId         String?           @map("assigned_to") @db.Uuid
+  incidentType         String            @map("incident_type") @db.VarChar(50)
+  category             String?           @db.VarChar(50)
+  description          String
+  severity             String            @default("low") @db.VarChar(20)
+  status               String            @default("open") @db.VarChar(20)
+  escalationLevel      Int               @default(0) @map("escalation_level")
+  resolution           String?
+  evidenceUrls         String[]          @default([]) @map("evidence_urls")
+  resolvedById         String?           @map("resolved_by") @db.Uuid
+  resolvedAt           DateTime?         @map("resolved_at") @db.Timestamptz(6)
+  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  organization         Organization      @relation(fields: [organizationId], references: [id])
+  targetOrganization   Organization?     @relation("IncidentTargetOrg", fields: [targetOrganizationId], references: [id])
+  reportedBy           UserAccount       @relation("IncidentReporter", fields: [reportedById], references: [id])
+  assignedTo           UserAccount?      @relation("IncidentAssignee", fields: [assignedToId], references: [id])
+  resolvedBy           UserAccount?      @relation("IncidentResolver", fields: [resolvedById], references: [id])
+  comments             IncidentComment[]
 
+  @@index([organizationId])
+  @@index([targetOrganizationId])
   @@map("incidents")
+}
+
+model IncidentComment {
+  id         String      @id @default(uuid()) @db.Uuid
+  incidentId String      @map("incident_id") @db.Uuid
+  authorId   String      @map("author_id") @db.Uuid
+  comment    String
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  incident   Incident    @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  author     UserAccount @relation(fields: [authorId], references: [id])
+
+  @@index([incidentId])
+  @@map("incident_comments")
 }
 
 /// الإقرارات والتعهدات الوطنية (إقرار الانضمام وإقرار الشؤون الأكاديمية)
