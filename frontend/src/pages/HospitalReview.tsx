@@ -255,7 +255,7 @@ export const HospitalReview: React.FC = () => {
                   badges={[
                     { label: st.label, tone: row.status === 'on_hold' ? 'warning' : row.status === 'rejected' ? 'danger' : 'info' },
                     { label: `التخصص: ${specialtyName}`, tone: 'success' as const },
-                    ...(req?.studentCount || req?.totalTraineesRequested || 1 ? [{ label: `عدد المطلوبين بالطلب: ${req.totalTraineesRequested}`, tone: 'violet' as const }] : []),
+                    ...(req?.totalTraineesRequested ?? req?.studentCount ?? 1 ? [{ label: `عدد المطلوبين بالطلب: ${req?.totalTraineesRequested ?? req?.studentCount ?? 1}`, tone: 'violet' as const }] : []),
                   ]}
                   metrics={[
                     { label: 'القسم السريري', value: row.assignedDepartment?.nameAr ?? 'غير محدد', tone: 'info' },
