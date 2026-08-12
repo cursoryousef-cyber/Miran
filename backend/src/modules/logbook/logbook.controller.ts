@@ -77,21 +77,24 @@ export class LogbookController {
 
   // ─── 1. مكتبة الإجراءات الطبية (Procedures Catalog) ──────────────────────
   @Get('procedures')
-  @RequireRoles('trainee', 'trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_training_admin', 'academic_supervisor', 'cluster_administrator', 'training_director', 'org_manager', 'platform_owner')
   @ApiOperation({ summary: 'استعراض مكتبة الإجراءات والمهارات السريرية المتاحة' })
-  async getProcedures(@Query('category') category?: string) {
-    const where: any = { isActive: true };
+  async getProcedures(@Query('category') category?: string, @Query('includeInactive') includeInactive?: string) {
+    const where: any = {};
+    if (includeInactive !== 'true') {
+      where.isActive = true;
+    }
     if (category) where.category = category;
 
     const procedures = await this.prisma.procedureCatalog.findMany({
       where,
-      orderBy: { category: 'asc' },
+      orderBy: [{ category: 'asc' }, { code: 'asc' }],
     });
     return { data: procedures };
   }
 
   @Post('procedures')
-  @RequireRoles('org_manager', 'platform_owner', 'academic_supervisor')
+  @RequireRoles('org_manager', 'platform_owner', 'academic_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director')
   @ApiOperation({ summary: 'إضافة إجراء سريري جديد لمكتبة الإجراءات' })
   async createProcedure(@Body() dto: { code: string; titleAr: string; titleEn: string; category: string; minRequired?: number; descriptionAr?: string }) {
     const proc = await this.prisma.procedureCatalog.create({
@@ -103,6 +106,39 @@ export class LogbookController {
         minRequired: dto.minRequired || 5,
         descriptionAr: dto.descriptionAr,
       },
+    });
+    return { success: true, procedure: proc };
+  }
+
+  @Patch('procedures/:id')
+  @RequireRoles('org_manager', 'platform_owner', 'academic_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director')
+  @ApiOperation({ summary: 'تعديل بيانات إجراء سريري في المكتبة' })
+  async updateProcedure(
+    @Param('id') id: string,
+    @Body() dto: { code?: string; titleAr?: string; titleEn?: string; category?: string; minRequired?: number; descriptionAr?: string; isActive?: boolean }
+  ) {
+    const proc = await this.prisma.procedureCatalog.update({
+      where: { id },
+      data: {
+        ...(dto.code !== undefined ? { code: dto.code } : {}),
+        ...(dto.titleAr !== undefined ? { titleAr: dto.titleAr } : {}),
+        ...(dto.titleEn !== undefined ? { titleEn: dto.titleEn } : {}),
+        ...(dto.category !== undefined ? { category: dto.category } : {}),
+        ...(dto.minRequired !== undefined ? { minRequired: dto.minRequired } : {}),
+        ...(dto.descriptionAr !== undefined ? { descriptionAr: dto.descriptionAr } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+      },
+    });
+    return { success: true, procedure: proc };
+  }
+
+  @Patch('procedures/:id/deactivate')
+  @RequireRoles('org_manager', 'platform_owner', 'academic_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director')
+  @ApiOperation({ summary: 'تعطيل / تفعيل إجراء سريري (Soft Delete/Deactivate)' })
+  async toggleProcedureActive(@Param('id') id: string, @Body() dto: { isActive: boolean }) {
+    const proc = await this.prisma.procedureCatalog.update({
+      where: { id },
+      data: { isActive: dto.isActive },
     });
     return { success: true, procedure: proc };
   }

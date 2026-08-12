@@ -56,6 +56,22 @@ export const LogbookPage: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [selectedTraineeId, setSelectedTraineeId] = useState('');
 
+  // Procedure Modal & Search State
+  const [procModalOpen, setProcModalOpen] = useState(false);
+  const [procEditId, setProcEditId] = useState<string | null>(null);
+  const [procCode, setProcCode] = useState('');
+  const [procTitleAr, setProcTitleAr] = useState('');
+  const [procTitleEn, setProcTitleEn] = useState('');
+  const [procCategory, setProcCategory] = useState('');
+  const [procMinRequired, setProcMinRequired] = useState(5);
+  const [procDescriptionAr, setProcDescriptionAr] = useState('');
+  const [procSearch, setProcSearch] = useState('');
+  const [procCategoryFilter, setProcCategoryFilter] = useState('');
+  const [includeInactive, setIncludeInactive] = useState(false);
+
+  // Evidence view state
+  const [evidenceModalUrl, setEvidenceModalUrl] = useState<string | null>(null);
+
   // Evaluation state — trainer submits eval
   const [evalSubmitting, setEvalSubmitting] = useState(false);
   const [evalMsg, setEvalMsg] = useState<string | null>(null);
@@ -74,10 +90,13 @@ export const LogbookPage: React.FC = () => {
     },
   });
 
-  const { data: procsData } = useQuery({
-    queryKey: ['procedures-catalog'],
+  const { data: procsData, refetch: refetchProcs } = useQuery({
+    queryKey: ['procedures-catalog', includeInactive, procCategoryFilter],
     queryFn: async () => {
-      const res = await apiClient.get('/logbook/procedures');
+      const params = new URLSearchParams();
+      if (includeInactive) params.append('includeInactive', 'true');
+      if (procCategoryFilter) params.append('category', procCategoryFilter);
+      const res = await apiClient.get(`/logbook/procedures?${params.toString()}`);
       return res.data;
     },
   });
@@ -185,6 +204,73 @@ export const LogbookPage: React.FC = () => {
       return res.data?.data ?? [];
     },
   });
+
+  const canManageProcedures = ['hospital_training_admin', 'cluster_administrator', 'training_director', 'academic_supervisor', 'org_manager', 'platform_owner'].includes(primaryRole);
+
+  const handleSaveProcedure = async () => {
+    if (!procCode || !procTitleAr || !procCategory) {
+      alert('جميع الحقول الأساسية لرمز واسم وفئة الإجراء إلمزامية');
+      return;
+    }
+    try {
+      if (procEditId) {
+        await apiClient.patch(`/logbook/procedures/${procEditId}`, {
+          code: procCode,
+          titleAr: procTitleAr,
+          titleEn: procTitleEn,
+          category: procCategory,
+          minRequired: procMinRequired,
+          descriptionAr: procDescriptionAr,
+        });
+      } else {
+        await apiClient.post('/logbook/procedures', {
+          code: procCode,
+          titleAr: procTitleAr,
+          titleEn: procTitleEn,
+          category: procCategory,
+          minRequired: procMinRequired,
+          descriptionAr: procDescriptionAr,
+        });
+      }
+      setProcModalOpen(false);
+      resetProcForm();
+      refetchProcs();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'حدث خطأ أثناء حفظ الإجراء');
+    }
+  };
+
+  const handleToggleProcActive = async (procId: string, currentActive: boolean) => {
+    try {
+      await apiClient.patch(`/logbook/procedures/${procId}/deactivate`, {
+        isActive: !currentActive,
+      });
+      refetchProcs();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'حدث خطأ أثناء تغيير حالة الإجراء');
+    }
+  };
+
+  const resetProcForm = () => {
+    setProcEditId(null);
+    setProcCode('');
+    setProcTitleAr('');
+    setProcTitleEn('');
+    setProcCategory('');
+    setProcMinRequired(5);
+    setProcDescriptionAr('');
+  };
+
+  const openProcEditModal = (proc: any) => {
+    setProcEditId(proc.id);
+    setProcCode(proc.code);
+    setProcTitleAr(proc.titleAr);
+    setProcTitleEn(proc.titleEn || '');
+    setProcCategory(proc.category);
+    setProcMinRequired(proc.minRequired || 5);
+    setProcDescriptionAr(proc.descriptionAr || '');
+    setProcModalOpen(true);
+  };
 
   const handleCreateLog = async () => {
     if (isTrainerRole && !selectedTraineeId) {
@@ -421,31 +507,112 @@ export const LogbookPage: React.FC = () => {
 
       {/* Tab 2: Procedures Catalog */}
       {tabIndex === 2 && (
-        <TableContainer component={Paper} className="glass-card">
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>اسم الإجراء السريري</TableCell>
-                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الرمز (Code)</TableCell>
-                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>التخصص / الفئة</TableCell>
-                <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الحد الأدنى المطلوب</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {procsData?.data?.map((proc: any) => (
-                <TableRow key={proc.id}>
-                  <TableCell style={{ fontWeight: 700, color: '#0F172A' }}>
-                    {proc.titleAr}
-                    <div style={{ fontSize: '11px', color: '#64748b' }}>{proc.titleEn}</div>
-                  </TableCell>
-                  <TableCell style={{ fontFamily: 'monospace', color: '#0891B2' }}>{proc.code}</TableCell>
-                  <TableCell><Chip label={proc.category} size="small" variant="outlined" /></TableCell>
-                  <TableCell style={{ fontWeight: 700, color: '#059669' }}>{proc.minRequired} مرات</TableCell>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="glass-card" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <TextField
+                size="small"
+                placeholder="بحث عن إجراء بالاسم أو الرمز..."
+                value={procSearch}
+                onChange={(e) => setProcSearch(e.target.value)}
+                InputProps={{ startAdornment: <Search size={16} style={{ marginLeft: 8, color: '#64748B' }} /> }}
+                sx={{ width: 280 }}
+              />
+              <FormControl size="small" sx={{ width: 180 }}>
+                <InputLabel>التخصص / الفئة</InputLabel>
+                <Select
+                  value={procCategoryFilter}
+                  onChange={(e) => setProcCategoryFilter(e.target.value)}
+                  label="التخصص / الفئة"
+                >
+                  <MenuItem value="">كل الفئات والتخصصات</MenuItem>
+                  {Array.from(new Set((procsData?.data || []).map((p: any) => p.category))).map((cat: any) => (
+                    <MenuItem key={cat} value={cat}>{cat}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {canManageProcedures && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#475569', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={includeInactive}
+                    onChange={(e) => setIncludeInactive(e.target.checked)}
+                  />
+                  إظهار الإجراءات المعطلة
+                </label>
+              )}
+            </div>
+            {canManageProcedures && (
+              <Button
+                variant="contained"
+                startIcon={<Plus size={16} />}
+                onClick={() => { resetProcForm(); setProcModalOpen(true); }}
+                style={{ background: '#0F766E', fontWeight: 700 }}
+              >
+                إضافة إجراء جديد للمكتبة
+              </Button>
+            )}
+          </div>
+
+          <TableContainer component={Paper} className="glass-card">
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell style={{ color: '#64748B', fontWeight: 700 }}>اسم الإجراء السريري</TableCell>
+                  <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الرمز (Code)</TableCell>
+                  <TableCell style={{ color: '#64748B', fontWeight: 700 }}>التخصص / الفئة</TableCell>
+                  <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الحد الأدنى المطلوب</TableCell>
+                  <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الحالة</TableCell>
+                  {canManageProcedures && <TableCell style={{ color: '#64748B', fontWeight: 700 }}>الإجراءات</TableCell>}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {(procsData?.data || [])
+                  .filter((proc: any) => {
+                    if (!procSearch.trim()) return true;
+                    const q = procSearch.toLowerCase();
+                    return proc.titleAr?.toLowerCase().includes(q) || proc.code?.toLowerCase().includes(q) || proc.category?.toLowerCase().includes(q);
+                  })
+                  .map((proc: any) => (
+                    <TableRow key={proc.id} style={{ opacity: proc.isActive ? 1 : 0.6 }}>
+                      <TableCell style={{ fontWeight: 700, color: '#0F172A' }}>
+                        {proc.titleAr}
+                        {proc.titleEn && <div style={{ fontSize: '11px', color: '#64748b' }}>{proc.titleEn}</div>}
+                        {proc.descriptionAr && <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>{proc.descriptionAr}</div>}
+                      </TableCell>
+                      <TableCell style={{ fontFamily: 'monospace', color: '#0891B2', fontWeight: 700 }}>{proc.code}</TableCell>
+                      <TableCell><Chip label={proc.category} size="small" variant="outlined" /></TableCell>
+                      <TableCell style={{ fontWeight: 700, color: '#059669' }}>{proc.minRequired} مرات</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={proc.isActive ? 'مفعّل' : 'معطّل'}
+                          size="small"
+                          color={proc.isActive ? 'success' : 'default'}
+                        />
+                      </TableCell>
+                      {canManageProcedures && (
+                        <TableCell>
+                          <Box style={{ display: 'flex', gap: '8px' }}>
+                            <Button size="small" variant="outlined" onClick={() => openProcEditModal(proc)}>
+                              تعديل
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color={proc.isActive ? 'error' : 'success'}
+                              onClick={() => handleToggleProcActive(proc.id, proc.isActive)}
+                            >
+                              {proc.isActive ? 'تعطيل' : 'تفعيل'}
+                            </Button>
+                          </Box>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </div>
       )}
 
       {/* Tab 3: Evaluations & Mutual Lock ─────────────────────────────────── */}
@@ -831,6 +998,68 @@ export const LogbookPage: React.FC = () => {
             style={{ background: '#0F766E', fontWeight: 700, borderRadius: '10px' }}
           >
             تسجيل وتوثيق الحالة
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Procedure Catalog Create / Edit Modal */}
+      <Dialog open={procModalOpen} onClose={() => setProcModalOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>
+          {procEditId ? 'تعديل إجراء سريري في المكتبة' : 'إضافة إجراء سريري جديد للمكتبة'}
+        </DialogTitle>
+        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '16px' }}>
+          <TextField
+            label="رمز الإجراء (Procedure Code) *"
+            size="small"
+            fullWidth
+            value={procCode}
+            onChange={(e) => setProcCode(e.target.value)}
+            helperText="مثال: INT-CARD-001 أو SURG-GEN-002"
+          />
+          <TextField
+            label="اسم الإجراء (بالعربية) *"
+            size="small"
+            fullWidth
+            value={procTitleAr}
+            onChange={(e) => setProcTitleAr(e.target.value)}
+          />
+          <TextField
+            label="اسم الإجراء (بالإنجليزية)"
+            size="small"
+            fullWidth
+            value={procTitleEn}
+            onChange={(e) => setProcTitleEn(e.target.value)}
+          />
+          <TextField
+            label="التخصص / الفئة (Category) *"
+            size="small"
+            fullWidth
+            value={procCategory}
+            onChange={(e) => setProcCategory(e.target.value)}
+            helperText="مثال: الباطنية العامة, الجراحة, الطب النفسي, طب الأطفال"
+          />
+          <TextField
+            label="الحد الأدنى المطلوب للتنفيذ (Min Required) *"
+            type="number"
+            size="small"
+            fullWidth
+            value={procMinRequired}
+            onChange={(e) => setProcMinRequired(parseInt(e.target.value, 10) || 1)}
+          />
+          <TextField
+            label="وصف أو شروط الإجراء (اختياري)"
+            multiline
+            rows={2}
+            size="small"
+            fullWidth
+            value={procDescriptionAr}
+            onChange={(e) => setProcDescriptionAr(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions style={{ padding: '16px 24px' }}>
+          <Button onClick={() => setProcModalOpen(false)}>إلغاء</Button>
+          <Button variant="contained" style={{ background: '#0F766E', fontWeight: 700 }} onClick={handleSaveProcedure}>
+            {procEditId ? 'حفظ التعديلات' : 'إضافة للمكتبة'}
           </Button>
         </DialogActions>
       </Dialog>
