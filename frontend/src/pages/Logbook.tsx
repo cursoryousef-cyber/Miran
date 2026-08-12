@@ -72,6 +72,12 @@ export const LogbookPage: React.FC = () => {
   // Evidence view state
   const [evidenceModalUrl, setEvidenceModalUrl] = useState<string | null>(null);
 
+  // Digital Signature State
+  const [signModalLogId, setSignModalLogId] = useState<string | null>(null);
+  const [signFeedback, setSignFeedback] = useState('');
+  const [isDrawing, setIsDrawing] = useState(false);
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+
   // Evaluation state — trainer submits eval
   const [evalSubmitting, setEvalSubmitting] = useState(false);
   const [evalMsg, setEvalMsg] = useState<string | null>(null);
@@ -296,15 +302,31 @@ export const LogbookPage: React.FC = () => {
     }
   };
 
-  const handleApprove = async (logId: string) => {
+  const handleApprove = async (logId: string, signatureUrl?: string, feedback?: string) => {
     try {
       await apiClient.post(`/logbook/entries/${logId}/approve`, {
-        feedback: 'تم التدقيق والاعتماد بنجاح',
+        feedback: feedback || 'تم التدقيق والاعتماد بنجاح والتوقيع رقمياً',
+        signatureUrl,
       });
       refetchLogs();
     } catch (err) {
       console.error('Error approving log entry:', err);
     }
+  };
+
+  const getQualitativeRubric = (perc: number) => {
+    if (perc === 0) return { label: 'لم تبدأ', color: '#94A3B8', bg: '#F1F5F9' };
+    if (perc < 50) return { label: 'تحت الإشراف', color: '#D97706', bg: '#FEF3C7' };
+    if (perc < 100) return { label: 'مستقل', color: '#0891B2', bg: '#CFFAFE' };
+    return { label: 'متمكن', color: '#059669', bg: '#D1FAE5' };
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
   const handleReject = async (logId: string, feedback: string) => {
@@ -440,10 +462,13 @@ export const LogbookPage: React.FC = () => {
                           size="small"
                           variant="contained"
                           startIcon={<Check size={14} />}
-                          onClick={() => handleApprove(log.id)}
+                          onClick={() => {
+                            setSignModalLogId(log.id);
+                            setSignFeedback('');
+                          }}
                           style={{ backgroundColor: '#059669', color: '#fff', fontWeight: 700 }}
                         >
-                          اعتماد المدرب
+                          اعتماد المدرب والتوقيع
                         </Button>
                         <Button
                           size="small"
@@ -456,6 +481,21 @@ export const LogbookPage: React.FC = () => {
                         >
                           رفض
                         </Button>
+                      </Box>
+                    )}
+                    {log.evidenceUrls && log.evidenceUrls.length > 0 && (
+                      <Box style={{ marginTop: '4px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                        {log.evidenceUrls.map((url: string, i: number) => (
+                          <Button
+                            key={i}
+                            size="small"
+                            variant="text"
+                            onClick={() => setEvidenceModalUrl(url)}
+                            style={{ fontSize: '11px', padding: '2px 4px', color: '#0891B2' }}
+                          >
+                            مرفق {i + 1} 📎
+                          </Button>
+                        ))}
                       </Box>
                     )}
                     {log.status === 'trainer_approved' && (
@@ -482,18 +522,19 @@ export const LogbookPage: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
             {competenciesData?.data?.map((comp: any) => {
               const perc = Math.min(100, Math.round((comp.completedCount / comp.requiredCount) * 100));
+              const rubric = getQualitativeRubric(perc);
               return (
                 <div key={comp.id} style={{ padding: '16px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>{comp.procedure?.titleAr || 'إجراء سريري'}</span>
-                    <Chip label={comp.status === 'completed' ? 'مكتمل' : 'قيد التدريب'} color={comp.status === 'completed' ? 'success' : 'warning'} size="small" />
+                    <Chip label={rubric.label} style={{ backgroundColor: rubric.bg, color: rubric.color, fontWeight: 700 }} size="small" />
                   </div>
                   <div style={{ fontSize: '12px', color: '#64748B' }}>
                     التنفيذ: <strong style={{ color: '#059669' }}>{comp.completedCount}</strong> من أصل <strong style={{ color: '#0F172A' }}>{comp.requiredCount}</strong> مهارات مطلوبة
                   </div>
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>
-                      <span>نسبة الإنجاز</span>
+                      <span>مستوى التقدم</span>
                       <span>{perc}%</span>
                     </div>
                     <LinearProgress variant="determinate" value={perc} style={{ borderRadius: '6px', height: '8px', backgroundColor: '#E2E8F0' }} />
@@ -1061,6 +1102,112 @@ export const LogbookPage: React.FC = () => {
           <Button variant="contained" style={{ background: '#0F766E', fontWeight: 700 }} onClick={handleSaveProcedure}>
             {procEditId ? 'حفظ التعديلات' : 'إضافة للمكتبة'}
           </Button>
+        </DialogActions>
+      </Dialog>
+      {/* Digital Signature Approval Dialog */}
+      <Dialog open={Boolean(signModalLogId)} onClose={() => setSignModalLogId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>التوقيع الإلكتروني واعتمد الإجراء</DialogTitle>
+        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '12px' }}>
+          <div style={{ fontSize: '13px', color: '#64748B' }}>
+            ارسم توقيعك الحي بالإصبع أو الماوس في المربع أدناه للاعتماد:
+          </div>
+          <div style={{ border: '2px dashed #CBD5E1', borderRadius: '8px', overflow: 'hidden', background: '#F8FAFC' }}>
+            <canvas
+              ref={canvasRef}
+              width={340}
+              height={140}
+              onMouseDown={(e) => {
+                setIsDrawing(true);
+                const ctx = canvasRef.current?.getContext('2d');
+                if (ctx) {
+                  const rect = canvasRef.current!.getBoundingClientRect();
+                  ctx.beginPath();
+                  ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+                }
+              }}
+              onMouseMove={(e) => {
+                if (!isDrawing) return;
+                const ctx = canvasRef.current?.getContext('2d');
+                if (ctx) {
+                  const rect = canvasRef.current!.getBoundingClientRect();
+                  ctx.lineWidth = 2.5;
+                  ctx.lineCap = 'round';
+                  ctx.strokeStyle = '#0F172A';
+                  ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+                  ctx.stroke();
+                }
+              }}
+              onMouseUp={() => setIsDrawing(false)}
+              onTouchStart={(e) => {
+                setIsDrawing(true);
+                const ctx = canvasRef.current?.getContext('2d');
+                if (ctx && e.touches[0]) {
+                  const rect = canvasRef.current!.getBoundingClientRect();
+                  ctx.beginPath();
+                  ctx.moveTo(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
+                }
+              }}
+              onTouchMove={(e) => {
+                if (!isDrawing || !e.touches[0]) return;
+                const ctx = canvasRef.current?.getContext('2d');
+                if (ctx) {
+                  const rect = canvasRef.current!.getBoundingClientRect();
+                  ctx.lineWidth = 2.5;
+                  ctx.lineCap = 'round';
+                  ctx.strokeStyle = '#0F172A';
+                  ctx.lineTo(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
+                  ctx.stroke();
+                }
+              }}
+              onTouchEnd={() => setIsDrawing(false)}
+              style={{ width: '100%', height: '140px', cursor: 'crosshair', touchAction: 'none' }}
+            />
+          </div>
+          <Button size="small" onClick={clearCanvas} style={{ color: '#64748B', alignSelf: 'flex-start' }}>
+            إعادة المسح
+          </Button>
+          <TextField
+            label="ملاحظات وتغذية راجعة (اختياري)"
+            size="small"
+            fullWidth
+            value={signFeedback}
+            onChange={(e) => setSignFeedback(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions style={{ padding: '16px' }}>
+          <Button onClick={() => setSignModalLogId(null)}>إلغاء</Button>
+          <Button
+            variant="contained"
+            style={{ background: '#059669', fontWeight: 700 }}
+            onClick={() => {
+              if (!signModalLogId) return;
+              const dataUrl = canvasRef.current?.toDataURL();
+              handleApprove(signModalLogId, dataUrl, signFeedback);
+              setSignModalLogId(null);
+            }}
+          >
+            تأكيد التوقيع والاعتماد
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Evidence Lightbox / Preview Dialog */}
+      <Dialog open={Boolean(evidenceModalUrl)} onClose={() => setEvidenceModalUrl(null)} maxWidth="md" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>معاينة المرفق / الدليل السريري</DialogTitle>
+        <DialogContent style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px' }}>
+          {evidenceModalUrl && (evidenceModalUrl.endsWith('.png') || evidenceModalUrl.endsWith('.jpg') || evidenceModalUrl.endsWith('.jpeg') || evidenceModalUrl.startsWith('data:image')) ? (
+            <img src={evidenceModalUrl} alt="Evidence" style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: '8px' }} />
+          ) : (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <p style={{ color: '#0F172A', fontWeight: 700 }}>مستند أو دليل سريري مرفق</p>
+              <a href={evidenceModalUrl || '#'} target="_blank" rel="noopener noreferrer" style={{ color: '#0891B2', fontWeight: 700, textDecoration: 'underline' }}>
+                فتح / تحميل المرفق في نافذة جديدة
+              </a>
+            </div>
+          )}
+        </DialogContent>
+        <DialogActions style={{ padding: '16px' }}>
+          <Button onClick={() => setEvidenceModalUrl(null)}>إغلاق</Button>
         </DialogActions>
       </Dialog>
     </DataPageShell>
