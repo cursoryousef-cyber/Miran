@@ -81,25 +81,26 @@ jobs:
         run: |
           git fetch --tags origin || true
 
-          HIGHEST_TAG=$(git tag -l "v[0-9]*.[0-9]*" | sort -V | tail -n 1)
+          BASE_COMMIT="4ea1d79f04ee881a5eacae9d13db1b606f236ff4"
+          BASE_MAJOR="1"
+          BASE_MINOR="15"
 
-          if [ -n "$HIGHEST_TAG" ]; then
-            BASE_VER="${HIGHEST_TAG#v}"
+          if git merge-base --is-ancestor "$BASE_COMMIT" HEAD 2>/dev/null; then
+            COMMITS_SINCE_BASE=$(git rev-list --count "$BASE_COMMIT"..HEAD)
           else
-            BASE_VER=$(grep -m1 "MARKETING_VERSION" Miran.xcodeproj/project.pbxproj | awk -F'=' '{print $2}' | tr -d ' ;"')
-            if [ -z "$BASE_VER" ]; then
-              BASE_VER="1.14"
-            fi
+            COMMITS_SINCE_BASE=0
           fi
 
-          MAJOR=$(echo "$BASE_VER" | cut -d'.' -f1)
-          MINOR=$(echo "$BASE_VER" | cut -d'.' -f2)
-          NEXT_MINOR=$((MINOR + 1))
-          MARKETING_VERSION="${MAJOR}.${NEXT_MINOR}"
+          CALCULATED_MINOR=$((BASE_MINOR + COMMITS_SINCE_BASE))
+          MARKETING_VERSION="${BASE_MAJOR}.${CALCULATED_MINOR}"
 
           RUN_NUM="${GITHUB_RUN_NUMBER:-1}"
           RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT:-1}"
-          BUILD_NUMBER="${RUN_NUM}${RUN_ATTEMPT}"
+          if [ "$RUN_ATTEMPT" -gt 1 ]; then
+            BUILD_NUMBER="$(( 100 + RUN_NUM )).${RUN_ATTEMPT}"
+          else
+            BUILD_NUMBER="$(( 100 + RUN_NUM ))"
+          fi
 
           perl -pi -e "s/MARKETING_VERSION = .*/MARKETING_VERSION = ${MARKETING_VERSION};/g" Miran.xcodeproj/project.pbxproj
           perl -pi -e "s/CURRENT_PROJECT_VERSION = .*/CURRENT_PROJECT_VERSION = ${BUILD_NUMBER};/g" Miran.xcodeproj/project.pbxproj
