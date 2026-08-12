@@ -59,6 +59,9 @@
 		A1B2C3D410000109 /* OrgManagerDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000109 /* OrgManagerDashboardFullView.swift */; };
 		A1B2C3D410000110 /* AcademicSupervisorDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000110 /* AcademicSupervisorDashboardFullView.swift */; };
 		A1B2C3D410000111 /* TrainingSupervisorDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000111 /* TrainingSupervisorDashboardFullView.swift */; };
+		A1B2C3D410000120 /* ServiceCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000120 /* ServiceCatalog.swift */; };
+		A1B2C3D410000121 /* DynamicServicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000121 /* DynamicServicesView.swift */; };
+		A1B2C3D410000122 /* DynamicMainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000122 /* DynamicMainTabView.swift */; };
 		A1B2C3D410000112 /* TrainerDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000112 /* TrainerDashboardFullView.swift */; };
 		A1B2C3D410000113 /* TraineeDashboardFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000113 /* TraineeDashboardFullView.swift */; };
 		A1B2C3D410000114 /* WorkflowEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000114 /* WorkflowEngine.swift */; };
@@ -123,6 +126,9 @@
 		A1B2C3D420000109 /* OrgManagerDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgManagerDashboardFullView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000110 /* AcademicSupervisorDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademicSupervisorDashboardFullView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000111 /* TrainingSupervisorDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingSupervisorDashboardFullView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000120 /* ServiceCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceCatalog.swift; sourceTree = "<group>"; };
+		A1B2C3D420000121 /* DynamicServicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicServicesView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000122 /* DynamicMainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicMainTabView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000112 /* TrainerDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainerDashboardFullView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000113 /* TraineeDashboardFullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraineeDashboardFullView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000114 /* WorkflowEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowEngine.swift; sourceTree = "<group>"; };
@@ -219,6 +225,8 @@
 				A1B2C3D420000008 /* RoleSelectionView.swift */,
 				A1B2C3D420000009 /* RegistrationView.swift */,
 				A1B2C3D420000040 /* OrgMembersView.swift */,
+				A1B2C3D420000121 /* DynamicServicesView.swift */,
+				A1B2C3D420000122 /* DynamicMainTabView.swift */,
 				A1B2C3D430000011 /* Auth */,
 				A1B2C3D430000006 /* Trainee */,
 				A1B2C3D430000007 /* Trainer */,
@@ -333,6 +341,7 @@
 				A1B2C3D420000114 /* WorkflowEngine.swift */,
 				A1B2C3D420000115 /* RotationSchedulerEngine.swift */,
 				A1B2C3D420000116 /* FineGrainedRBACEngine.swift */,
+				A1B2C3D420000120 /* ServiceCatalog.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -470,6 +479,9 @@
 				A1B2C3D410000109 /* OrgManagerDashboardFullView.swift in Sources */,
 				A1B2C3D410000110 /* AcademicSupervisorDashboardFullView.swift in Sources */,
 				A1B2C3D410000111 /* TrainingSupervisorDashboardFullView.swift in Sources */,
+				A1B2C3D410000120 /* ServiceCatalog.swift in Sources */,
+				A1B2C3D410000121 /* DynamicServicesView.swift in Sources */,
+				A1B2C3D410000122 /* DynamicMainTabView.swift in Sources */,
 				A1B2C3D410000112 /* TrainerDashboardFullView.swift in Sources */,
 				A1B2C3D410000113 /* TraineeDashboardFullView.swift in Sources */,
 				A1B2C3D410000114 /* WorkflowEngine.swift in Sources */,

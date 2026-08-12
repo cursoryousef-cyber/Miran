@@ -60,32 +60,16 @@ struct RBACMainView: View {
             if let user = user {
                 switch user.primaryRole {
                 case "platform_owner", "system_admin", "holding_administrator":
-                    // 1. مدير المنصة / مدير النظام: مركز التحكم الوطني (Control Center)
                     SystemAdminTabView()
 
                 case "university_administrator", "university_admin", "academic_affairs":
-                    // 2. إدارة الجامعة: رفع الطلاب والبرامج والخطط وتقديم الطلبات للتجمع
                     UniversityAdminTabView()
 
-                case "training_director", "cluster_administrator", "cluster_manager", "training_manager", "org_manager":
-                    // 3. إدارة التدريب بالتجمع الصحي: مراجعة طلبات الجامعات وتوزيع السعة على المستشفيات
-                    ClusterTrainingAdminTabView()
-
-                case "hospital_training_admin", "hospital_administrator", "hospital_supervisor", "training_supervisor", "department_head":
-                    // 4. مشرف امتياز المستشفى: قبول الطلاب، تحديد التواريخ، توزيع الأقسام وإسناد المدرب
-                    HospitalSupervisorTabView()
-
-                case "trainer":
-                    // 5. المدرب الميداني (استشاري/أخصائي): الطلاب المسندين إليه، الحضور، Logbook Sign-off والتقييم النهائي
-                    TrainerTabView()
-
-                case "trainee":
-                    // 6. المتدرب (طبيب الامتياز): جدولي، البرنامج، القسم، المدرب المباشر، والمهام والبطاقة
-                    TraineeTabView()
-
-                case "academic_supervisor":
-                    // 7. المشرف الأكاديمي (MVP): اعتماد النتيجة وإكمال البرنامج النهائي فقط
-                    AcademicSupervisorTabView()
+                case "training_director", "cluster_administrator", "cluster_manager", "training_manager", "org_manager",
+                     "hospital_training_admin", "hospital_administrator", "hospital_supervisor", "training_supervisor", "department_head",
+                     "trainer", "trainee", "academic_supervisor":
+                    // التبويبات والخدمات المحلولة ديناميكيًا حسب الـ RBAC والمستشفى
+                    DynamicMainTabView()
 
                 default:
                     UnknownRoleView(roleCode: user.primaryRole)
