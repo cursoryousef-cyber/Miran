@@ -100,8 +100,13 @@ export const ScheduleBuilder: React.FC = () => {
     },
   });
 
+  const isTrainerOrAdmin = user?.roles?.some((r: string) =>
+    ['trainer', 'training_supervisor', 'hospital_training_admin', 'hospital_administrator', 'org_manager', 'platform_owner'].includes(r),
+  );
+
   const { data: trainees } = useQuery({
     queryKey: ['trainees-list'],
+    enabled: !!isTrainerOrAdmin,
     queryFn: async () => {
       const res = await apiClient.get('/operations/trainer/assigned-interns');
       return res.data?.data ?? [];
@@ -118,12 +123,12 @@ export const ScheduleBuilder: React.FC = () => {
 
   const { data: activeScheduleData, refetch: refetchActiveSchedule } = useQuery({
     queryKey: ['schedule-detail', selectedScheduleId],
+    enabled: !!selectedScheduleId,
     queryFn: async () => {
       if (!selectedScheduleId) return null;
       const res = await apiClient.get(`/schedules/${selectedScheduleId}`);
       return res.data?.data as Schedule;
     },
-    enabled: !!selectedScheduleId,
   });
 
   useEffect(() => {
@@ -221,6 +226,10 @@ export const ScheduleBuilder: React.FC = () => {
     if (!wDepartmentId) return alert('الرجاء اختيار القسم التدريبي الرئيسي');
 
     const sessions = generateWizardSessions();
+    if (!sessions || sessions.length === 0) {
+      return alert('لم يتم توليد أي جلسات تدريبية وفق التواريخ والأيام المحددة. يرجى مراجعة التواريخ والأيام المختارة.');
+    }
+
     createScheduleMutation.mutate({
       titleAr: wTitleAr,
       startDate: wStartDate,

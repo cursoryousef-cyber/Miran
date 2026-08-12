@@ -360,6 +360,10 @@ export class SchedulesService {
 
       if (!schedule) throw new NotFoundException('الجدول التدريبي غير موجود');
 
+      if (!schedule.sessions || schedule.sessions.length === 0) {
+        throw new BadRequestException('لا يمكن نشر جدول تدريبي لا يحتوي على أي جلسات أو مناوبات تدريبية');
+      }
+
       // Re-check conflicts inside current transaction
       const proposed: ProposedSession[] = schedule.sessions.map((s) => ({
         date: new Date(s.date).toISOString().slice(0, 10),
@@ -380,29 +384,8 @@ export class SchedulesService {
         });
       }
 
-      const nextRevision = (schedule.revisions[0]?.revision || 0) + 1;
-      const snapshot = JSON.parse(JSON.stringify(schedule));
-
-      // 1. Create Revision Snapshot
-      await tx.scheduleRevision.create({
-        data: {
-          scheduleId: id,
-          revision: nextRevision,
-          snapshot: snapshot as Prisma.InputJsonValue,
-          oldValues: schedule.revisions[0]?.snapshot || {},
-          newValues: snapshot as Prisma.InputJsonValue,
-          changeReason: changeReason || 'نشر وتحديث الجدول التدريبي',
-          publishedById: user.accountId,
-        },
-      });
-
-      // 2. Update Schedule Status to published
-      await tx.trainingSchedule.update({
-        where: { id },
-        data: { status: 'published', updatedById: user.accountId },
-      });
-
-      // 3. Idempotently generate Shift records for trainees in sessions
+      // 1. Idempotently generate Shift records for trainees in sessions FIRST
+      let generatedShiftsCount = 0;
       for (const session of schedule.sessions) {
         const traineeIds = session.traineeProfileId
           ? [session.traineeProfileId]
@@ -433,9 +416,32 @@ export class SchedulesService {
                 createdById: user.accountId,
               },
             });
+            generatedShiftsCount++;
           }
         }
       }
+
+      const nextRevision = (schedule.revisions[0]?.revision || 0) + 1;
+      const snapshot = JSON.parse(JSON.stringify(schedule));
+
+      // 2. Create Revision Snapshot
+      await tx.scheduleRevision.create({
+        data: {
+          scheduleId: id,
+          revision: nextRevision,
+          snapshot: snapshot as Prisma.InputJsonValue,
+          oldValues: schedule.revisions[0]?.snapshot || {},
+          newValues: snapshot as Prisma.InputJsonValue,
+          changeReason: changeReason || 'نشر وتحديث الجدول التدريبي',
+          publishedById: user.accountId,
+        },
+      });
+
+      // 3. Update Schedule Status to published ONLY after sessions/shifts validation
+      await tx.trainingSchedule.update({
+        where: { id },
+        data: { status: 'published', updatedById: user.accountId },
+      });
 
       // 4. Send notifications to participants
       for (const part of schedule.participants) {
