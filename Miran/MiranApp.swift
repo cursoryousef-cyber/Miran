@@ -139,10 +139,23 @@ struct UnknownRoleView: View {
 
 // MARK: - University Admin TabView
 struct UniversityAdminTabView: View {
+    @State private var selectedTab = 0
+
     var body: some View {
-        NavigationView {
-            UniversityAdminDashboardView()
+        TabView(selection: $selectedTab) {
+            NavigationView { UniversityAdminDashboardView() }
+                .tabItem { Label("لوحة القيادة", systemImage: "house.fill") }
+                .tag(0)
+
+            RoleReportsView()
+                .tabItem { Label("التقارير", systemImage: "chart.bar.doc.horizontal.fill") }
+                .tag(1)
+
+            UniversalProfileView()
+                .tabItem { Label("حسابي", systemImage: "person.crop.circle.fill") }
+                .tag(2)
         }
+        .tint(MiranTheme.primary)
     }
 }
 

@@ -4,6 +4,15 @@
 //
 //  شريط التبويبات الرئيسي المولد ديناميكيًا حسب أدوار وصلاحيات المستخدم (RBAC Resolver).
 //
+//  ROUTING RULES (from Audit 2026-08-13):
+//  - كل Service Destination تذهب للـView المخصص لها، لا لـOrgManagerDashboardView.
+//  - Profile tab مضاف لجميع الأدوار.
+//  - incidents → IncidentsFullView (capability-gated)
+//  - reports → RoleReportsView (role-aware)
+//  - hospitals/programs/capacity → OrgManagerDashboardFullView (Cluster only)
+//  - trainees → role-appropriate view
+//  - evaluations → role-appropriate view
+//
 
 import SwiftUI
 
@@ -24,7 +33,7 @@ struct DynamicMainTabView: View {
             if let user = user, !mainTabs.isEmpty {
                 TabView(selection: $selectedTabId) {
                     ForEach(mainTabs) { tab in
-                        destinationView(for: tab)
+                        destinationView(for: tab, user: user)
                             .tabItem {
                                 Label(tab.titleAr, systemImage: tab.icon)
                             }
@@ -44,73 +53,110 @@ struct DynamicMainTabView: View {
     }
 
     @ViewBuilder
-    private func destinationView(for tab: ServiceDefinition) -> some View {
+    private func destinationView(for tab: ServiceDefinition, user: UserProfileResponse) -> some View {
+        let persona = ServiceResolver.resolvePersona(for: user)
+
         switch tab.destination {
+
+        // ── Dashboard: role-specific home ──────────────────────────────
         case .dashboard:
-            if let user = user {
-                let persona = ServiceResolver.resolvePersona(for: user)
-                switch persona {
-                case .trainee:
-                    TraineeJourneyHomeView()
-                case .trainer:
-                    TrainerDashboardFullView()
-                case .trainingOperations:
-                    HospitalWorkQueueHomeView()
-                case .clusterOperations:
-                    OrgManagerDashboardFullView()
-                case .university:
-                    UniversityAdminTabView()
-                case .platform:
-                    SystemAdminTabView()
-                }
-            } else {
+            switch persona {
+            case .trainee:
                 TraineeJourneyHomeView()
+            case .trainer:
+                TrainerDashboardFullView()
+            case .trainingOperations:
+                HospitalWorkQueueHomeView()
+            case .clusterOperations:
+                OrgManagerDashboardFullView()
+            case .university:
+                UniversityAdminDashboardView()
+            case .platform:
+                SystemAdminTabView()
+            case .academicSupervisor:
+                AcademicSupervisorDashboardFullView()
             }
 
+        // ── Schedule ───────────────────────────────────────────────────
         case .schedule:
             ScheduleView()
 
+        // ── Logbook ────────────────────────────────────────────────────
         case .logbook:
-            ClinicalLogbookView()
+            if user.isTrainee {
+                ClinicalLogbookView()
+            } else {
+                ClinicalLogbookManagementFullView()
+            }
 
+        // ── Competencies ───────────────────────────────────────────────
         case .competencies:
             TodayView()
 
+        // ── Trainees ───────────────────────────────────────────────────
         case .trainees:
-            TrainerDashboardFullView()
+            switch persona {
+            case .trainer:
+                TrainerDashboardFullView()
+            case .trainingOperations:
+                HospitalWorkQueueHomeView()
+            default:
+                TrainingSupervisorDashboardFullView()
+            }
 
+        // ── Evaluations ────────────────────────────────────────────────
         case .evaluations:
             TrainerAttendanceView()
 
+        // ── Sign-offs ──────────────────────────────────────────────────
         case .signoffs:
-            ClinicalLogbookView()
+            ClinicalLogbookManagementFullView()
 
+        // ── Training Requests ──────────────────────────────────────────
         case .requests:
-            OrgManagerDashboardFullView()
+            switch persona {
+            case .university:
+                UniversityAdminDashboardView()
+            case .trainingOperations:
+                HospitalWorkQueueHomeView()
+            default:
+                OrgManagerDashboardFullView()
+            }
 
+        // ── Trainers ───────────────────────────────────────────────────
         case .trainers:
             TrainingSupervisorDashboardFullView()
 
+        // ── Incidents (capability-gated, real view) ────────────────────
         case .incidents:
-            Text("البلاغات والتصعيد")
-                .font(.headline)
+            IncidentsFullView()
 
+        // ── Reports (role-aware, never OrgManagerDash for all) ─────────
         case .reports:
-            OrgManagerDashboardFullView()
+            RoleReportsView()
 
+        // ── Hospitals (cluster only) ───────────────────────────────────
         case .hospitals:
             OrgManagerDashboardFullView()
 
+        // ── Programs ──────────────────────────────────────────────────
         case .programs:
             OrgManagerDashboardFullView()
 
+        // ── Capacity ──────────────────────────────────────────────────
         case .capacity:
             OrgManagerDashboardFullView()
 
+        // ── Services Grid ──────────────────────────────────────────────
         case .servicesGrid:
             DynamicServicesView()
 
-        default:
+        // ── Profile (all roles) ────────────────────────────────────────
+        case .profile:
+            UniversalProfileView()
+
+        // ── Notifications / Digital Card (in servicesGrid) ────────────
+        case .notifications, .digitalCard:
             DynamicServicesView()
         }
     }

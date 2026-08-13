@@ -27,6 +27,7 @@ enum ServiceDestination: String, Hashable, Identifiable {
     case notifications
     case digitalCard
     case servicesGrid
+    case profile
 
     var id: String { rawValue }
 }
@@ -252,6 +253,18 @@ struct ServiceCatalog {
             requiredCapabilities: [],
             allowedRoles: ["trainee", "trainer", "hospital_training_admin", "training_director"],
             isMainTab: true
+        ),
+
+        // 18. الملف الشخصي — متاح لجميع الأدوار
+        ServiceDefinition(
+            id: "profile",
+            titleAr: "حسابي",
+            titleEn: "Profile",
+            icon: "person.crop.circle.fill",
+            destination: .profile,
+            requiredCapabilities: [],
+            allowedRoles: [],
+            isMainTab: true
         )
     ]
 }
@@ -264,6 +277,7 @@ enum MiranPersona: String, Identifiable {
     case clusterOperations = "CLUSTER_OPERATIONS_PERSONA"
     case university = "UNIVERSITY_PERSONA"
     case platform = "PLATFORM_PERSONA"
+    case academicSupervisor = "ACADEMIC_SUPERVISOR_PERSONA"
 
     var id: String { rawValue }
 
@@ -275,6 +289,7 @@ enum MiranPersona: String, Identifiable {
         case .clusterOperations: return "الطلبات والطاقة الاستيعابية"
         case .university: return "طلبات التدريب"
         case .platform: return "مركز التحكم"
+        case .academicSupervisor: return "الإشراف الأكاديمي"
         }
     }
 }
@@ -306,12 +321,17 @@ struct ServiceResolver {
             return .trainingOperations
         }
 
-        // 5. TRAINER PERSONA (المتدربون والإجراءات — المدرب المباشر)
+        // 5. ACADEMIC SUPERVISOR PERSONA (الإشراف الأكاديمي — مشرف الجامعة على أطباء الامتياز)
+        if roles.contains("academic_supervisor") || caps.contains("academic.supervise") || caps.contains("academic.view_scope") {
+            return .academicSupervisor
+        }
+
+        // 6. TRAINER PERSONA (المتدربون والإجراءات — المدرب المباشر)
         if caps.contains("trainee.view_assigned") || caps.contains("logbook.approve") || caps.contains("evaluation.submit") || roles.contains("trainer") {
             return .trainer
         }
 
-        // 6. TRAINEE PERSONA (رحلتي التدريبية)
+        // 7. TRAINEE PERSONA (رحلتي التدريبية)
         return .trainee
     }
 
@@ -333,30 +353,50 @@ struct ServiceResolver {
         let authorized = authorizedServices(for: user)
         let persona = resolvePersona(for: user)
 
+        let profileDef = ServiceCatalog.allServices.first { $0.id == "profile" }!
+
         switch persona {
         case .trainee:
             let ids = ["dashboard", "schedule", "logbook", "competencies", "servicesGrid"]
-            return ids.compactMap { id in authorized.first { $0.id == id } }
+            var tabs = ids.compactMap { id in authorized.first { $0.id == id } }
+            tabs.append(profileDef)
+            return tabs
 
         case .trainer:
             let ids = ["trainees", "evaluations", "signoffs", "schedule", "logbook", "servicesGrid"]
-            return ids.compactMap { id in authorized.first { $0.id == id } }
+            var tabs = ids.compactMap { id in authorized.first { $0.id == id } }
+            tabs.append(profileDef)
+            return tabs
 
         case .trainingOperations:
-            let ids = ["requests", "trainees", "trainers", "schedule", "incidents", "reports", "servicesGrid"]
-            return ids.compactMap { id in authorized.first { $0.id == id } }
+            let ids = ["requests", "trainees", "trainers", "schedule", "reports"]
+            var tabs = ids.compactMap { id in authorized.first { $0.id == id } }
+            tabs.append(profileDef)
+            return tabs
 
         case .clusterOperations:
-            let ids = ["hospitals", "programs", "capacity", "reports", "incidents"]
-            return ids.compactMap { id in authorized.first { $0.id == id } }
+            let ids = ["hospitals", "programs", "capacity", "reports"]
+            var tabs = ids.compactMap { id in authorized.first { $0.id == id } }
+            tabs.append(profileDef)
+            return tabs
 
         case .university:
-            let ids = ["requests", "programs", "reports", "servicesGrid"]
-            return ids.compactMap { id in authorized.first { $0.id == id } }
+            let ids = ["requests", "programs", "reports"]
+            var tabs = ids.compactMap { id in authorized.first { $0.id == id } }
+            tabs.append(profileDef)
+            return tabs
 
         case .platform:
-            let ids = ["hospitals", "programs", "capacity", "reports", "servicesGrid"]
-            return ids.compactMap { id in authorized.first { $0.id == id } }
+            let ids = ["hospitals", "programs", "capacity", "reports"]
+            var tabs = ids.compactMap { id in authorized.first { $0.id == id } }
+            tabs.append(profileDef)
+            return tabs
+
+        case .academicSupervisor:
+            let ids = ["dashboard", "logbook", "reports"]
+            var tabs = ids.compactMap { id in authorized.first { $0.id == id } }
+            tabs.append(profileDef)
+            return tabs
         }
     }
 

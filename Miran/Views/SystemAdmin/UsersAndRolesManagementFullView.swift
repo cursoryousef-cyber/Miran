@@ -10,6 +10,7 @@ import SwiftUI
 
 struct UsersAndRolesManagementFullView: View {
     @EnvironmentObject var store: AppStore
+    @Environment(\.colorScheme) var colorScheme
     @State private var accounts: [UserAccountViewModel] = []
     @State private var isLoading = false
     @State private var errorMessage: String? = nil
@@ -20,6 +21,7 @@ struct UsersAndRolesManagementFullView: View {
     @State private var showCreateUserSheet = false
     @State private var accountToDelete: UserAccountViewModel? = nil
     @State private var showDeleteAlert = false
+    @State private var accountToEdit: UserAccountViewModel? = nil
 
     private var userRoles: [UserRole] {
         if let r = store.role { return [r] }
@@ -39,7 +41,7 @@ struct UsersAndRolesManagementFullView: View {
 
     var body: some View {
         ZStack {
-            MiranTheme.background
+            MiranTheme.background(for: colorScheme)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -47,18 +49,18 @@ struct UsersAndRolesManagementFullView: View {
                 VStack(spacing: 10) {
                     HStack {
                         Image(systemName: "magnifyingglass")
-                            .foregroundColor(MiranTheme.subtext)
+                            .foregroundColor(MiranTheme.secondaryText(for: colorScheme))
                         TextField("البحث بالبريد الإلكتروني أو الاسم...", text: $searchText)
-                            .foregroundColor(.white)
+                            .foregroundColor(MiranTheme.primaryText(for: colorScheme))
                         if !searchText.isEmpty {
                             Button { searchText = "" } label: {
                                 Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(MiranTheme.subtext)
+                                    .foregroundColor(MiranTheme.secondaryText(for: colorScheme))
                             }
                         }
                     }
                     .padding()
-                    .background(Color.white.opacity(0.06))
+                    .background(MiranTheme.surface(for: colorScheme))
                     .cornerRadius(12)
                     .padding(.horizontal)
 
@@ -81,20 +83,20 @@ struct UsersAndRolesManagementFullView: View {
                 // List View
                 if isLoading && accounts.isEmpty {
                     VStack(spacing: 12) {
-                        ProgressView().tint(.white)
+                        ProgressView().tint(MiranTheme.emerald)
                         Text("جاري استعلام قائمة الحسابات والأنظمة...")
                             .font(.caption)
-                            .foregroundColor(MiranTheme.subtext)
+                            .foregroundColor(MiranTheme.secondaryText(for: colorScheme))
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredAccounts.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "person.crop.circle.badge.exclamationmark")
                             .font(.system(size: 50))
-                            .foregroundColor(MiranTheme.subtext)
+                            .foregroundColor(MiranTheme.secondaryText(for: colorScheme))
                         Text("لا توجد حسابات مطابقة")
                             .font(.headline)
-                            .foregroundColor(.white)
+                            .foregroundColor(MiranTheme.primaryText(for: colorScheme))
                         Button("تحديث البيانات") {
                             Task { await fetchAccounts() }
                         }
@@ -106,6 +108,8 @@ struct UsersAndRolesManagementFullView: View {
                     List {
                         ForEach(filteredAccounts) { acc in
                             UserAccountRowCard(account: acc) {
+                                accountToEdit = acc
+                            } onDelete: {
                                 accountToDelete = acc
                                 showDeleteAlert = true
                             }
@@ -140,6 +144,11 @@ struct UsersAndRolesManagementFullView: View {
         }
         .sheet(isPresented: $showCreateUserSheet) {
             CreateUserAccountSheet {
+                Task { await fetchAccounts() }
+            }
+        }
+        .sheet(item: $accountToEdit) { acc in
+            EditUserAccountSheet(account: acc) {
                 Task { await fetchAccounts() }
             }
         }
@@ -187,7 +196,9 @@ struct UserAccountViewModel: Codable, Identifiable {
 // MARK: - Row Card
 struct UserAccountRowCard: View {
     let account: UserAccountViewModel
+    let onEdit: () -> Void
     let onDelete: () -> Void
+    @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
         HStack(spacing: 14) {
@@ -198,16 +209,16 @@ struct UserAccountRowCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(account.personNameAr ?? account.email)
                     .font(.body.weight(.bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(MiranTheme.primaryText(for: colorScheme))
                 Text(account.email)
                     .font(.caption2)
-                    .foregroundColor(MiranTheme.subtext)
+                    .foregroundColor(MiranTheme.secondaryText(for: colorScheme))
                 if let role = account.roleCode {
                     Text(role)
                         .font(.caption2.bold())
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.blue.opacity(0.2))
+                        .background(Color.blue.opacity(0.18))
                         .foregroundColor(.blue)
                         .cornerRadius(4)
                 }
@@ -215,21 +226,148 @@ struct UserAccountRowCard: View {
 
             Spacer()
 
-            Button(action: onDelete) {
-                Image(systemName: "trash.fill")
-                    .foregroundColor(.red)
+            HStack(spacing: 4) {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .foregroundColor(MiranTheme.emerald)
+                        .padding(8)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(BorderlessButtonStyle())
+
+                Button(action: onDelete) {
+                    Image(systemName: "trash.fill")
+                        .foregroundColor(.red)
+                        .padding(8)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(BorderlessButtonStyle())
             }
         }
         .padding()
-        .background(Color.white.opacity(0.04))
+        .background(MiranTheme.surface(for: colorScheme))
         .cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(MiranTheme.border(for: colorScheme), lineWidth: 1))
         .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Edit User Sheet
+struct EditUserAccountSheet: View {
+    let account: UserAccountViewModel
+    let onSaved: () -> Void
+    @Environment(\.dismiss) var dismiss
+    @Environment(\.colorScheme) var colorScheme
+    @State private var nameAr: String
+    @State private var roleCode: String
+    @State private var isSubmitting = false
+    @State private var errorMessage: String?
+
+    private let roleCodes = [
+        ("platform_owner", "مدير المنصة"),
+        ("system_admin", "مدير النظام"),
+        ("university_administrator", "مدير الجامعة"),
+        ("cluster_administrator", "مدير التجمع"),
+        ("hospital_training_admin", "مدير التدريب بالمستشفى"),
+        ("training_supervisor", "مشرف التدريب"),
+        ("academic_supervisor", "مشرف أكاديمي"),
+        ("trainer", "مدرب"),
+        ("trainee", "متدرب")
+    ]
+
+    init(account: UserAccountViewModel, onSaved: @escaping () -> Void) {
+        self.account = account
+        self.onSaved = onSaved
+        _nameAr = State(initialValue: account.personNameAr ?? "")
+        _roleCode = State(initialValue: account.roleCode ?? "trainee")
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                MiranTheme.background(for: colorScheme).ignoresSafeArea()
+                Form {
+                    Section("معلومات الحساب") {
+                        HStack {
+                            Text("البريد الإلكتروني")
+                                .foregroundColor(MiranTheme.secondaryText(for: colorScheme))
+                            Spacer()
+                            Text(account.email)
+                                .foregroundColor(MiranTheme.primaryText(for: colorScheme))
+                                .font(.caption)
+                        }
+
+                        HStack {
+                            TextField("الاسم بالعربي", text: $nameAr)
+                                .multilineTextAlignment(.trailing)
+                                .foregroundColor(MiranTheme.primaryText(for: colorScheme))
+                        }
+                    }
+
+                    Section("الدور الوظيفي") {
+                        Picker("الدور", selection: $roleCode) {
+                            ForEach(roleCodes, id: \.0) { code, label in
+                                Text(label).tag(code)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+
+                    if let err = errorMessage {
+                        Section {
+                            Text(err).foregroundColor(MiranTheme.error).font(.caption)
+                        }
+                    }
+
+                    Section {
+                        Button {
+                            Task { await saveChanges() }
+                        } label: {
+                            HStack {
+                                if isSubmitting { ProgressView().tint(.white).scaleEffect(0.8) }
+                                Text("حفظ التعديلات").font(.headline).foregroundColor(.white)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .listRowBackground(MiranTheme.emerald)
+                        .disabled(isSubmitting)
+                    }
+                }
+                .scrollContentBackground(.hidden)
+            }
+            .navigationTitle("تعديل الحساب")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("إلغاء") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func saveChanges() async {
+        isSubmitting = true
+        errorMessage = nil
+        struct EditRequest: Codable {
+            let nameAr: String?
+            let roleCode: String?
+        }
+        do {
+            let req = EditRequest(nameAr: nameAr.isEmpty ? nil : nameAr, roleCode: roleCode)
+            try await APIClient.shared.requestVoid(endpoint: "/user-accounts/\(account.id)", method: "PATCH", body: req)
+            onSaved()
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isSubmitting = false
     }
 }
 
 // MARK: - Create User Sheet
 struct CreateUserAccountSheet: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(\.colorScheme) var colorScheme
     @State private var nationalId = ""
     @State private var nameAr = ""
     @State private var email = ""
@@ -239,66 +377,66 @@ struct CreateUserAccountSheet: View {
 
     let onCreated: () -> Void
 
+    private let roleCodes = [
+        ("trainee", "متدرب"),
+        ("trainer", "مدرب"),
+        ("academic_supervisor", "مشرف أكاديمي"),
+        ("training_supervisor", "مشرف التدريب"),
+        ("hospital_training_admin", "مدير التدريب بالمستشفى"),
+        ("cluster_administrator", "مدير التجمع"),
+        ("university_administrator", "مدير الجامعة"),
+        ("system_admin", "مدير النظام")
+    ]
+
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
-                MiranTheme.background.ignoresSafeArea()
-
-                ScrollView {
-                    VStack(spacing: 14) {
+                MiranTheme.background(for: colorScheme).ignoresSafeArea()
+                Form {
+                    Section("بيانات الهوية") {
                         TextField("رقم الهوية / الإقامة", text: $nationalId)
-                            .padding()
-                            .background(Color.white.opacity(0.06))
-                            .cornerRadius(10)
-                            .foregroundColor(.white)
-
+                            .multilineTextAlignment(.trailing)
                         TextField("الاسم بالعربي", text: $nameAr)
-                            .padding()
-                            .background(Color.white.opacity(0.06))
-                            .cornerRadius(10)
-                            .foregroundColor(.white)
-
+                            .multilineTextAlignment(.trailing)
+                    }
+                    Section("بيانات الاتصال") {
                         TextField("البريد الإلكتروني", text: $email)
-                            .padding()
-                            .background(Color.white.opacity(0.06))
-                            .cornerRadius(10)
-                            .foregroundColor(.white)
+                            .multilineTextAlignment(.trailing)
                             .keyboardType(.emailAddress)
-
+                            .autocapitalization(.none)
                         TextField("رقم الجوال (+966)", text: $phone)
-                            .padding()
-                            .background(Color.white.opacity(0.06))
-                            .cornerRadius(10)
-                            .foregroundColor(.white)
-
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.phonePad)
+                    }
+                    Section("الدور الوظيفي") {
+                        Picker("الدور", selection: $roleCode) {
+                            ForEach(roleCodes, id: \.0) { code, label in
+                                Text(label).tag(code)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+                    Section {
                         Button {
                             Task { await submitUser() }
                         } label: {
                             HStack {
-                                if isSubmitting {
-                                    ProgressView().tint(.white)
-                                } else {
-                                    Text("حفظ الحساب")
-                                        .font(.headline.bold())
-                                }
+                                if isSubmitting { ProgressView().tint(.white).scaleEffect(0.8) }
+                                Text("حفظ الحساب").font(.headline.bold()).foregroundColor(.white)
                             }
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(MiranTheme.emerald)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
                         }
+                        .listRowBackground(MiranTheme.emerald)
                         .disabled(email.isEmpty || nationalId.isEmpty || isSubmitting)
                     }
-                    .padding()
                 }
+                .scrollContentBackground(.hidden)
             }
             .navigationTitle("إنشاء حساب مستخدم جديد")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("إلغاء") { dismiss() }
-                        .foregroundColor(.red)
                 }
             }
         }

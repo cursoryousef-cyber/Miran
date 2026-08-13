@@ -224,12 +224,19 @@ struct OrganizationRowCard: View {
                         Image(systemName: "square.and.pencil")
                             .font(.caption)
                             .foregroundColor(.blue)
+                            .padding(6)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(BorderlessButtonStyle())
+
                     Button(action: onDelete) {
                         Image(systemName: "trash.fill")
                             .font(.caption)
                             .foregroundColor(.red)
+                            .padding(6)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(BorderlessButtonStyle())
                 }
             }
         }
