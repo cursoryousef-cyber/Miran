@@ -12,117 +12,125 @@
 
 import SwiftUI
 
-// MARK: - لوحة قيادة التجمع (Org Manager)
+// MARK: - لوحة قيادة التجمع (Org Manager / Training Director)
 struct OrgManagerDashboardFullView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var store: AppStore
+    @Environment(\.colorScheme) var colorScheme
     @State private var showCreateRequestSheet = false
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                MiranTheme.background.ignoresSafeArea()
+        SharedDashboardShell(
+            roleTitle: "إدارة التجمع الصحي والتوزيع",
+            subtitle: "التوزيع التلقائي للمتدربين، اعتماد الطلبات الواردة، والطاقة الاستيعابية للمستشفيات",
+            iconName: "building.2.crop.circle.fill",
+            accentColor: MiranTheme.emerald
+        ) {
+            VStack(spacing: 20) {
+                // 1. Cluster Metrics Grid — Real API Data Only
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    SharedKPICard(
+                        title: "المتدربين بالجهة",
+                        value: dashCount(store.organizationStatistics?.totalTrainees),
+                        subtitle: "إجمالي المتدربين المسجلين والتراخيص",
+                        iconName: "person.3.fill",
+                        color: MiranTheme.emerald
+                    )
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        // Org Manager Header Banner
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("لوحة قيادة التجمع الصحي (Org Manager)")
-                                    .font(.title2.bold())
-                                    .foregroundColor(.white)
-                                Spacer()
-                                Image(systemName: "building.2.crop.circle.fill")
-                                    .font(.system(size: 28))
-                                    .foregroundColor(MiranTheme.emerald)
-                            }
-                            Text(authViewModel.currentUser?.activeOrganization.nameAr ?? "تجمع الحدود الشمالية الصحي")
-                                .font(.subheadline)
-                                .foregroundColor(MiranTheme.subtext)
+                    SharedKPICard(
+                        title: "المدربين المعتمدين",
+                        value: dashCount(store.organizationStatistics?.totalTrainers),
+                        subtitle: "الكادر التدريبي السريري",
+                        iconName: "stethoscope",
+                        color: .blue
+                    )
+
+                    SharedKPICard(
+                        title: "طلبات التدريب الواردة",
+                        value: "\(store.pendingTrainingRequestsCount)",
+                        subtitle: "طلبات تنتظر التوزيع والاعتماد",
+                        iconName: "clock.badge.exclamationmark",
+                        color: store.pendingTrainingRequestsCount > 0 ? MiranTheme.warning : MiranTheme.secondaryText(for: colorScheme)
+                    )
+
+                    SharedKPICard(
+                        title: "المستشفيات التابعة",
+                        value: dashCount(store.organizationStatistics?.hospitals),
+                        subtitle: "المراكز الميدانية والتأهيلية",
+                        iconName: "building.2.fill",
+                        color: .orange
+                    )
+                }
+                .padding(.horizontal)
+
+                // 2. Error Banner if stats fail
+                if let err = store.clusterStatsError, store.organizationStatistics == nil {
+                    DashboardErrorBanner(message: err) {
+                        Task { await store.fetchClusterDashboard() }
+                    }
+                    .padding(.horizontal)
+                }
+
+                // 3. Quick Actions Section (Authorized Role Capabilities Only)
+                SharedSectionCard(title: "إجراءات التجمع والاعتماد", iconName: "bolt.fill") {
+                    VStack(spacing: 10) {
+                        NavigationLink(destination: IncomingTrainingRequestsView()) {
+                            SharedQuickActionButton(
+                                title: "طلبات التدريب الواردة والتوزيع الآلي",
+                                subtitle: "مراجعة واعتماد وتوزيع الطلبات القادمة من الجامعات",
+                                iconName: "envelope.open.badge.clock",
+                                color: MiranTheme.emerald
+                            ) {}
                         }
-                        .padding(.horizontal)
+                        .buttonStyle(PlainButtonStyle())
 
-                        // Cluster Metrics Grid — بيانات حقيقية من Backend
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            MetricStatCard(title: "المتدربين بالجهة", count: dashCount(store.organizationStatistics?.totalTrainees), icon: "person.3.fill", color: MiranTheme.emerald)
-                            MetricStatCard(title: "المدربين المعتمدين", count: dashCount(store.organizationStatistics?.totalTrainers), icon: "stethoscope", color: .blue)
-                            MetricStatCard(title: "المشرفين الأكاديميين", count: dashCount(supervisorSum), icon: "person.badge.shield.checkmark", color: .purple)
-                            MetricStatCard(title: "المستشفيات التابعة", count: dashCount(store.organizationStatistics?.hospitals), icon: "building.2.fill", color: .orange)
-                            MetricStatCard(title: "معدل إنجاز الروتيشنات", count: timelinePercent, icon: "chart.line.uptrend.xyaxis", color: MiranTheme.teal)
-                            MetricStatCard(title: "طلبات التدريب قيد المعالجة", count: "\(store.pendingTrainingRequestsCount)", icon: "clock.badge.exclamationmark", color: .red)
-                        }
-                        .padding(.horizontal)
-
-                        // حالات فشل تحميل لوحة القيادة — إعادة محاولة واضحة
-                        if let err = store.clusterStatsError, store.organizationStatistics == nil {
-                            DashboardErrorBanner(message: err) {
-                                Task { await store.fetchClusterDashboard() }
-                            }
-                            .padding(.horizontal)
+                        SharedQuickActionButton(
+                            title: "إنشاء طلب تدريب جديد للمستشفى",
+                            subtitle: "إرسال طلب تدريب مباشر للمستشفيات التابعة ضمن نطاقك",
+                            iconName: "plus.circle.fill",
+                            color: MiranTheme.primary
+                        ) {
+                            showCreateRequestSheet = true
                         }
 
-                        // Cluster Operations
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("إدارة التجمع والاعتمادات")
-                                .font(.headline.bold())
-                                .foregroundColor(.white)
-                                .padding(.horizontal)
-
-                            VStack(spacing: 10) {
-                                NavigationLink(destination: IncomingTrainingRequestsView()) {
-                                    AdminActionRow(title: "طلبات التدريب الواردة", subtitle: "مراجعة واعتماد طلبات التدريب القادمة من الجامعات", icon: "envelope.open.badge.clock", color: MiranTheme.emerald)
-                                }
-
-                                Button {
-                                    showCreateRequestSheet = true
-                                } label: {
-                                    AdminActionRow(title: "إنشاء طلب تدريب جديد للمستشفى", subtitle: "إرسال طلب تدريب مباشر للمستشفيات التابعة ضمن نطاقك", icon: "plus.circle.fill", color: MiranTheme.emerald)
-                                }
-
-                                NavigationLink(destination: OrgMembersView()) {
-                                    AdminActionRow(title: "أعضاء التجمع الصحي والجهات المعتمدة", subtitle: "إدارة المدربين والمتدربين المسندين للتجمع", icon: "person.crop.rectangle.stack.fill", color: MiranTheme.emerald)
-                                }
-                            }
-                            .padding(.horizontal)
+                        NavigationLink(destination: OrgMembersView()) {
+                            SharedQuickActionButton(
+                                title: "أعضاء التجمع الصحي والجهات المعتمدة",
+                                subtitle: "إدارة المدربين والمتدربين المسندين للتجمع",
+                                iconName: "person.crop.rectangle.stack.fill",
+                                color: .purple
+                            ) {}
                         }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
 
-                        // Hospital Cards — القدرة الاستيعابية الفعلية
-                        if !store.hospitalCards.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("المستشفيات التابعة — الطاقة الاستيعابية")
-                                    .font(.headline.bold())
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal)
-
-                                VStack(spacing: 10) {
-                                    ForEach(store.hospitalCards) { card in
-                                        HospitalCardRow(card: card)
-                                    }
-                                }
-                                .padding(.horizontal)
+                // 4. Hospital Cards Capacity Section
+                if !store.hospitalCards.isEmpty {
+                    SharedSectionCard(
+                        title: "الطاقة الاستيعابية للمستشفيات التابعة",
+                        iconName: "building.2.fill",
+                        badgeText: "\(store.hospitalCards.count) مستشفى"
+                    ) {
+                        VStack(spacing: 10) {
+                            ForEach(store.hospitalCards) { card in
+                                HospitalCardRow(card: card)
                             }
                         }
                     }
-                    .padding(.vertical)
                 }
             }
-            .navigationTitle("مدير الجهة والتجمع")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { authViewModel.logout() } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .foregroundColor(.red)
-                    }
-                }
-            }
-            .task {
-                await store.fetchClusterDashboard()
-                await store.fetchTrainingRequests()
-            }
-            .sheet(isPresented: $showCreateRequestSheet) {
-                CreateTrainingRequestSheet()
-            }
+        }
+        .task {
+            await store.fetchClusterDashboard()
+            await store.fetchTrainingRequests()
+        }
+        .refreshable {
+            await store.fetchClusterDashboard()
+            await store.fetchTrainingRequests()
+        }
+        .sheet(isPresented: $showCreateRequestSheet) {
+            CreateTrainingRequestSheet()
         }
     }
 

@@ -8,10 +8,12 @@
 
 import SwiftUI
 
+// MARK: - لوحة تحكم طبيب الامتياز والمتدرب (Trainee / Intern)
 struct TraineeDashboardFullView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var store: AppStore
     @StateObject private var traineeVM = TraineeViewModel()
+    @Environment(\.colorScheme) var colorScheme
 
     @State private var showNewCaseSheet = false
     @State private var showDigitalIDSheet = false
@@ -22,34 +24,52 @@ struct TraineeDashboardFullView: View {
     }
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                MiranTheme.background.ignoresSafeArea()
+        SharedDashboardShell(
+            roleTitle: "لوحة طبيب الامتياز والمتدرب",
+            subtitle: "الروتيشن الحالي، المدرب المباشر، تسجـيل الحالات السريرية، والبطاقة الرقمية",
+            iconName: "person.text.rectangle.fill",
+            accentColor: MiranTheme.primary
+        ) {
+            VStack(spacing: 20) {
+                // 1. Real Trainee KPI Stat Cards
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    SharedKPICard(
+                        title: "رقم المتدرب",
+                        value: traineeVM.traineeProfile?.traineeNumber ?? "—",
+                        subtitle: "الرقم الأكاديمي المعتمد",
+                        iconName: "vcard.fill",
+                        color: MiranTheme.primary
+                    ) {
+                        showDigitalIDSheet = true
+                    }
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        // Trainee Header Banner
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("أهلاً بك، \(authViewModel.currentUser?.nameAr ?? "طبيب الامتياز")")
-                                        .font(.title2.bold())
-                                        .foregroundColor(.white)
-                                    Text(traineeVM.traineeProfile?.organization?.nameAr ?? "—")
-                                        .font(.subheadline)
-                                        .foregroundColor(MiranTheme.subtext)
-                                }
-                                Spacer()
-                                Button {
-                                    showDigitalIDSheet = true
-                                } label: {
-                                    Image(systemName: "vcard.fill")
-                                        .font(.title)
-                                        .foregroundColor(MiranTheme.emerald)
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
+                    SharedKPICard(
+                        title: "الحالات السريرية",
+                        value: "\(store.caseLogsList.count)",
+                        subtitle: "السجل التجريبي المسجل",
+                        iconName: "doc.plaintext.fill",
+                        color: MiranTheme.emerald
+                    )
+
+                    SharedKPICard(
+                        title: "زملاء التدريب",
+                        value: "\(traineeVM.colleagues.count)",
+                        subtitle: "الأطباء بنفس الروتيشن",
+                        iconName: "person.2.fill",
+                        color: .purple
+                    ) {
+                        showColleaguesSheet = true
+                    }
+
+                    SharedKPICard(
+                        title: "الروتيشنات المنجزة",
+                        value: "\(traineeVM.rotations.filter { $0.status == "completed" }.count)",
+                        subtitle: "المراحل السريرية المنتهية",
+                        iconName: "checkmark.seal.fill",
+                        color: .blue
+                    )
+                }
+                .padding(.horizontal)
 
                         // Current Rotation Active Card
                         VStack(alignment: .leading, spacing: 10) {
@@ -133,48 +153,56 @@ struct TraineeDashboardFullView: View {
                                 .foregroundColor(.white)
                                 .cornerRadius(12)
                             }
-                        }
-                        .padding(.horizontal)
+                        // Quick Actions Section
+                        SharedSectionCard(title: "الإجراءات اليومية والبطاقة الرقمية", iconName: "bolt.fill") {
+                            VStack(spacing: 10) {
+                                SharedQuickActionButton(
+                                    title: "تسجيل حالة سريرية جديدة (Logbook)",
+                                    subtitle: "إضافة حالة جديدة لطلب الاعتماد من مدربك المباشر",
+                                    iconName: "plus.circle.fill",
+                                    color: MiranTheme.emerald
+                                ) {
+                                    showNewCaseSheet = true
+                                }
 
-                        // Logbook Status
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("السجل السريري وحالات اليوم")
-                                .font(.headline.bold())
-                                .foregroundColor(.white)
-                                .padding(.horizontal)
+                                SharedQuickActionButton(
+                                    title: "عرض بطاقة المتدرب الرقمية (Digital ID)",
+                                    subtitle: "بطاقة الهوية والرمز الاستجابة السريع للتحقق",
+                                    iconName: "vcard.fill",
+                                    color: MiranTheme.primary
+                                ) {
+                                    showDigitalIDSheet = true
+                                }
 
-                            NavigationLink(destination: ClinicalLogbookManagementFullView()) {
-                                AdminActionRow(title: "سجل الحالات والـ Logbook الخاص بك", subtitle: "متابعة الحالات المسجلة بانتظار الاعتماد من مدربك", icon: "doc.text.fill", color: MiranTheme.emerald)
+                                NavigationLink(destination: ClinicalLogbookManagementFullView()) {
+                                    SharedQuickActionButton(
+                                        title: "سجل الحالات المعتمدة والمهارات",
+                                        subtitle: "متابعة الحالات المسجلة وساعات التدريب السريري",
+                                        iconName: "doc.text.fill",
+                                        color: .purple
+                                    ) {}
+                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
-                            .padding(.horizontal)
                         }
                     }
-                    .padding(.vertical)
-                }
             }
-            .navigationTitle("لوحة المتدرب")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { authViewModel.logout() } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .foregroundColor(.red)
-                    }
-                }
-            }
-            .sheet(isPresented: $showDigitalIDSheet) {
-                DigitalIDCardView(profile: traineeVM.traineeProfile, rotation: activeRotation, qrToken: traineeVM.cardQrToken)
-            }
-            .sheet(isPresented: $showColleaguesSheet) {
-                TrainingColleaguesView(colleagues: traineeVM.colleagues)
-            }
-            .sheet(isPresented: $showNewCaseSheet) {
-                CreateClinicalCaseSheet {
-                    // Refresh action
-                }
-            }
-            .task {
-                await traineeVM.fetchDashboardData()
+        }
+        .task {
+            await traineeVM.fetchDashboardData()
+        }
+        .refreshable {
+            await traineeVM.fetchDashboardData()
+        }
+        .sheet(isPresented: $showDigitalIDSheet) {
+            DigitalIDCardView(profile: traineeVM.traineeProfile, rotation: activeRotation, qrToken: traineeVM.cardQrToken)
+        }
+        .sheet(isPresented: $showColleaguesSheet) {
+            TrainingColleaguesView(colleagues: traineeVM.colleagues)
+        }
+        .sheet(isPresented: $showNewCaseSheet) {
+            CreateClinicalCaseSheet {
+                Task { await traineeVM.fetchDashboardData() }
             }
         }
     }

@@ -1,423 +1,219 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CircularProgress, Button } from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
 import {
-  AlertTriangle, BellRing, BookOpen, CalendarCheck, CheckCircle2, ClipboardCheck, FileSignature,
-  GraduationCap, LogIn, LogOut, MapPin, PhoneCall, Route, Target, Users,
+  BookOpen, CalendarCheck, CheckSquare, ClipboardCheck, GraduationCap,
+  Stethoscope, Users, CreditCard, Zap, Clock
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { TraineeCard } from '../../components/trainee/TraineeCard';
 import {
-  Badge, EmptyState, KpiCard, KpiGrid, ListRow, Metric, MetricRow, Panel,
-  PanelGrid, PanelLink, PageHeader, QuickActions, SplitGrid, StatBar,
-  colour, font, radius, space, toneColour,
+  Badge, EmptyState, KpiCard, KpiGrid, ListRow, Panel, PanelGrid, PanelLink,
+  PanelSkeleton, PageHeader, QuickActions, SplitGrid, StatBar, colour, space,
 } from '../../components/ui';
 
-/**
- * The trainee's own journey.
- *
- * This is the only board built around a single person, so it leads with where
- * they are in the plan and what is left, using the timeline as the source for
- * every progress figure.
- */
 export const TraineeDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const { data: timeline, isLoading: timelineLoading, error: timelineError, refetch: refetchTimeline } = useQuery({
-    queryKey: ['te-timeline'],
+  const { data: profile, isLoading: profileLoading } = useQuery({
+    queryKey: ['tr-profile-me'],
     queryFn: async () => {
-      const res = await apiClient.get('/timeline/me');
+      const res = await apiClient.get('/trainees/me').catch(() => ({ data: { data: null } }));
       return res.data?.data ?? null;
     },
   });
 
-  const { data: dash, error: dashError, refetch: refetchDash } = useQuery({
-    queryKey: ['te-dashboard'],
+  const { data: logbook, isLoading: logLoading } = useQuery({
+    queryKey: ['tr-logbook-me'],
     queryFn: async () => {
-      const res = await apiClient.get('/operations/trainee/dashboard');
+      const res = await apiClient.get('/logbook/my-logs').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const { data: timeline } = useQuery({
+    queryKey: ['tr-timeline-me'],
+    queryFn: async () => {
+      const res = await apiClient
+        .get('/timeline/dashboard', { params: { scope: 'trainee', limit: 50 } })
+        .catch(() => ({ data: { data: null } }));
       return res.data?.data ?? null;
     },
   });
 
-  const { data: colleagues, error: colleaguesError, refetch: refetchColleagues } = useQuery({
-    queryKey: ['te-colleagues'],
-    queryFn: async () => {
-      const res = await apiClient.get('/trainees/my-colleagues');
-      return res.data?.data ?? [];
-    },
-  });
-
-  const { data: calls, error: callsError, refetch: refetchCalls } = useQuery({
-    queryKey: ['te-calls'],
-    queryFn: async () => {
-      const res = await apiClient.get('/calls/my-incoming');
-      return res.data?.data ?? [];
-    },
-  });
-
-  const queryClient = useQueryClient();
-  const { data: attendanceList, error: attendanceError, refetch: refetchAttendance } = useQuery({
-    queryKey: ['te-attendance'],
-    queryFn: async () => {
-      const res = await apiClient.get('/operations/attendance');
-      return res.data?.data ?? [];
-    },
-  });
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todayAttendance = attendanceList?.find((a: any) => String(a.date).slice(0, 10) === todayStr);
-  const checkedInToday = !!(todayAttendance?.checkIn && !todayAttendance?.checkOut);
-  const checkedOutToday = !!todayAttendance?.checkOut;
-
-  const checkInMutation = useMutation({
-    mutationFn: () => apiClient.post('/operations/attendance/qr', { qrCode: dash?.profile?.cardUuid ?? 'manual' }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['te-attendance'] }); queryClient.invalidateQueries({ queryKey: ['te-dashboard'] }); },
-  });
-  const checkOutMutation = useMutation({
-    mutationFn: () => apiClient.patch(`/operations/attendance/${todayAttendance?.id}/check-out`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['te-attendance'] }); queryClient.invalidateQueries({ queryKey: ['te-dashboard'] }); },
-  });
-
-  const completeTaskMutation = useMutation({
-    mutationFn: (taskId: string) => apiClient.patch(`/operations/tasks/${taskId}/complete`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['te-dashboard'] });
-    },
-  });
-
-  const ackCallMutation = useMutation({
-    mutationFn: (callId: string) => apiClient.post(`/calls/${callId}/ack`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['te-calls'] });
-      queryClient.invalidateQueries({ queryKey: ['te-dashboard'] });
-    },
-  });
-
-  const arriveCallMutation = useMutation({
-    mutationFn: (callId: string) => apiClient.post(`/calls/${callId}/arrived`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['te-calls'] });
-      queryClient.invalidateQueries({ queryKey: ['te-dashboard'] });
-    },
-  });
-
-  const isLoading = timelineLoading;
-
-  if (isLoading) {
-    return <div style={{ display: 'grid', placeItems: 'center', padding: 80 }}><CircularProgress sx={{ color: colour.primary }} /></div>;
-  }
-
-  // Error state with retry buttons
-  const hasError = timelineError || dashError || attendanceError || callsError;
-  if (hasError) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'] }}>
-        <PageHeader
-          eyebrow="MY TRAINING JOURNEY"
-          icon={GraduationCap}
-          title={`مرحباً، ${user?.nameAr ?? ''}`}
-          subtitle="برنامج التدريب"
-        />
-        <div className="glass-card" style={{ padding: space['2xl'], textAlign: 'center' }}>
-          <EmptyState
-            icon={AlertTriangle}
-            title="تعذر تحميل البيانات"
-            hint="تحقق من اتصالك بالشبكة وأعد المحاولة"
-          />
-          <div style={{ display: 'flex', gap: space.md, justifyContent: 'center', marginTop: space.lg }}>
-            <Button variant="contained" onClick={() => { refetchTimeline(); refetchDash(); refetchAttendance(); refetchCalls(); }}>
-              إعادة التحميل
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const current = timeline?.current;
-  const readiness = timeline?.readiness;
-  const rotations = timeline?.rotations ?? [];
-  const completion = timeline?.completionPercentage ?? 0;
-
-  const statusTone = (s?: string) =>
-    s === 'completed' ? 'success' : s === 'active' ? 'primary'
-      : s === 'cancelled' || s === 'skipped' ? 'danger' : 'neutral';
-
-  const callStateLabel = (s?: string) =>
-    s === 'acknowledged' ? 'أكدت الاستلام' : s === 'self_arrived' ? 'وصلت للموقع'
-      : s === 'confirmed_arrived' ? 'تم تأكيد وصولك' : s === 'no_show' ? 'لم تحضر'
-      : s === 'notified' ? 'بانتظار تأكيدك' : s ?? '';
+  const rotations: any[] = profile?.rotations ?? [];
+  const activeRotation = rotations.find((r: any) => r.status === 'active');
+  const completedRotations = rotations.filter((r: any) => r.status === 'completed');
+  const logs: any[] = logbook ?? [];
+  const pendingLogs = logs.filter((l: any) => l.status === 'pending' || l.status === 'submitted');
+  const approvedLogs = logs.filter((l: any) => l.status === 'approved');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'] }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space['2xl'], width: '100%' }}>
+      {/* 1. HEADER */}
       <PageHeader
-        eyebrow="MY TRAINING JOURNEY"
+        eyebrow="رحلة طبيب الامتياز والمتدرب"
         icon={GraduationCap}
-        title={`مرحباً، ${user?.nameAr ?? ''}`}
-        subtitle={
-          timeline?.program?.nameAr
-            ? `${timeline.program.nameAr}${timeline?.trainingPlanVersion ? ` — ${timeline.trainingPlanVersion.label ?? ''}` : ''}`
-            : 'برنامج التدريب'
-        }
+        title="لوحة طبيب الامتياز والمتدرب"
+        subtitle={`${user?.nameAr ?? ''} — ${profile?.sponsorOrganization?.nameAr ?? user?.activeOrganization?.nameAr ?? 'الجامعة/المستشفى'}`}
       />
 
-      {/* Progress hero — the single most important thing for a trainee. */}
-      <div className="glass-card" style={{ padding: space['2xl'] }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: space['2xl'], flexWrap: 'wrap',
-          justifyContent: 'space-between',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: space.xl, minWidth: 0 }}>
-            <div style={{ position: 'relative', width: 92, height: 92, flexShrink: 0 }}>
-              <CircularProgress variant="determinate" value={100} size={92} thickness={4}
-                sx={{ color: colour.subtle, position: 'absolute' }} />
-              <CircularProgress variant="determinate" value={completion} size={92} thickness={4}
-                sx={{ color: colour.primary, position: 'absolute' }} />
-              <div style={{
-                position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
-                fontSize: 20, fontWeight: 800, color: colour.text,
-              }}>
-                {completion}%
-              </div>
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: font.label, color: colour.muted, fontWeight: 600 }}>نسبة الإنجاز الكلية</div>
-              <div style={{ fontSize: font.sectionTitle, fontWeight: 800, color: colour.text, marginTop: 2 }}>
-                {current ? current.departmentNameAr : 'لا يوجد روتيشن نشط'}
-              </div>
-              {current && (
-                <div style={{ fontSize: font.caption, color: colour.muted, marginTop: 4 }}>
-                  المدرب: {current.trainerNameAr ?? '—'} · متبقٍ {current.remainingDays} يوم
-                </div>
-              )}
-            </div>
-          </div>
-          <MetricRow min={104}>
-            <Metric label="مكتملة" value={timeline?.rotationSummary?.completed ?? 0} tone="success" />
-            <Metric label="متبقية" value={timeline?.rotationSummary?.remaining ?? 0} tone="info" />
-            <Metric label="تقدم التخرج" value={`${timeline?.graduationProgress ?? 0}%`} tone="primary" />
-          </MetricRow>
-        </div>
-      </div>
-
-      <SplitGrid>
-        <TraineeCard profile={dash?.profile} rotation={dash?.rotation} />
-
-        <Panel title="الحضور والانصراف" icon={CalendarCheck} tone={checkedInToday ? 'success' : 'neutral'}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: space.md }}>
-            <MetricRow min={104}>
-              <Metric label="نسبة الحضور" value={`${readiness?.attendance?.rate ?? 0}%`} tone="primary" />
-              <Metric label="حالة اليوم" value={checkedOutToday ? 'مكتمل' : checkedInToday ? 'حاضر' : 'لم يسجل'} tone={checkedOutToday ? 'success' : checkedInToday ? 'info' : 'neutral'} />
-            </MetricRow>
-            {todayAttendance && (
-              <div style={{ fontSize: font.caption, color: colour.muted }}>
-                الدخول: {todayAttendance.checkIn ? new Date(todayAttendance.checkIn).toLocaleTimeString('ar-SA') : '—'}
-                {' · '}
-                الخروج: {todayAttendance.checkOut ? new Date(todayAttendance.checkOut).toLocaleTimeString('ar-SA') : '—'}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: space.sm }}>
-              <Button
-                variant="contained" size="small" startIcon={<LogIn size={16} />}
-                disabled={checkedInToday || checkedOutToday || checkInMutation.isPending}
-                onClick={() => checkInMutation.mutate()}
-                sx={{ bgcolor: colour.primary, '&:hover': { bgcolor: colour.primary } }}
-              >
-                تسجيل حضور
-              </Button>
-              <Button
-                variant="outlined" size="small" startIcon={<LogOut size={16} />}
-                disabled={!checkedInToday || checkOutMutation.isPending}
-                onClick={() => checkOutMutation.mutate()}
-              >
-                تسجيل انصراف
-              </Button>
-            </div>
-            {(checkInMutation.isError || checkOutMutation.isError) && (
-              <div style={{ fontSize: font.caption, color: colour.danger }}>
-                {(checkInMutation.error as any)?.response?.data?.message ?? (checkOutMutation.error as any)?.response?.data?.message ?? 'تعذر تنفيذ العملية'}
-              </div>
-            )}
-          </div>
-        </Panel>
-      </SplitGrid>
-
+      {/* 2. KPI GRID */}
       <KpiGrid min={200}>
-        <KpiCard label="الحضور" value={`${readiness?.attendance?.rate ?? 0}%`} icon={CalendarCheck} tone="violet"
-          hint={readiness?.attendance ? `${readiness.attendance.missingDays} يوم غياب` : undefined} />
-        <KpiCard label="السجل السريري" value={dash?.logbook?.approved ?? 0} icon={BookOpen} tone="primary"
-          hint={dash?.logbook ? `${dash.logbook.pending} بانتظار الاعتماد` : undefined}
-          onClick={() => navigate('/logbook')} />
-        <KpiCard label="تقييمات متبقية" value={readiness?.remaining?.evaluations ?? 0} icon={ClipboardCheck} tone="warning" />
-        <KpiCard label="إجراءات متبقية" value={readiness?.remaining?.procedures ?? 0} icon={Target} tone="info" />
+        <KpiCard label="الرقم الأكاديمي" value={profile?.traineeNumber ?? '—'} icon={CreditCard} tone="primary" loading={profileLoading} />
+        <KpiCard label="الروتيشن الحالي" value={activeRotation?.department?.nameAr ?? 'غير معين'} icon={Stethoscope} tone="success" loading={profileLoading} />
+        <KpiCard label="السجلات السريرية Logbook" value={logs.length} icon={BookOpen} tone="info" hint={`${approvedLogs.length} معتمد`} loading={logLoading} onClick={() => navigate('/logbook')} />
+        <KpiCard label="الروتيشنات المنتهية" value={completedRotations.length} icon={GraduationCap} tone="violet" loading={profileLoading} />
       </KpiGrid>
 
+      {/* 3. NEEDS ATTENTION */}
+      {pendingLogs.length > 0 && (
+        <div
+          style={{
+            backgroundColor: '#FFFBEB',
+            border: '1px solid #FCD34D',
+            borderRadius: '14px',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: '#FEF3C7', color: '#D97706' }}>
+              <Clock size={20} />
+            </div>
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: 800, color: '#92400E' }}>
+                متابعة السجلات السريرية: يوجد لديك {pendingLogs.length} سجل سريري بانتظار توقيع واعتماد المدرب
+              </div>
+              <div style={{ fontSize: '12px', color: '#B45309', marginTop: '2px' }}>
+                تأكد من متابعة مدربك المباشر لإنهاء اعتماد الساعات والمهارات المكتسبة.
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/logbook')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              backgroundColor: '#D97706',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 800,
+              cursor: 'pointer',
+              fontSize: '12px',
+            }}
+          >
+            عرض السجلات
+          </button>
+        </div>
+      )}
+
+      {/* 4. PRIMARY DATA (Current Active Rotation & Today's Schedule) */}
       <SplitGrid>
-        <Panel title="جدولي التدريبي" icon={Route}
-          action={<PanelLink label="السجل السريري" onClick={() => navigate('/logbook')} />}>
-          {rotations.length === 0 ? (
-            <EmptyState
-              icon={Route}
-              title={
-                timeline?.trainee?.applicationStatus === 'draft' ? 'تدريبك قيد التفعيل'
-                  : timeline?.trainee?.applicationStatus === 'graduated' ? 'أتممت برنامج التدريب'
-                  : timeline?.trainee?.applicationStatus === 'suspended' ? 'تدريبك موقف مؤقتاً'
-                  : 'لا يوجد جدول تدريبي'
-              }
-              hint={
-                timeline?.trainee?.applicationStatus === 'draft' ? 'سيظهر جدولك فور اعتماد إسنادك للمدرب.'
-                  : timeline?.trainee?.applicationStatus === 'graduated' ? 'يمكنك مراجعة سجلك التدريبي من قسم السجل السريري.'
-                  : timeline?.trainee?.applicationStatus === 'suspended' ? 'تواصل مع إدارة التدريب لمعرفة التفاصيل.'
-                  : 'سيظهر جدول الروتيشنات فور تفعيل تدريبك.'
-              }
-            />
+        <Panel
+          title="الروتيشن السريري الحالي (Current Rotation)"
+          icon={Stethoscope}
+          tone="success"
+          action={<PanelLink label="الجدول الكامل" onClick={() => navigate('/profile')} />}
+        >
+          {profileLoading ? (
+            <PanelSkeleton rows={4} />
+          ) : !activeRotation ? (
+            <EmptyState icon={Stethoscope} title="لا يوجد روتيشن نشط حالياً" hint="سيتم تفعيل الروتيشن فور اعتماد جدول المستشفى." />
           ) : (
-            rotations.map((r: any) => {
-              const tone = statusTone(r.status);
-              const c = toneColour(tone as any);
-              return (
-                <ListRow
-                  key={r.rotationId}
-                  leading={
-                    <div style={{
-                      width: 28, height: 28, borderRadius: radius.sm, background: c.bg, color: c.fg,
-                      display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0,
-                    }}>
-                      {r.sequenceOrder ?? '•'}
-                    </div>
-                  }
-                  title={r.departmentNameAr}
-                  meta={`${String(r.startDate).slice(0, 10)} → ${String(r.endDate).slice(0, 10)} · ${r.trainerNameAr ?? ''}`}
-                  trailing={<Badge label={
-                    r.status === 'pending_acceptance' ? 'بانتظار قبول المدرب'
-                      : r.status === 'rejected' ? 'مرفوض'
-                      : r.status === 'completed' ? 'مكتمل'
-                      : r.status === 'active' ? 'نشط'
-                      : r.status === 'scheduled' ? 'مجدول'
-                      : r.status === 'transferred' ? 'منقول'
-                      : `${r.progressPercentage}%`
-                  } tone={tone as any} />}
-                />
-              );
-            })
+            <div style={{ display: 'flex', flexDirection: 'column', gap: space.md }}>
+              <div style={{ backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: '12px', padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '16px', fontWeight: 800, color: '#0F766E' }}>{activeRotation.department?.nameAr || 'القسم السريري'}</span>
+                  <Badge label="نشط الآن" tone="success" />
+                </div>
+                <div style={{ fontSize: '12.5px', color: '#475569', marginTop: '6px' }}>
+                  المستشفى: <strong>{activeRotation.organization?.nameAr || profile?.organization?.nameAr || 'المستشفى'}</strong>
+                </div>
+                <div style={{ fontSize: '12.5px', color: '#475569', marginTop: '2px' }}>
+                  المدرب السريري المباشر: <strong>{activeRotation.trainerProfile?.person?.nameAr || 'غير معين'}</strong>
+                </div>
+                <div style={{ fontSize: '12px', color: '#0F766E', marginTop: '10px', fontWeight: 700 }}>
+                  الفترة التدريبية: {String(activeRotation.startDate).slice(0, 10)} إلى {String(activeRotation.endDate).slice(0, 10)}
+                </div>
+              </div>
+            </div>
           )}
         </Panel>
 
-        <Panel title="ما تبقى للتخرج" icon={CheckCircle2} tone={readiness?.readyForGraduation ? 'success' : 'warning'}>
-          {readiness?.readyForGraduation ? (
-            <EmptyState icon={CheckCircle2} title="استوفيت جميع المتطلبات" hint="ملفك جاهز لاعتماد التخرج." />
-          ) : readiness?.remainingRequirements?.length ? (
-            readiness.remainingRequirements.map((req: string, i: number) => (
-              <ListRow key={i} title={req} />
-            ))
+        <Panel title="تقدم خطة التدريب والتخرج" icon={GraduationCap} tone="primary">
+          {timeline?.averageCompletion !== undefined ? (
+            <>
+              <StatBar label="معدل إنجاز الروتيشنات السريرية" value={timeline.averageCompletion} max={100} tone="primary" />
+              <StatBar label="نسبة الجاهزية للتخرج" value={timeline.averageGraduationProgress} max={100} tone="info" />
+              <div style={{ marginTop: space.lg, paddingTop: space.md, borderTop: `1px solid ${colour.border}`, fontSize: '12px', color: colour.muted }}>
+                حالة الخطة الأكاديمية: <strong style={{ color: colour.primary }}>{profile?.applicationStatus === 'active' ? 'نشط وفي المسار المعتمد' : 'تحت الإشراف'}</strong>
+              </div>
+            </>
           ) : (
-            <EmptyState icon={Target} title="لا توجد متطلبات مسجلة" />
+            <EmptyState icon={GraduationCap} title="متابعة الخطة التدريبية" hint="يتم تحديث نسب الإنجاز تلقائياً بناءً على تقييمات الساعات." />
           )}
         </Panel>
       </SplitGrid>
 
+      {/* 5. QUICK ACTIONS */}
+      <Panel title="الإجراءات السريعة والخدمات اليومية" icon={Zap} tone="primary">
+        <QuickActions
+          items={[
+            { label: 'تسجيل حالة سريرية Logbook', icon: BookOpen, onClick: () => navigate('/logbook'), tone: 'primary', hint: 'إضافة مهارة سريرية جديدة' },
+            { label: 'الملف الشخصي والبطاقة', icon: CreditCard, onClick: () => navigate('/profile'), tone: 'info', hint: 'عرض البطاقة الرقمية' },
+            { label: 'سلسلة موافقات التدريب', icon: CheckSquare, onClick: () => navigate('/acceptance-chain'), tone: 'warning', hint: 'متابعة حالة القبول' },
+          ]}
+        />
+      </Panel>
+
+      {/* 6. SECONDARY DATA (My Logbook Entries & Digital ID Card) */}
       <PanelGrid>
-        <Panel title="مهامي" icon={ClipboardCheck} tone="warning">
-          {dash?.tasks?.length ? (
-            dash.tasks.slice(0, 5).map((t: any) => (
-              <ListRow key={t.id} title={t.titleAr}
-                meta={t.dueDate ? `الاستحقاق: ${String(t.dueDate).slice(0, 10)}` : undefined}
-                trailing={
-                  t.status === 'completed' ? (
-                    <Badge label="مكتملة" tone="success" />
-                  ) : (
-                    <div style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
-                      <Badge label="معلقة" tone="warning" />
-                      <Button size="small" variant="outlined" color="success"
-                        disabled={completeTaskMutation.isPending}
-                        onClick={() => completeTaskMutation.mutate(t.id)}>
-                        إتمام
-                      </Button>
-                    </div>
-                  )
-                }
-              />
-            ))
+        <Panel
+          title="آخر السجلات السريرية المسجلة (Logbook)"
+          icon={BookOpen}
+          action={<PanelLink label="السجل الكامل" onClick={() => navigate('/logbook')} />}
+        >
+          {logLoading ? (
+            <PanelSkeleton rows={4} />
+          ) : logs.length === 0 ? (
+            <EmptyState icon={BookOpen} title="لم تسجل أي حالات سريرية بعد" hint="اضغط على تسجيل حالة جديدة لإضافة مهاراتك." />
           ) : (
-            <EmptyState icon={ClipboardCheck} title="لا توجد مهام معلقة" />
-          )}
-        </Panel>
-
-        <Panel title="التنبيهات" icon={BellRing} tone="info">
-          {dash?.notifications?.length ? (
-            dash.notifications.slice(0, 5).map((n: any) => (
-              <ListRow key={n.id} title={n.titleAr}
-                meta={new Date(n.createdAt).toLocaleDateString('ar-SA')} />
-            ))
-          ) : (
-            <EmptyState icon={BellRing} title="لا توجد تنبيهات" />
-          )}
-        </Panel>
-
-        <Panel title="النداءات" icon={PhoneCall} tone={calls?.some((c: any) => c.call?.status === 'active') ? 'danger' : 'neutral'}>
-          {calls?.length ? (
-            calls.slice(0, 5).map((c: any) => {
-              const active = c.call?.status === 'active';
-              const canAck = active && c.state === 'notified';
-              const canArrive = active && ['notified', 'acknowledged'].includes(c.state);
-              return (
-                <ListRow
-                  key={c.id}
-                  title={c.call?.customTitle ?? (c.call?.callType === 'urgent' ? 'نداء عاجل' : 'نداء تدريبي')}
-                  meta={`${callStateLabel(c.state)}${c.call?.location ? ` · ${c.call.location}` : ''}${c.notifiedAt ? ` · ${new Date(c.notifiedAt).toLocaleDateString('ar-SA')}` : ''}`}
-                  trailing={
-                    <div style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
-                      {canAck && (
-                        <Button size="small" variant="contained"
-                          disabled={ackCallMutation.isPending}
-                          onClick={() => ackCallMutation.mutate(c.call.id)}
-                          sx={{ bgcolor: colour.primary, '&:hover': { bgcolor: colour.primary } }}>
-                          تأكيد الاستلام
-                        </Button>
-                      )}
-                      {canArrive && (
-                        <Button size="small" variant="outlined" color="info"
-                          disabled={arriveCallMutation.isPending}
-                          onClick={() => arriveCallMutation.mutate(c.call.id)}>
-                          وصلت الموقع
-                        </Button>
-                      )}
-                      <Badge label={active ? 'نشط' : 'منتهي'} tone={active ? 'danger' : 'neutral'} />
-                    </div>
-                  }
-                />
-              );
-            })
-          ) : (
-            <EmptyState icon={PhoneCall} title="لا توجد نداءات" hint="ستظهر هنا النداءات التي يطلقها المدربون." />
-          )}
-        </Panel>
-
-        <Panel title="زملائي في التدريب" icon={Users} tone="violet">
-          {colleagues?.length ? (
-            colleagues.map((c: any) => (
+            logs.slice(0, 5).map((l: any) => (
               <ListRow
-                key={c.traineeProfileId}
-                title={c.nameAr}
-                meta={`${c.specialty ?? ''}${c.departmentNameAr ? ` · ${c.departmentNameAr}` : ''}`}
-                trailing={<Badge label={c.trainingStatus === 'active' ? 'نشط' : c.trainingStatus} tone={c.trainingStatus === 'active' ? 'success' : 'neutral'} />}
+                key={l.id}
+                title={l.diagnosis || 'إجراء سريري'}
+                meta={`القسم: ${l.department?.nameAr || 'عام'} · التاريخ: ${String(l.createdAt).slice(0, 10)}`}
+                trailing={
+                  <Badge
+                    label={l.status === 'approved' ? 'معتمد' : 'قيد المراجعة'}
+                    tone={l.status === 'approved' ? 'success' : 'warning'}
+                  />
+                }
+                onClick={() => navigate('/logbook')}
               />
             ))
-          ) : (
-            <EmptyState icon={Users} title="لا يوجد زملاء آخرون في هذا الدوران" />
           )}
         </Panel>
 
-        <Panel title="روابط سريعة" icon={MapPin} tone="neutral">
-          <QuickActions
-            items={[
-              { label: 'السجل السريري', icon: BookOpen, onClick: () => navigate('/logbook'), tone: 'primary' },
-              { label: 'الإقرارات', icon: FileSignature, onClick: () => navigate('/declarations'), tone: 'info' },
-              { label: 'البلاغات', icon: BellRing, onClick: () => navigate('/incidents'), tone: 'danger' },
-            ]}
-          />
+        <Panel title="البطاقة الرقمية والهوية الأكاديمية" icon={CreditCard} tone="violet">
+          <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '16px' }}>
+            <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>{user?.nameAr}</div>
+            <div style={{ fontSize: '12px', color: '#64748B', fontFamily: 'monospace', marginTop: '2px' }}>
+              الرقم الأكاديمي: {profile?.traineeNumber || '—'}
+            </div>
+            <div style={{ fontSize: '12px', color: '#0F766E', marginTop: '8px', fontWeight: 700 }}>
+              الجامعة الموفدة: {profile?.sponsorOrganization?.nameAr || 'الجامعة'}
+            </div>
+            <div style={{ fontSize: '12px', color: '#0284C7', marginTop: '2px', fontWeight: 700 }}>
+              المستشفى الحالي: {profile?.organization?.nameAr || 'المستشفى'}
+            </div>
+          </div>
         </Panel>
       </PanelGrid>
     </div>

@@ -8,6 +8,7 @@
 
 import SwiftUI
 
+// MARK: - لوحة تحكم مشرف التدريب بالمستشفى (Hospital Training Admin / Supervisor)
 struct TrainingSupervisorDashboardFullView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var store: AppStore
@@ -17,60 +18,48 @@ struct TrainingSupervisorDashboardFullView: View {
     @State private var activeTabSelection = 0
 
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    // Header Banner
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(authViewModel.currentUser?.activeOrganization.nameAr ?? "إدارة التدريب بالمستشفى")
-                                    .font(.title2.bold())
-                                    .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
+        SharedDashboardShell(
+            roleTitle: "إدارة التدريب والامتياز بالمستشفى",
+            subtitle: "نطاق المستشفى الخاص بك: تخصيص الأقسام، اعتماد المتدربين، ومتابعة السعة الاستيعابية",
+            iconName: "cross.case.circle.fill",
+            accentColor: MiranTheme.emerald
+        ) {
+            VStack(spacing: 20) {
+                // 1. Real Hospital Metrics Grid
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    SharedKPICard(
+                        title: "المدربون المؤهلون",
+                        value: "\(store.hospitalTrainers.count)",
+                        subtitle: "الكادر التدريبي الميداني بالمستشفى",
+                        iconName: "stethoscope",
+                        color: MiranTheme.emerald
+                    )
 
-                                Text("لوحة تحكم مشرف التدريب والامتياز بالمستشفى (Hospital Scope)")
-                                    .font(.caption)
-                                    .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
-                            }
-                            Spacer()
-                            Image(systemName: "cross.case.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(MiranTheme.emerald)
-                        }
-                    }
-                    .padding()
-                    .background(MiranTheme.cardBackground(for: systemColorScheme))
-                    .cornerRadius(14)
-                    .padding(.horizontal)
+                    SharedKPICard(
+                        title: "الأقسام السريرية",
+                        value: "\(store.hospitalDepartmentsList.count)",
+                        subtitle: "الأقسام المعتمدة للتأهيل",
+                        iconName: "building.2.fill",
+                        color: .blue
+                    )
 
-                    // Metrics Grid (Connected to Real Backend Store Data)
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                        MetricStatCard(
-                            title: "المدربون المؤهلون",
-                            count: "\(store.hospitalTrainers.count)",
-                            icon: "stethoscope",
-                            color: MiranTheme.emerald
-                        )
-                        MetricStatCard(
-                            title: "الأقسام السريرية",
-                            count: "\(store.hospitalDepartmentsList.count)",
-                            icon: "building.2.fill",
-                            color: .blue
-                        )
-                        MetricStatCard(
-                            title: "الروتيشنات النشطة",
-                            count: "\(store.hospitalRotationsList.filter { $0.status == "active" }.count)",
-                            icon: "calendar.badge.clock",
-                            color: .purple
-                        )
-                        MetricStatCard(
-                            title: "النداءات الحية",
-                            count: "\(store.apiCalls.filter { $0.status == "active" }.count)",
-                            icon: "bell.badge.fill",
-                            color: .red
-                        )
-                    }
-                    .padding(.horizontal)
+                    SharedKPICard(
+                        title: "الروتيشنات النشطة",
+                        value: "\(store.hospitalRotationsList.filter { $0.status == "active" }.count)",
+                        subtitle: "الجداول والتنقلات الجارية",
+                        iconName: "calendar.badge.clock",
+                        color: .purple
+                    )
+
+                    SharedKPICard(
+                        title: "النداءات الحية M-CALL",
+                        value: "\(store.apiCalls.filter { $0.status == "active" }.count)",
+                        subtitle: "نداءات الطوارئ النشطة بالمستشفى",
+                        iconName: "bell.badge.fill",
+                        color: store.apiCalls.filter { $0.status == "active" }.count > 0 ? MiranTheme.error : MiranTheme.secondaryText(for: systemColorScheme)
+                    )
+                }
+                .padding(.horizontal)
 
                     // Section 1: Trainer Capacity & Occupancy Cards (Backend Qualified Workspace Cards)
                     VStack(alignment: .leading, spacing: 12) {
@@ -153,42 +142,40 @@ struct TrainingSupervisorDashboardFullView: View {
                     // Section 3: Operations Actions
                     VStack(alignment: .leading, spacing: 12) {
                         Text("عمليات التوزيع والتحويل الميداني")
-                            .font(.headline.bold())
-                            .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
-                            .padding(.horizontal)
-
+                    // Section 3: Quick Actions for Hospital Scope
+                    SharedSectionCard(title: "الإجراءات والخدمات السريعة بالمستشفى", iconName: "bolt.fill") {
                         VStack(spacing: 10) {
-                            Button {
+                            SharedQuickActionButton(
+                                title: "إعادة إسناد المتدرب لمدرب جديد",
+                                subtitle: "إسناد المتدرب لمدرب آخر بنفس المستشفى مع حفظ السجل",
+                                iconName: "arrow.triangle.branch",
+                                color: MiranTheme.emerald
+                            ) {
                                 showTransferSheet = true
-                            } label: {
-                                AdminActionRow(title: "إعادة إسناد المتدرب لمدرب جديد", subtitle: "إسناد المتدرب لمدرب آخر بنفس المستشفى مع حفظ السجل", icon: "arrow.triangle.branch", color: MiranTheme.emerald)
                             }
 
                             NavigationLink(destination: CallCenterView()) {
-                                AdminActionRow(title: "مركز التحكم بالنداءات والاستدعاءات", subtitle: "متابعة زمن استجابة المتدربين للنداءات العاجلة", icon: "bell.badge.fill", color: .red)
+                                SharedQuickActionButton(
+                                    title: "مركز التحكم بالنداءات والاستدعاءات (M-CALL)",
+                                    subtitle: "متابعة زمن استجابة المتدربين للنداءات العاجلة",
+                                    iconName: "bell.badge.fill",
+                                    color: .red
+                                ) {}
                             }
+                            .buttonStyle(PlainButtonStyle())
                         }
-                        .padding(.horizontal)
-                    }
-                }
-                .padding(.vertical)
-            }
-            .navigationTitle("مشرف التدريب بالـمستشفى")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { authViewModel.logout() } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .foregroundColor(.red)
                     }
                 }
             }
-            .sheet(isPresented: $showTransferSheet) {
-                TraineeReassignmentSheet()
-            }
-            .task {
-                await store.fetchHospitalData()
-            }
+        }
+        .task {
+            await store.fetchHospitalData()
+        }
+        .refreshable {
+            await store.fetchHospitalData()
+        }
+        .sheet(isPresented: $showTransferSheet) {
+            TraineeReassignmentSheet()
         }
     }
 }

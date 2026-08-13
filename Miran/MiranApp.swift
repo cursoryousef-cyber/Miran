@@ -139,72 +139,14 @@ struct UnknownRoleView: View {
 
 // MARK: - University Admin TabView
 struct UniversityAdminTabView: View {
-    @State private var selectedTab = 0
-
-    var body: some View {
-        TabView(selection: $selectedTab) {
-            UniversityAdminDashboardView()
-                .tabItem {
-                    Label("الجامعة والبرامج", systemImage: "graduationcap.fill")
-                }
-                .tag(0)
-        }
-        .tint(MiranTheme.primary)
-    }
-}
-
-// MARK: - University Admin Dashboard
-struct UniversityAdminDashboardView: View {
-    @EnvironmentObject var authViewModel: AuthViewModel
-    @Environment(\.colorScheme) var systemColorScheme
-
     var body: some View {
         NavigationView {
-            ZStack {
-                MiranTheme.background(for: systemColorScheme).ignoresSafeArea()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("إدارة جامعة الحدود الشمالية (University Admin)")
-                                    .font(.title2.bold())
-                                    .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
-                                Spacer()
-                                Image(systemName: "graduationcap.circle.fill")
-                                    .font(.system(size: 28))
-                                    .foregroundColor(MiranTheme.accent)
-                            }
-                            Text("رفع خطط الامتياز وتقديم طلبات التدريب للكلية")
-                                .font(.subheadline)
-                                .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
-                        }
-                        .padding(.horizontal)
-
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            DynamicMetricCard(title: "طلاب الامتياز المسجلين", count: "140", icon: "person.3.fill", color: MiranTheme.accent)
-                            DynamicMetricCard(title: "طلبات التدريب المرسلة", count: "4", icon: "paperplane.fill", color: MiranTheme.primary)
-                            DynamicMetricCard(title: "البرامج التدريبية", count: "3", icon: "book.fill", color: MiranTheme.info(for: systemColorScheme))
-                            DynamicMetricCard(title: "النتائج النهائية المعتمدة", count: "128", icon: "award.fill", color: MiranTheme.warning)
-                        }
-                        .padding(.horizontal)
-                    }
-                    .padding(.vertical)
-                }
-            }
-            .navigationTitle("إدارة الجامعة")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { authViewModel.logout() } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .foregroundColor(MiranTheme.error)
-                    }
-                }
-            }
+            UniversityAdminDashboardView()
         }
     }
 }
+
+
 
 // MARK: - Cluster Training Admin TabView
 struct ClusterTrainingAdminTabView: View {
