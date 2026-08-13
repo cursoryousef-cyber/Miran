@@ -24,6 +24,14 @@ final class AuthViewModel: ObservableObject {
     }
 
     func checkSavedSession() {
+        // Detect fresh installation: if UserDefaults flag is missing, wipe leftover Keychain session items
+        let hasLaunchedKey = "has_launched_before"
+        if !UserDefaults.standard.bool(forKey: hasLaunchedKey) {
+            KeychainService.shared.clearAll()
+            UserDefaults.standard.set(true, forKey: hasLaunchedKey)
+            print("🧹 [Auth] Fresh install detected — cleared orphan Keychain session items")
+        }
+
         if let token = KeychainService.shared.get(forKey: "access_token"), !token.isEmpty {
             self.isAuthenticated = true
             // Load saved user profile if cached
@@ -172,7 +180,23 @@ final class AuthViewModel: ObservableObject {
         KeychainService.shared.clearAll()
         self.currentUser = nil
         self.isAuthenticated = false
-        print("🚪 [Auth] Logged out — session cleared")
+        appStore?.role = nil
+        appStore?.currentTraineeID = nil
+        appStore?.currentTrainerID = nil
+        appStore?.trainees = []
+        appStore?.trainers = []
+        appStore?.departments = []
+        appStore?.rotations = []
+        appStore?.shifts = []
+        appStore?.attendance = []
+        appStore?.calls = []
+        appStore?.evaluations = []
+        appStore?.apiNotifications = []
+        appStore?.apiRotations = []
+        appStore?.apiCalls = []
+        appStore?.apiTraineeProfile = nil
+        appStore?.apiTrainerProfile = nil
+        print("🚪 [Auth] Logged out — session & store cleared")
     }
 }
 
