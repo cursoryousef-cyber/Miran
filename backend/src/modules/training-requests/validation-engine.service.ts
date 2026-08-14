@@ -37,7 +37,13 @@ export class ValidationEngineService {
         trainingRequestId,
         status: { notIn: [TRAINEE_ROW_STATUS.MERGED, TRAINEE_ROW_STATUS.SPLIT, TRAINEE_ROW_STATUS.REJECTED] },
       },
-      include: { documents: true, university: { include: { organizationType: true } } },
+      include: {
+        documents: true,
+        university: { include: { organizationType: true } },
+        trainingRequest: {
+          select: { sourceOrg: { select: { organizationType: { select: { code: true } } } } },
+        },
+      },
     });
 
     const validSpecialties = await this.prisma.lookupTable.findMany({
@@ -168,7 +174,15 @@ export class ValidationEngineService {
       }
 
       // ── الجامعة ──
-      if (!row.universityOrgId) {
+      // Path B (cluster → hospital) has no sponsoring university row behind it:
+      // the university's no-objection letter attached to the request is what
+      // authorises the training, so the sponsor-organisation rule applies to
+      // university-originated requests only.
+      const isDirectClusterRequest =
+        row.trainingRequest?.sourceOrg?.organizationType?.code === 'cluster';
+      if (isDirectClusterRequest) {
+        // no sponsor-organisation requirement on this path
+      } else if (!row.universityOrgId) {
         errors.push({ code: 'missing_university', field: 'universityOrgId', messageAr: 'الجامعة غير محددة' });
       } else if (row.university?.organizationType?.code !== 'university') {
         errors.push({

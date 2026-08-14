@@ -124,8 +124,6 @@ export const ProfilePage: React.FC = () => {
     platform_owner: 'مدير المنصة الإلكترونية',
     cluster_manager: 'مشرف التدريب بالتجمع',
     hospital_training_admin: 'إدارة التدريب بالمستشفى',
-    department_head: 'رئيس القسم العلمي',
-    training_supervisor: 'مشرف التدريب السريري',
     university_administrator: 'مسؤول الجامعة',
     academic_supervisor: 'المشرف الأكاديمي',
     trainer: 'مدرب سريري',

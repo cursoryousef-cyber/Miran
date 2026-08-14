@@ -36,13 +36,13 @@ const INCIDENT_TYPES = [
 ];
 
 const MANAGER_ROLES = [
-  'hospital_administrator', 'hospital_training_admin', 'training_supervisor', 'cluster_administrator', 'platform_owner',
+  'hospital_administrator', 'hospital_training_admin', 'cluster_administrator', 'platform_owner',
 ];
 
 // Mirrors the backend POST /incidents @RequireRoles list: only these roles may
 // register a new بلاغ — everyone else sees the page read-only.
 const REPORTER_ROLES = [
-  'trainee', 'trainer', 'training_supervisor', 'hospital_administrator', 'hospital_training_admin', 'cluster_administrator',
+  'trainee', 'trainer', 'hospital_administrator', 'hospital_training_admin', 'cluster_administrator',
 ];
 
 export const Incidents: React.FC = () => {

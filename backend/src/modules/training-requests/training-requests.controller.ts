@@ -49,14 +49,14 @@ import {
   ScopedResource,
 } from '../../common/authz';
 
-const CLUSTER_ROLES = ['cluster_administrator', 'training_director', 'platform_owner'] as const;
+const CLUSTER_ROLES = ['cluster_administrator', 'cluster_manager', 'training_director', 'platform_owner'] as const;
 const UNIVERSITY_ROLES = ['university_administrator', 'academic_affairs', 'platform_owner'] as const;
 // The hospital side of the training workflow belongs to the hospital training
 // administration. `hospital_administrator` is deliberately absent: it administers
 // the hospital, it does not run training. Role lists are retained only for the
 // legacy RolesGuard on endpoints not yet migrated to capabilities; capability
 // checks are the authority wherever both are present.
-const HOSPITAL_ROLES = ['hospital_training_admin', 'hospital_administrator', 'department_head', 'training_supervisor', 'platform_owner'] as const;
+const HOSPITAL_ROLES = ['hospital_training_admin', 'platform_owner'] as const;
 
 @ApiTags('Training Requests (طلبات التدريب التشغيلية الواردة للتجمع)')
 @ApiBearerAuth('JWT-auth')
@@ -196,7 +196,7 @@ export class TrainingRequestsController {
   }
 
   @Post(':id/reject')
-  @RequireRoles(...CLUSTER_ROLES, ...HOSPITAL_ROLES, 'trainer', 'training_supervisor')
+  @RequireRoles(...CLUSTER_ROLES, ...HOSPITAL_ROLES, 'trainer')
   @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'رفض طلب التدريب — من التجمع (نهائي) أو من سلسلة القبول' })
   async reject(
@@ -238,7 +238,7 @@ export class TrainingRequestsController {
   }
 
   @Post(':id/accept-hospital-director')
-  @RequireRoles('hospital_administrator', 'platform_owner')
+  @RequireRoles('hospital_training_admin', 'platform_owner')
   @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'قبول مدير المستشفى وإحالة الطلب للمشرف التدريبي' })
   async acceptByHospitalDirector(
@@ -250,9 +250,9 @@ export class TrainingRequestsController {
   }
 
   @Post(':id/accept-supervisor')
-  @RequireRoles('training_supervisor', 'academic_supervisor', 'platform_owner')
+  @RequireRoles('hospital_training_admin', 'academic_supervisor', 'platform_owner')
   @ScopedResource('trainingRequest', 'id')
-  @ApiOperation({ summary: 'قبول المشرف التدريبي وإحالة الطلب للمدرب السريري' })
+  @ApiOperation({ summary: 'قبول مدير تدريب المستشفى وإحالة الطلب للمدرب السريري' })
   async acceptBySupervisor(
     @Param('id') id: string,
     @Body() body: { notes?: string },
@@ -307,7 +307,9 @@ export class TrainingRequestsController {
   }
 
   @Post(':id/trainees/submit')
-  @RequireRoles(...UNIVERSITY_ROLES)
+  // Path A: the university sends its roster to the cluster. Path B: the cluster
+  // originates the request itself, so it sends its own roster to the hospital.
+  @RequireRoles(...UNIVERSITY_ROLES, ...CLUSTER_ROLES)
   @ApiOperation({ summary: 'إرسال الدفعة للتجمع الصحي وتشغيل محرك التحقق' })
   async submitBatch(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
     return this.traineesService.submitBatch(id, user);
@@ -515,7 +517,7 @@ export class TrainingRequestsController {
 
   // ─── Phase 5: Multi-level acceptance chain (TrainingRequest level) ────────
   @Post(':id/accept')
-  @RequireRoles(...HOSPITAL_ROLES, 'trainer', 'training_supervisor')
+  @RequireRoles(...HOSPITAL_ROLES, 'trainer')
   @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'الموافقة على الطلب — تقدم سلسلة القبول للخطوة التالية' })
   async acceptRequest(
@@ -527,7 +529,7 @@ export class TrainingRequestsController {
   }
 
   @Post(':id/return-to-cluster')
-  @RequireRoles(...HOSPITAL_ROLES, 'trainer', 'training_supervisor')
+  @RequireRoles(...HOSPITAL_ROLES, 'trainer')
   @ScopedResource('trainingRequest', 'id')
   @ApiOperation({ summary: 'إعادة الطلب للتجمع الصحي من مرحلة القبول الحالية' })
   async returnToCluster(
@@ -553,7 +555,7 @@ export class TrainingRequestsController {
   }
 
   @Post('trainees/:profileId/graduation/approve')
-  @RequireRoles('trainer', 'training_supervisor', ...HOSPITAL_ROLES, 'university_administrator')
+  @RequireRoles('trainer', ...HOSPITAL_ROLES, 'university_administrator')
   @ApiOperation({ summary: 'تقديم موافقة الجهة على تخرج المتدرب' })
   async submitGraduationApproval(
     @Param('profileId') profileId: string,

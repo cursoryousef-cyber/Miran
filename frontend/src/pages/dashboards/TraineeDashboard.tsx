@@ -1,9 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button, CircularProgress } from '@mui/material';
 import {
   BookOpen, CalendarCheck, CheckSquare, ClipboardCheck, GraduationCap,
-  Stethoscope, Users, CreditCard, Zap, Clock
+  Stethoscope, Users, CreditCard, Zap, Clock, PhoneCall
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -15,12 +16,16 @@ import {
 export const TraineeDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ['tr-profile-me'],
     queryFn: async () => {
-      const res = await apiClient.get('/trainees/me').catch(() => ({ data: { data: null } }));
-      return res.data?.data ?? null;
+      const res = await apiClient.get('/trainees/me').catch(() => ({ data: null }));
+      // This endpoint answers with the profile itself, not a { data } envelope;
+      // reading only `data.data` left the dashboard with no profile at all.
+      const body: any = res.data;
+      return body?.data ?? (body?.id ? body : null);
     },
   });
 
@@ -35,11 +40,55 @@ export const TraineeDashboard: React.FC = () => {
   const { data: timeline } = useQuery({
     queryKey: ['tr-timeline-me'],
     queryFn: async () => {
+      // The trainee's own timeline, not the org-wide dashboard feed: that feed
+      // is scoped by hospital/university/cluster and refuses a trainee (403),
+      // which is correct — a trainee may only ever read their own journey.
       const res = await apiClient
-        .get('/timeline/dashboard', { params: { scope: 'trainee', limit: 50 } })
+        .get('/timeline/me')
         .catch(() => ({ data: { data: null } }));
-      return res.data?.data ?? null;
+      const own = res.data?.data ?? null;
+      return own
+        ? {
+            averageCompletion: own.completionPercentage,
+            averageGraduationProgress: own.graduationProgress,
+          }
+        : null;
     },
+  });
+
+  // Tasks/activities the trainer assigned. GET /operations/tasks is already
+  // scoped to the caller's own account, and only the assignee may complete one.
+  const { data: tasks, isLoading: tasksLoading } = useQuery({
+    queryKey: ['tr-my-tasks'],
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/tasks').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const completeTaskMutation = useMutation({
+    mutationFn: (taskId: string) => apiClient.patch(`/operations/tasks/${taskId}/complete`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tr-my-tasks'] }),
+  });
+
+  // Read-only clinical record for the trainee: their competency progress and the
+  // evaluations their trainer has finalised. No editing controls are rendered.
+  const { data: competencies } = useQuery({
+    queryKey: ['tr-my-competencies'],
+    queryFn: async () => {
+      const res = await apiClient.get('/logbook/competencies').catch(() => ({ data: { data: [] } }));
+      return res.data ?? { data: [] };
+    },
+  });
+
+  const { data: myEvaluations } = useQuery({
+    queryKey: ['tr-my-evaluations'],
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/evaluations').catch(() => ({ data: { data: [] } }));
+      const all = res.data?.data ?? [];
+      return all.filter((e: any) => e.evaluatee?.person?.id === profile?.personId || e.evaluateeId);
+    },
+    enabled: !!profile,
   });
 
   const rotations: any[] = profile?.rotations ?? [];
@@ -159,6 +208,80 @@ export const TraineeDashboard: React.FC = () => {
             <EmptyState icon={GraduationCap} title="متابعة الخطة التدريبية" hint="يتم تحديث نسب الإنجاز تلقائياً بناءً على تقييمات الساعات." />
           )}
         </Panel>
+        <Panel title="التقييمات والدرجات المعتمدة" icon={ClipboardCheck} tone="warning">
+          {(myEvaluations ?? []).length ? (
+            (myEvaluations ?? []).map((ev: any) => {
+              // Read-only breakdown: each criterion the form declares, the mark
+              // awarded against its maximum, then the stored total and percentage.
+              const items: any[] = Array.isArray(ev.form?.items) ? ev.form.items : [];
+              const scores = ev.scores ?? {};
+              const maxTotal = scores._maxTotal ?? items.reduce((a: number, i: any) => a + Number(i.max ?? 0), 0);
+              const percentage = scores._percentage
+                ?? (maxTotal > 0 && ev.totalScore != null ? Math.round((Number(ev.totalScore) / maxTotal) * 100) : null);
+              return (
+                <div key={ev.id} style={{ borderBottom: `1px solid ${colour.border}`, padding: `${space.md} 0` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space.md }}>
+                    <span style={{ fontWeight: 800 }}>{ev.form?.nameAr ?? ev.evaluationType ?? 'تقييم'}</span>
+                    <Badge tone="success" label="معتمد" />
+                  </div>
+                  <div style={{ fontSize: 11, color: colour.muted, marginBottom: space.sm }}>
+                    {String(ev.submittedAt).slice(0, 10)}{ev.comments ? ` · ${ev.comments}` : ''}
+                  </div>
+                  {items.filter((i: any) => i?.code && scores[i.code] !== undefined).map((i: any) => (
+                    <div key={i.code} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '2px 0' }}>
+                      <span>{i.nameAr || i.code}</span>
+                      <span style={{ fontWeight: 700 }}>{scores[i.code]} / {i.max ?? '—'}</span>
+                    </div>
+                  ))}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', fontWeight: 800,
+                    marginTop: space.sm, paddingTop: space.sm, borderTop: `1px solid ${colour.border}`,
+                  }}>
+                    <span>المجموع</span>
+                    <span style={{ color: colour.primary }}>
+                      {ev.totalScore ?? '—'}{maxTotal ? ` / ${maxTotal}` : ''}{percentage != null ? ` · ${percentage}%` : ''}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <EmptyState icon={ClipboardCheck} title="لا توجد تقييمات معتمدة بعد" hint="تظهر الدرجة هنا فور اعتماد مدربك للتقييم." />
+          )}
+          {competencies?.data?.length ? (
+            <div style={{ marginTop: space.lg, paddingTop: space.md, borderTop: `1px solid ${colour.border}` }}>
+              <StatBar label="نسبة إنجاز الكفاءات السريرية" value={competencies.overallPercentage ?? 0} max={100} tone="violet" />
+            </div>
+          ) : null}
+        </Panel>
+
+        <Panel title="المهام والأنشطة المسندة من المدرب" icon={CheckSquare} tone="info">
+          {tasksLoading ? (
+            <PanelSkeleton rows={2} />
+          ) : (tasks ?? []).length ? (
+            (tasks ?? []).map((t: any) => (
+              <ListRow
+                key={t.id}
+                title={t.titleAr}
+                meta={`${t.status === 'completed' ? 'مكتملة' : 'قيد التنفيذ'}${t.dueDate ? ` · تستحق ${String(t.dueDate).slice(0, 10)}` : ''}`}
+                trailing={t.status === 'completed' ? (
+                  <Badge tone="success" label="مكتملة" />
+                ) : (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    disabled={completeTaskMutation.isPending}
+                    onClick={() => completeTaskMutation.mutate(t.id)}
+                  >
+                    {completeTaskMutation.isPending ? <CircularProgress size={14} /> : 'إنهاء المهمة'}
+                  </Button>
+                )}
+              />
+            ))
+          ) : (
+            <EmptyState icon={CheckSquare} title="لا توجد مهام مسندة حالياً" hint="تظهر هنا المهام والأنشطة السريرية فور إسنادها من مدربك." />
+          )}
+        </Panel>
       </SplitGrid>
 
       {/* 5. QUICK ACTIONS */}
@@ -167,7 +290,7 @@ export const TraineeDashboard: React.FC = () => {
           items={[
             { label: 'تسجيل حالة سريرية Logbook', icon: BookOpen, onClick: () => navigate('/logbook'), tone: 'primary', hint: 'إضافة مهارة سريرية جديدة' },
             { label: 'الملف الشخصي والبطاقة', icon: CreditCard, onClick: () => navigate('/profile'), tone: 'info', hint: 'عرض البطاقة الرقمية' },
-            { label: 'سلسلة موافقات التدريب', icon: CheckSquare, onClick: () => navigate('/acceptance-chain'), tone: 'warning', hint: 'متابعة حالة القبول' },
+            { label: 'نداءات المدرب M-CALL', icon: PhoneCall, onClick: () => navigate('/calls'), tone: 'danger', hint: 'الرد على نداءات مدربك' },
           ]}
         />
       </Panel>

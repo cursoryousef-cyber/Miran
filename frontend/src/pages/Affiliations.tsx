@@ -7,6 +7,7 @@ import {
   FileText, CheckCircle2, Clock, Building2, Send, AlertCircle, RefreshCw,
   FolderGit2, Clock3, Sparkles, Users, XCircle, Trash2, FileSpreadsheet, Eye,
   Undo2, ShieldCheck, Search, Filter, Calendar, History, UserCheck, Layers, ArrowRight,
+  Download, Upload,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -40,6 +41,8 @@ import { useAuth } from '../context/AuthContext';
 
 export const Affiliations: React.FC = () => {
   const { user, hasAnyRole, hasCapability } = useAuth();
+  /** The university/sponsor side of this shared page — labels and copy follow it. */
+  const isUniversitySponsor = hasAnyRole(['university_administrator', 'academic_affairs']);
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -112,6 +115,29 @@ export const Affiliations: React.FC = () => {
   const [excelErrors, setExcelErrors] = useState<Array<{ rowNumber: number; academicNumber?: string; nationalId?: string; errors: string[] }>>([]);
   const [excelSuccessMsg, setExcelSuccessMsg] = useState<string | null>(null);
 
+  /**
+   * The official roster template. Its headers are exactly the column names the
+   * parser below accepts and the backend import validates, so a file produced
+   * here always round-trips.
+   */
+  const downloadRosterTemplate = () => {
+    const templateRow = {
+      'الرقم الأكاديمي': '4412345',
+      'رقم الهوية': '1012345678',
+      'الاسم بالعربية': 'محمد عبدالله الأحمد',
+      'التخصص': 'internal_medicine',
+      'الجنس': 'ذكر',
+      'البريد الإلكتروني': 'trainee@example.edu.sa',
+      'رقم الجوال': '0500000000',
+      'تاريخ البداية': '2026-09-01',
+      'تاريخ النهاية': '2027-08-31',
+    };
+    const ws = XLSX.utils.json_to_sheet([templateRow]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'كشف المتدربين');
+    XLSX.writeFile(wb, 'Miran_University_Trainees_Template.xlsx');
+  };
+
   const handleRosterExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -123,10 +149,14 @@ export const Affiliations: React.FC = () => {
     reader.onload = (evt) => {
       try {
         const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
+        // cellDates keeps date cells as real dates instead of Excel serial numbers,
+        // which otherwise reached the preview (and the payload) as e.g. 46266.12.
+        const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-        const rawData: any[] = XLSX.utils.sheet_to_json(ws);
+        // raw:false formats every cell through its display format, so a date cell
+        // arrives as "2026-09-01" rather than a serial number.
+        const rawData: any[] = XLSX.utils.sheet_to_json(ws, { raw: false, dateNF: 'yyyy-mm-dd' });
 
         if (!rawData || rawData.length === 0) {
           setExcelErrors([{ rowNumber: 1, errors: ['الملف المرفق فارغ ولا يحتوي على بيانات'] }]);
@@ -158,6 +188,12 @@ export const Affiliations: React.FC = () => {
           const specialty = String(row['التخصص'] || row['Specialty'] || row['specialty'] || '').trim();
           const startDate = String(row['تاريخ البداية'] || row['Start Date'] || row['startDate'] || '').trim();
           const endDate = String(row['تاريخ النهاية'] || row['End Date'] || row['endDate'] || '').trim();
+          // Gender is one of the fields the cluster's validation engine requires
+          // before a row can be approved, so it is read from the same sheet.
+          const genderRaw = String(row['الجنس'] || row['Gender'] || row['gender'] || '').trim();
+          const gender = /^(ذكر|male|m)$/i.test(genderRaw) ? 'male'
+            : /^(أنثى|انثى|female|f)$/i.test(genderRaw) ? 'female'
+            : undefined;
           const email = String(row['البريد الإلكتروني'] || row['Email'] || row['email'] || '').trim();
           const mobile = String(row['رقم الجوال'] || row['الجوال'] || row['Mobile'] || row['phone'] || '').trim();
 
@@ -202,6 +238,7 @@ export const Affiliations: React.FC = () => {
               specialty: specialty || undefined,
               startDate: startDate || undefined,
               endDate: endDate || undefined,
+              gender,
               email: email || undefined,
               mobile: mobile || undefined,
             });
@@ -234,8 +271,14 @@ export const Affiliations: React.FC = () => {
   const { data: clustersData } = useQuery({
     queryKey: ['clusters-list'],
     queryFn: async () => {
-      const res = await apiClient.get('/organizations').catch(() => ({ data: [] }));
-      const all = Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
+      // Addressable clusters come from the dedicated request-target lookup: a
+      // university is scoped to its own organisation, so the general listing
+      // returns only itself and left this dropdown empty.
+      const res = await apiClient.get('/organizations/request-targets').catch(() => ({ data: [] }));
+      const targets = Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
+      if (targets.length > 0) return targets;
+      const fallback = await apiClient.get('/organizations').catch(() => ({ data: [] }));
+      const all = Array.isArray(fallback.data) ? fallback.data : (fallback.data?.data ?? []);
       return all.filter((o: any) => o.organizationType?.code === 'cluster' || o.type === 'cluster' || o.code?.includes('CLUSTER'));
     },
   });
@@ -253,6 +296,139 @@ export const Affiliations: React.FC = () => {
     },
   });
   const programs = programsData || [];
+
+  // ── University: mandatory trainee documents ─────────────────────────────
+  // The cluster's validation engine refuses to approve a row until all four
+  // mandatory documents exist. The sponsor had no way to attach them, so this
+  // section drives the existing trainee-documents upload endpoint per row.
+  const [docsRow, setDocsRow] = useState<any | null>(null);
+  const [docBusyType, setDocBusyType] = useState<string | null>(null);
+  const [docError, setDocError] = useState<string | null>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const pendingDocType = useRef<string | null>(null);
+
+  /** Document types the validation engine treats as mandatory, in its own order. */
+  const MANDATORY_DOC_TYPES = [
+    { code: 'national_id', labelAr: 'الهوية الوطنية' },
+    { code: 'internship_letter', labelAr: 'خطاب الامتياز' },
+    { code: 'academic_transcript', labelAr: 'السجل الأكاديمي' },
+    { code: 'medical_examination', labelAr: 'الفحص الطبي' },
+  ];
+
+  const { data: rowDocuments, isLoading: docsLoading } = useQuery({
+    queryKey: ['trainee-row-documents', docsRow?.id],
+    queryFn: async () => {
+      const res = await apiClient.get('/trainee-documents', {
+        params: { trainingRequestTraineeId: docsRow.id },
+      });
+      return Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
+    },
+    enabled: !!docsRow?.id,
+  });
+
+  const uploadedTypes: Record<string, any> = {};
+  for (const d of (rowDocuments ?? []) as any[]) {
+    // findAll returns newest first, so the first hit per type is the current one.
+    if (!uploadedTypes[d.documentType]) uploadedTypes[d.documentType] = d;
+  }
+  const uploadedCount = MANDATORY_DOC_TYPES.filter((t) => uploadedTypes[t.code]).length;
+
+  const uploadDocMutation = useMutation({
+    mutationFn: async ({ file, documentType }: { file: File; documentType: string }) => {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('trainingRequestTraineeId', docsRow.id);
+      form.append('documentType', documentType);
+      form.append('isMandatory', 'true');
+      return apiClient.post('/trainee-documents/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    },
+    onMutate: ({ documentType }) => { setDocBusyType(documentType); setDocError(null); },
+    onSettled: () => setDocBusyType(null),
+    onSuccess: () => {
+      // Refresh the row's document state so the readiness the cluster reads is current.
+      queryClient.invalidateQueries({ queryKey: ['trainee-row-documents'] });
+      queryClient.invalidateQueries({ queryKey: ['training-request-trainees'] });
+    },
+    onError: (err: any) => {
+      setDocError(err.response?.data?.message || err.message || 'تعذر رفع المستند');
+    },
+  });
+
+  const handleDocFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const documentType = pendingDocType.current;
+    e.target.value = '';
+    if (!file || !documentType) return;
+    uploadDocMutation.mutate({ file, documentType });
+  };
+
+  const pickDocFile = (documentType: string) => {
+    pendingDocType.current = documentType;
+    docInputRef.current?.click();
+  };
+
+  /** Mandatory documents already attached to a row, for the list column. */
+  const documentsReady = (row: any) => {
+    const types = new Set(((row?.documents ?? []) as any[]).map((d) => d.documentType));
+    return MANDATORY_DOC_TYPES.filter((t) => types.has(t.code)).length;
+  };
+
+  // ── Cluster: per-row hospital allocation ────────────────────────────────
+  // The seat-count action above records how many places a hospital takes; this
+  // is the step that actually puts a named trainee in one, through the canonical
+  // allocation endpoint. Approval runs first when the row is still `submitted`,
+  // because a row has no trainee profile — and therefore cannot be activated
+  // later — until the cluster has approved it.
+  const [rowHospital, setRowHospital] = useState<Record<string, string>>({});
+  const [rowBusyId, setRowBusyId] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
+
+  const ALLOCATED_ROW_STATUSES = ['allocated', 'hospital_review', 'accepted', 'active', 'graduated'];
+  /** The sponsor attaches the candidate's documents; the cluster may also fix them. */
+  const canUploadDocs = hasAnyRole([
+    'university_administrator', 'academic_affairs',
+    'cluster_manager', 'cluster_administrator', 'training_director', 'platform_owner',
+  ]);
+  /** Cluster training management owns row → hospital placement. */
+  const canAllocateRows = hasCapability?.('allocation.cluster.manual') || hasAnyRole(['cluster_manager', 'cluster_administrator', 'training_director', 'platform_owner']);
+
+  const allocateRowMutation = useMutation({
+    mutationFn: async ({ row, hospitalId }: { row: any; hospitalId: string }) => {
+      if (row.status === 'submitted' || row.status === 'duplicate_flagged') {
+        // Re-run the validation engine first: the errors stored on the row are a
+        // snapshot from submission time, so documents or details corrected since
+        // then would otherwise still read as blocking.
+        if (row.trainingRequestId) {
+          await apiClient.post(`/training-requests/${row.trainingRequestId}/trainees/validate`).catch(() => undefined);
+        }
+        await apiClient.post(`/training-requests/trainees/${row.id}/approve`);
+      }
+      return apiClient.post(`/training-requests/trainees/${row.id}/allocations/hospital`, { hospitalId });
+    },
+    onMutate: ({ row }) => { setRowBusyId(row.id); setRowError(null); },
+    onSettled: () => setRowBusyId(null),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['training-request-trainees'] });
+      queryClient.invalidateQueries({ queryKey: ['training-requests'] });
+      setSuccessMsg('تم اعتماد المتدرب وإسناده للمستشفى المحدد.');
+    },
+    onError: (err: any) => {
+      setRowError(err.response?.data?.message || err.message || 'تعذر إسناد المتدرب للمستشفى');
+    },
+  });
+
+  /** date-only ("2026-09-01") → full ISO 8601, which the API validates against. */
+  const toIsoDate = (value?: string) => {
+    if (!value) return undefined;
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return undefined;
+    // Anchor at UTC midnight of the calendar day the user actually picked.
+    // Converting a local date straight through toISOString() shifts it back a
+    // day in any positive-offset timezone, so 2026-09-01 was stored as 08-31.
+    return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString();
+  };
 
   const createRequestMutation = useMutation({
     mutationFn: async () => {
@@ -273,7 +449,7 @@ export const Affiliations: React.FC = () => {
         }
       }
 
-      return apiClient.post('/training-requests', {
+      const created = await apiClient.post('/training-requests', {
         requestType: reqType,
         targetOrgId: reqType === 'cluster_request' ? (reqTargetHospitalId || reqTargetOrgId) : reqTargetOrgId,
         targetHospitalId: reqTargetHospitalId || undefined,
@@ -289,18 +465,37 @@ export const Affiliations: React.FC = () => {
           departmentNameAr: r.departmentNameAr,
           durationWeeks: Number(r.durationWeeks),
         })),
+        // Row dates are date-only strings from the sheet or the date pickers;
+        // the API validates them as ISO 8601, so they are normalised here.
         trainees: reqTrainees.map((t) => ({
           academicNumber: t.academicNumber || `CLUSTER-${Date.now().toString().slice(-4)}`,
           nationalId: t.nationalId,
           nameAr: t.nameAr,
-          startDate: reqStartDate,
-          endDate: reqEndDate,
+          // Row-level specialty and dates from the sheet win; the request-level
+          // values are the fallback the backend already applies.
+          specialty: (t as any).specialty || undefined,
+          gender: (t as any).gender || undefined,
+          email: (t as any).email || undefined,
+          mobile: (t as any).mobile || undefined,
+          startDate: toIsoDate((t as any).startDate || reqStartDate),
+          endDate: toIsoDate((t as any).endDate || reqEndDate),
         })),
       });
+
+      // The roster is written as drafts; the sponsor's send step is what puts it
+      // in front of the cluster. Without it the request arrives with an empty
+      // distribution queue, so it runs as part of submitting.
+      const createdId = created?.data?.data?.id ?? created?.data?.id;
+      if (createdId && reqTrainees.length > 0) {
+        await apiClient.post(`/training-requests/${createdId}/trainees/submit`).catch(() => undefined);
+      }
+      return created;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['training-requests'] });
       setOpenCreateModal(false);
+      setExcelErrors([]);
+      setExcelSuccessMsg(null);
       setSuccessMsg('تم تقديم طلب التدريب وقائمة المتدربين والروتيشنات بنجاح!');
     },
     onError: (err: any) => {
@@ -516,10 +711,15 @@ export const Affiliations: React.FC = () => {
 
   return (
     <DataPageShell
-      title="إدارة تدريب التجمع الصحي (Cluster Training Administration)"
-      subtitle={<>{user?.activeOrganization?.nameAr} — مراجعة الطلبات الواردة من الجامعات والتوزيع المباشر والطلبات المرسلة للمستشفيات</>}
+      title={isUniversitySponsor
+        ? 'إيفاد وطلبات التدريب — الجهة الجامعية الموفدة (University Sponsor)'
+        : 'إدارة تدريب التجمع الصحي (Cluster Training Administration)'}
+      eyebrow={isUniversitySponsor ? 'الجهة الجامعية الموفدة' : undefined}
+      subtitle={isUniversitySponsor
+        ? <>{user?.activeOrganization?.nameAr} — إنشاء كشوفات المتدربين وإرسال طلبات التدريب للتجمع الصحي ومتابعة حالتها</>
+        : <>{user?.activeOrganization?.nameAr} — مراجعة الطلبات الواردة من الجامعات والتوزيع المباشر والطلبات المرسلة للمستشفيات</>}
       actions={<>
-        {hasAnyRole(['university_administrator', 'academic_affairs', 'platform_owner', 'cluster_administrator']) && (
+        {hasAnyRole(['university_administrator', 'academic_affairs', 'platform_owner', 'cluster_administrator', 'cluster_manager', 'training_director']) && (
           <Button
             variant="contained"
             startIcon={<Send size={16} />}
@@ -528,6 +728,11 @@ export const Affiliations: React.FC = () => {
               if (programs.length > 0 && !reqProgramId) setReqProgramId(programs[0].id);
               setOpenCreateModal(true);
               setErrorMsg(null);
+              // A failed attempt must not leave its error banner behind once the
+              // roster is corrected and the request submits successfully.
+              createRequestMutation.reset();
+              setExcelErrors([]);
+              setExcelSuccessMsg(null);
             }}
             style={{ background: 'linear-gradient(135deg, #059669 0%, #0D9488 100%)', fontWeight: 700 }}
           >
@@ -824,6 +1029,70 @@ export const Affiliations: React.FC = () => {
         </DialogActions>
       </Dialog>
 
+      {/* مستندات المتدرب — the four mandatory attachments the cluster's validation
+          engine requires before a row can be approved. */}
+      <Dialog open={!!docsRow} onClose={() => setDocsRow(null)} maxWidth="sm" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>
+          مستندات المتدرب — {docsRow?.nameAr}
+          <div style={{ fontSize: '12px', fontWeight: 500, color: '#6B7280', marginTop: '4px' }}>
+            الرقم الأكاديمي: {docsRow?.academicNumber} · رقم الهوية: {docsRow?.nationalId}
+          </div>
+        </DialogTitle>
+        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '8px' }}>
+          <Alert severity={uploadedCount === MANDATORY_DOC_TYPES.length ? 'success' : 'info'}>
+            {uploadedCount === MANDATORY_DOC_TYPES.length
+              ? 'اكتملت المستندات الإلزامية — الصف جاهز لاعتماد التجمع الصحي.'
+              : `تم رفع ${uploadedCount} من ${MANDATORY_DOC_TYPES.length} مستندات إلزامية — لا يعتمد التجمع الصف قبل اكتمالها.`}
+          </Alert>
+
+          {docError && <Alert severity="error" onClose={() => setDocError(null)}>{docError}</Alert>}
+
+          <input ref={docInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" hidden onChange={handleDocFile} />
+
+          {docsLoading ? (
+            <div style={{ textAlign: 'center', padding: '16px' }}><CircularProgress size={22} /></div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {MANDATORY_DOC_TYPES.map((t) => {
+                const doc = uploadedTypes[t.code];
+                const busy = docBusyType === t.code;
+                return (
+                  <div
+                    key={t.code}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+                      border: '1px solid #E5E7EB', borderRadius: '8px', padding: '10px 12px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontWeight: 700, fontSize: '13px' }}>{t.labelAr}</span>
+                      <span style={{ fontSize: '11px', color: doc ? '#059669' : '#B45309' }}>
+                        {doc
+                          ? `مرفوع — ${String(doc.createdAt).slice(0, 10)}${doc.status ? ` · ${doc.status}` : ''}`
+                          : 'غير مرفوع'}
+                      </span>
+                    </div>
+                    <Button
+                      size="small"
+                      variant={doc ? 'outlined' : 'contained'}
+                      disabled={busy}
+                      startIcon={busy ? undefined : <Upload size={14} />}
+                      onClick={() => pickDocFile(t.code)}
+                      style={doc ? undefined : { background: '#059669', fontWeight: 700 }}
+                    >
+                      {busy ? <CircularProgress size={16} /> : doc ? 'استبدال' : 'رفع'}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+        <DialogActions style={{ padding: '12px 24px' }}>
+          <Button onClick={() => setDocsRow(null)}>إغلاق</Button>
+        </DialogActions>
+      </Dialog>
+
       <Dialog open={openCreateModal} onClose={() => setOpenCreateModal(false)} maxWidth="md" fullWidth>
         <DialogTitle style={{ fontWeight: 800 }}>تقديم طلب تدريب جديد</DialogTitle>
         <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingTop: '16px' }}>
@@ -850,6 +1119,30 @@ export const Affiliations: React.FC = () => {
                 </Select>
               </FormControl>
             )}
+            {/* Path B carries no university request behind it, so the sponsoring
+                university's no-objection letter is the mandatory attachment. */}
+            {reqType === 'cluster_request' && (
+              <div style={{ border: '1px solid rgba(2,132,199,0.35)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <strong style={{ fontWeight: 800, fontSize: '13px' }}>خطاب الجامعة بعدم الممانعة من التدريب *</strong>
+                <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                  مطلوب لطلب التدريب المباشر من التجمع الصحي إلى المستشفى.
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Button size="small" variant="outlined" component="label" startIcon={<Upload size={15} />}>
+                    اختيار الخطاب
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      hidden
+                      onChange={(e) => setClusterLetterFile(e.target.files?.[0] ?? null)}
+                    />
+                  </Button>
+                  <span style={{ fontSize: '12px', color: clusterLetterFile ? '#059669' : '#B45309', fontWeight: 700 }}>
+                    {clusterLetterFile ? `تم اختيار: ${clusterLetterFile.name}` : 'لم يتم اختيار خطاب بعد'}
+                  </span>
+                </div>
+              </div>
+            )}
             <FormControl fullWidth required>
               <InputLabel>البرنامج التدريبي</InputLabel>
               <Select value={reqProgramId} label="البرنامج التدريبي" onChange={(e) => { const p = programs.find((x: any) => x.id === e.target.value); setReqProgramId(e.target.value); if (p?.durationMonths) setReqDurationMonths(p.durationMonths); }}>
@@ -863,6 +1156,83 @@ export const Affiliations: React.FC = () => {
             <TextField label="تاريخ بداية التدريب" type="date" value={reqStartDate} onChange={(e) => setReqStartDate(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth />
             <TextField label="تاريخ نهاية التدريب" type="date" value={reqEndDate} onChange={(e) => setReqEndDate(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth />
           </div>
+          {/* Roster — the Excel entry point the sponsor submits its trainees with.
+              Rows parsed here go out with the request and are written by the same
+              validated import path as POST /training-requests/:id/trainees/import. */}
+          <div style={{ border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+              <strong style={{ fontWeight: 800 }}>كشف المتدربين (استيراد Excel)</strong>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <Button size="small" variant="outlined" startIcon={<Download size={15} />} onClick={downloadRosterTemplate}>
+                  تنزيل النموذج المعتمد
+                </Button>
+                <Button size="small" variant="contained" startIcon={<Upload size={15} />} onClick={() => fileInputRef.current?.click()} style={{ background: '#059669', fontWeight: 700 }}>
+                  رفع ملف Excel
+                </Button>
+                <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleRosterExcelUpload} />
+              </div>
+            </div>
+            <div style={{ fontSize: '12px', color: '#6B7280' }}>
+              الأعمدة المطلوبة: الرقم الأكاديمي، رقم الهوية، الاسم بالعربية، التخصص، تاريخ البداية، تاريخ النهاية
+            </div>
+
+            {excelSuccessMsg && <Alert severity="success" onClose={() => setExcelSuccessMsg(null)}>{excelSuccessMsg}</Alert>}
+
+            {excelErrors.length > 0 && (
+              <Alert severity="error">
+                <strong>تعذّر الاستيراد — {excelErrors.length} صف يحتوي على أخطاء:</strong>
+                <ul style={{ margin: '8px 0 0', paddingInlineStart: '18px' }}>
+                  {excelErrors.slice(0, 10).map((e) => (
+                    <li key={e.rowNumber} style={{ fontSize: '12px' }}>
+                      الصف {e.rowNumber}{e.academicNumber ? ` (${e.academicNumber})` : ''} — {e.errors.join('، ')}
+                    </li>
+                  ))}
+                </ul>
+              </Alert>
+            )}
+
+            {reqTrainees.length > 0 && (
+              <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ background: '#F9FAFB' }}>
+                      <th style={{ padding: '8px', textAlign: 'start' }}>الرقم الأكاديمي</th>
+                      <th style={{ padding: '8px', textAlign: 'start' }}>رقم الهوية</th>
+                      <th style={{ padding: '8px', textAlign: 'start' }}>الاسم بالعربية</th>
+                      <th style={{ padding: '8px', textAlign: 'start' }}>التخصص</th>
+                      <th style={{ padding: '8px', textAlign: 'start' }}>البداية</th>
+                      <th style={{ padding: '8px', textAlign: 'start' }}>النهاية</th>
+                      <th style={{ padding: '8px' }} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reqTrainees.map((t: any, i: number) => (
+                      <tr key={`${t.nationalId}-${i}`} style={{ borderTop: '1px solid #F3F4F6' }}>
+                        <td style={{ padding: '8px' }}>{t.academicNumber}</td>
+                        <td style={{ padding: '8px' }}>{t.nationalId}</td>
+                        <td style={{ padding: '8px' }}>{t.nameAr}</td>
+                        <td style={{ padding: '8px' }}>{t.specialty || reqSpecialty || '—'}</td>
+                        <td style={{ padding: '8px' }}>{t.startDate || reqStartDate || '—'}</td>
+                        <td style={{ padding: '8px' }}>{t.endDate || reqEndDate || '—'}</td>
+                        <td style={{ padding: '8px' }}>
+                          <IconButton size="small" onClick={() => setReqTrainees(reqTrainees.filter((_, idx) => idx !== i))}>
+                            <Trash2 size={14} />
+                          </IconButton>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div style={{ fontSize: '12px', color: reqTrainees.length ? '#059669' : '#B45309', fontWeight: 700 }}>
+              {reqTrainees.length
+                ? `جاهز للإرسال — ${reqTrainees.length} متدرب في الكشف`
+                : 'ارفع كشف المتدربين قبل إرسال الطلب'}
+            </div>
+          </div>
+
           {createRequestMutation.isError && (
             <Alert severity="error">{(createRequestMutation.error as any)?.response?.data?.message || (createRequestMutation.error as any)?.message || 'فشل تقديم طلب التدريب'}</Alert>
           )}
@@ -925,6 +1295,7 @@ export const Affiliations: React.FC = () => {
               )}
               {detailTab === 'trainees' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {rowError && <Alert severity="error" onClose={() => setRowError(null)}>{rowError}</Alert>}
                   {detailTraineesError ? (
                     <Alert severity="error">تعذر تحميل قائمة المتدربين: {(detailTraineesError as any)?.response?.data?.message || (detailTraineesError as any)?.message}</Alert>
                   ) : traineesLoading ? (
@@ -940,10 +1311,16 @@ export const Affiliations: React.FC = () => {
                             <TableCell style={{ fontWeight: 700 }}>المستشفى المسند</TableCell>
                             <TableCell style={{ fontWeight: 700 }}>القسم / المدرب</TableCell>
                             <TableCell style={{ fontWeight: 700 }}>الحالة</TableCell>
+                            <TableCell style={{ fontWeight: 700 }}>مستندات المتدرب</TableCell>
+                            {canAllocateRows && <TableCell style={{ fontWeight: 700 }}>الإسناد للمستشفى</TableCell>}
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {detailTrainees.map((t: any) => (
+                          {detailTrainees.map((t: any) => {
+                            const alreadyAllocated = ALLOCATED_ROW_STATUSES.includes(t.status) || !!t.assignedHospitalId;
+                            const blockingErrors: any[] = Array.isArray(t.validationErrors) ? t.validationErrors : [];
+                            const chosen = rowHospital[t.id] || t.assignedHospitalId || '';
+                            return (
                             <TableRow key={t.id}>
                               <TableCell style={{ fontWeight: 700 }}>{t.nameAr}</TableCell>
                               <TableCell style={{ fontFamily: 'monospace', fontSize: '12px' }}>{t.academicNumber}</TableCell>
@@ -951,8 +1328,73 @@ export const Affiliations: React.FC = () => {
                               <TableCell>{t.assignedHospital?.nameAr || '—'}</TableCell>
                               <TableCell style={{ fontSize: '12px' }}>{t.assignedDepartment?.nameAr ? `قسم: ${t.assignedDepartment.nameAr}` : '—'}</TableCell>
                               <TableCell>{getStatusChip(t.status)}</TableCell>
+                              <TableCell>
+                                {(() => {
+                                  const ready = documentsReady(t);
+                                  const complete = ready === MANDATORY_DOC_TYPES.length;
+                                  return (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+                                      <span style={{ fontSize: '12px', fontWeight: 700, color: complete ? '#059669' : '#B45309' }}>
+                                        {complete ? '✔ مكتملة' : `${ready}/${MANDATORY_DOC_TYPES.length}`}
+                                      </span>
+                                      {canUploadDocs && (
+                                        <Button
+                                          size="small"
+                                          variant={complete ? 'outlined' : 'contained'}
+                                          startIcon={<FileText size={14} />}
+                                          onClick={() => { setDocsRow(t); setDocError(null); }}
+                                          style={complete ? undefined : { background: '#0284C7', fontWeight: 700 }}
+                                        >
+                                          {complete ? 'عرض / استبدال' : 'رفع المستندات'}
+                                        </Button>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </TableCell>
+                              {canAllocateRows && (
+                                <TableCell>
+                                  {alreadyAllocated ? (
+                                    <span style={{ fontSize: '12px', color: '#059669', fontWeight: 700 }}>
+                                      ✔ مُسند — {t.assignedHospital?.nameAr || 'مستشفى محدد'}
+                                    </span>
+                                  ) : (
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minWidth: '320px' }}>
+                                      <FormControl size="small" style={{ minWidth: '170px' }}>
+                                        <InputLabel>المستشفى</InputLabel>
+                                        <Select
+                                          value={chosen}
+                                          label="المستشفى"
+                                          onChange={(e) => setRowHospital({ ...rowHospital, [t.id]: e.target.value })}
+                                        >
+                                          {hospitals.map((h: any) => (
+                                            <MenuItem key={h.id} value={h.id}>
+                                              {h.nameAr} {typeof h.available === 'number' ? `— متاح ${h.available}` : ''}
+                                            </MenuItem>
+                                          ))}
+                                        </Select>
+                                      </FormControl>
+                                      <Button
+                                        size="small"
+                                        variant="contained"
+                                        disabled={!chosen || rowBusyId === t.id}
+                                        onClick={() => allocateRowMutation.mutate({ row: t, hospitalId: chosen })}
+                                        style={{ background: '#059669', fontWeight: 700, whiteSpace: 'nowrap' }}
+                                      >
+                                        {rowBusyId === t.id ? <CircularProgress size={16} /> : 'اعتماد وإسناد'}
+                                      </Button>
+                                    </div>
+                                  )}
+                                  {blockingErrors.length > 0 && !alreadyAllocated && (
+                                    <div style={{ fontSize: '11px', color: '#B91C1C', marginTop: '4px', maxWidth: '320px' }}>
+                                      ملاحظات التحقق (قد تكون مُعالجة بعد آخر فحص): {blockingErrors.map((e: any) => e.messageAr).join('، ')}
+                                    </div>
+                                  )}
+                                </TableCell>
+                              )}
                             </TableRow>
-                          ))}
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </TableContainer>

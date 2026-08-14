@@ -222,32 +222,6 @@ async function main() {
       ],
     },
     {
-      code: 'department_head',
-      nameAr: 'رئيس القسم',
-      nameEn: 'Department Head',
-      descriptionAr: 'يشرف على مدربي ومتدربي قسمه',
-      hierarchyLevel: 12,
-      permissions: [
-        'view_users', 'manage_trainers', 'view_trainees', 'manage_trainees',
-        'assign_rotations', 'view_rotations', 'track_attendance',
-        'submit_evaluations', 'view_evaluations', 'view_reports',
-        'view_active_calls', 'receive_notifications',
-      ],
-    },
-    {
-      code: 'training_supervisor',
-      nameAr: 'مشرف التدريب الميداني',
-      nameEn: 'Training Supervisor',
-      descriptionAr: 'يتابع تقدم المتدربين والاعتمادات داخل المستشفى',
-      hierarchyLevel: 11,
-      permissions: [
-        'view_users', 'view_trainees', 'manage_trainees',
-        'assign_rotations', 'view_rotations', 'track_attendance',
-        'submit_evaluations', 'view_evaluations', 'view_reports',
-        'view_active_calls', 'track_call_responses', 'receive_notifications',
-      ],
-    },
-    {
       code: 'auditor',
       nameAr: 'مدقق',
       nameEn: 'Auditor',

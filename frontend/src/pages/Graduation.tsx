@@ -13,12 +13,11 @@ import {
 
 const APPROVER_ROLE_LABELS: Record<string, string> = {
   trainer: 'المدرب السريري',
-  training_supervisor: 'المشرف التدريبي',
   hospital_administrator: 'مدير المستشفى',
   university_administrator: 'مدير الجامعة',
 };
 
-const APPROVER_ROLES = ['trainer', 'training_supervisor', 'hospital_administrator', 'university_administrator'];
+const APPROVER_ROLES = ['trainer', 'hospital_training_admin', 'university_administrator'];
 
 export const Graduation: React.FC = () => {
   const { user, primaryRole } = useAuth();

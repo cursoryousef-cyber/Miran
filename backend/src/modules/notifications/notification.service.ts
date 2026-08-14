@@ -243,12 +243,10 @@ export class NotificationService {
 
   private scopeWhere(scope: ScopeContext): Record<string, unknown> {
     if (!scope || scope.visibleOrgIds === null) return {};
-    return {
-      OR: [
-        { organizationId: { in: scope.visibleOrgIds } },
-        { organizationId: null },
-      ],
-    };
+    // Notification.organizationId is non-nullable, so an `organizationId: null`
+    // branch is not a valid filter — Prisma rejects it with "Argument
+    // organizationId is missing" rather than matching org-less rows.
+    return { organizationId: { in: scope.visibleOrgIds } };
   }
 
   /**

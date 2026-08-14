@@ -7,6 +7,7 @@ import { PageHeader } from '../../components/ui';
 
 import { WorkspaceOverview } from './WorkspaceOverview';
 import { TrainerCards } from './TrainerCards';
+import { EvaluationForms } from './EvaluationForms';
 const CallsHub = lazy(() => import('./CallsHub').then(m => ({ default: m.CallsHub })));
 
 import { HospitalCapacity } from '../HospitalCapacity';
@@ -37,6 +38,7 @@ const SECTIONS: Section[] = [
   { key: 'reassignment', label: 'إعادة الإسناد',      render: () => <TrainerReassignment /> },
   { key: 'leaves',       label: 'الإجازات',           render: () => <TrainerLeaveManagement /> },
   { key: 'logbook',      label: 'السجل السريري',      render: () => <LogbookPage /> },
+  { key: 'eval-forms',   label: 'نماذج التقييم',      render: () => <EvaluationForms /> },
   { key: 'incidents',    label: 'البلاغات',            render: () => <Incidents /> },
   { key: 'graduation',   label: 'التخرج',             render: () => <Graduation /> },
 ];
@@ -47,7 +49,7 @@ export const HospitalWorkspace: React.FC = () => {
   const requested = params.get('tab');
 
   const isHospitalAdmin = user?.roles?.some((r) =>
-    ['hospital_training_admin', 'hospital_administrator', 'org_manager'].includes(r),
+    ['hospital_training_admin', 'org_manager'].includes(r),
   );
 
   const availableSections = useMemo(() => {

@@ -25,7 +25,7 @@ export class TrainingPlansController {
   @RequireRoles(
     'platform_owner', 'system_admin', 'org_manager',
     'cluster_administrator', 'cluster_manager', 'training_director',
-    'hospital_administrator', 'training_supervisor', 'trainer',
+    'hospital_training_admin', 'trainer',
     'university_administrator', 'academic_supervisor', 'trainee',
   )
   @ApiOperation({ summary: 'قوالب الخطط التدريبية وإصداراتها' })
@@ -41,7 +41,7 @@ export class TrainingPlansController {
   @RequireRoles(
     'platform_owner', 'system_admin', 'org_manager',
     'cluster_administrator', 'cluster_manager', 'training_director',
-    'hospital_administrator', 'training_supervisor', 'trainer',
+    'hospital_training_admin', 'trainer',
     'university_administrator', 'academic_supervisor', 'trainee',
   )
   @ApiOperation({ summary: 'إصدار خطة محدد مع روتيشناته' })
@@ -53,7 +53,7 @@ export class TrainingPlansController {
   @RequireRoles(
     'platform_owner', 'system_admin', 'org_manager',
     'cluster_administrator', 'cluster_manager', 'training_director',
-    'hospital_administrator', 'training_supervisor', 'trainer',
+    'hospital_training_admin', 'trainer',
     'university_administrator', 'academic_supervisor', 'trainee',
   )
   @ApiOperation({ summary: 'قالب خطة مع كامل إصداراته وروتيشناتها' })
@@ -66,14 +66,14 @@ export class TrainingPlansController {
   // and the cluster training directorate.
 
   @Post()
-  @RequireRoles('platform_owner', 'system_admin', 'training_director', 'cluster_administrator')
+  @RequireRoles('platform_owner', 'system_admin', 'training_director', 'cluster_administrator', 'cluster_manager')
   @ApiOperation({ summary: 'إنشاء قالب خطة تدريبية مع الإصدار الأول' })
   async createPlan(@Body() dto: CreateTrainingPlanDto, @CurrentUser() user: IAuthenticatedUser) {
     return this.plansService.createPlan(dto, user);
   }
 
   @Patch(':planId')
-  @RequireRoles('platform_owner', 'system_admin', 'training_director', 'cluster_administrator')
+  @RequireRoles('platform_owner', 'system_admin', 'training_director', 'cluster_administrator', 'cluster_manager')
   @ApiOperation({ summary: 'تحديث بيانات القالب — لا يشمل المحتوى التدريبي' })
   async updatePlan(
     @Param('planId') planId: string,
@@ -84,7 +84,7 @@ export class TrainingPlansController {
   }
 
   @Post(':planId/versions')
-  @RequireRoles('platform_owner', 'system_admin', 'training_director', 'cluster_administrator')
+  @RequireRoles('platform_owner', 'system_admin', 'training_director', 'cluster_administrator', 'cluster_manager')
   @ApiOperation({ summary: 'فتح إصدار مسودة جديد منسوخ عن إصدار قائم' })
   async createVersion(
     @Param('planId') planId: string,
@@ -96,7 +96,7 @@ export class TrainingPlansController {
   }
 
   @Post('versions/:versionId/publish')
-  @RequireRoles('platform_owner', 'system_admin', 'training_director', 'cluster_administrator')
+  @RequireRoles('platform_owner', 'system_admin', 'training_director', 'cluster_administrator', 'cluster_manager')
   @ApiOperation({ summary: 'اعتماد إصدار مسودة وأرشفة الإصدار السابق' })
   async publishVersion(
     @Param('versionId') versionId: string,
@@ -107,7 +107,7 @@ export class TrainingPlansController {
   }
 
   @Post('versions/:versionId/rotations')
-  @RequireRoles('platform_owner', 'system_admin', 'training_director', 'cluster_administrator')
+  @RequireRoles('platform_owner', 'system_admin', 'training_director', 'cluster_administrator', 'cluster_manager')
   @ApiOperation({
     summary: 'إضافة أو تعديل روتيشن في القالب — تعديل إصدار معتمد يُنشئ إصداراً جديداً تلقائياً',
   })
@@ -120,7 +120,7 @@ export class TrainingPlansController {
   }
 
   @Delete('versions/:versionId/rotations/:sequenceOrder')
-  @RequireRoles('platform_owner', 'system_admin', 'training_director', 'cluster_administrator')
+  @RequireRoles('platform_owner', 'system_admin', 'training_director', 'cluster_administrator', 'cluster_manager')
   @ApiOperation({ summary: 'حذف روتيشن من القالب — على إصدار معتمد يُنشئ إصداراً جديداً' })
   async removeRotation(
     @Param('versionId') versionId: string,

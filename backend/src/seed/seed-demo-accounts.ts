@@ -60,9 +60,9 @@ async function main() {
 
   // 3. Ensure Roles exist
   const supervisorRole = await prisma.role.upsert({
-    where: { code: 'training_supervisor' },
-    create: { code: 'training_supervisor', nameAr: 'مشرف تدريب', nameEn: 'Training Supervisor', hierarchyLevel: 6, isSystem: true },
-    update: {},
+    where: { code: 'hospital_training_admin' },
+    create: { code: 'hospital_training_admin', nameAr: 'مدير تدريب المستشفى', nameEn: 'Hospital Training Manager', hierarchyLevel: 6, isSystem: true },
+    update: { nameAr: 'مدير تدريب المستشفى', nameEn: 'Hospital Training Manager' },
   });
 
   const trainerRole = await prisma.role.upsert({

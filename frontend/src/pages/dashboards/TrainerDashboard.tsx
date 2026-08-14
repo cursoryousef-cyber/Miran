@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Dialog, DialogTitle, DialogContent, CircularProgress, Button } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, CircularProgress, Button, TextField, Alert } from '@mui/material';
 import {
   AlertTriangle, BookOpen, CalendarCheck, CheckSquare, ClipboardCheck,
   PhoneCall, Stethoscope, UserCog, Users, Inbox, LayoutGrid, UserPlus, Zap
@@ -42,6 +42,26 @@ export const TrainerDashboard: React.FC = () => {
   });
 
   const [selectedTraineeId, setSelectedTraineeId] = useState<string | null>(null);
+
+  // Clinical tasks/activities for an assigned trainee. The endpoint already
+  // refuses a trainee who is not assigned to this trainer; this is the UI for it.
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDue, setTaskDue] = useState('');
+  const [taskError, setTaskError] = useState<string | null>(null);
+  const [taskOk, setTaskOk] = useState<string | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDue, setEditDue] = useState('');
+
+  // Clinical assessment (grading) state — scores are entered per form item and
+  // finalised through the existing evaluation endpoint.
+  const [evalFormId, setEvalFormId] = useState('');
+  /** score per criterion code, keyed by the form's own item codes */
+  const [criterionScores, setCriterionScores] = useState<Record<string, string>>({});
+  const [evalComments, setEvalComments] = useState('');
+  const [evalMsg, setEvalMsg] = useState<string | null>(null);
+  const [evalError, setEvalError] = useState<string | null>(null);
+  const [compEdits, setCompEdits] = useState<Record<string, string>>({});
 
   const { data: recentLogs } = useQuery({
     queryKey: ['tr-recent-logs'],
@@ -88,6 +108,121 @@ export const TrainerDashboard: React.FC = () => {
     mutationFn: ({ rotationId, reason }: { rotationId: string; reason: string }) =>
       apiClient.post(`/operations/trainer/assignment-requests/${rotationId}/reject`, { reason }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tr-assignment-requests'] }),
+  });
+
+  // Evaluation forms and the trainee's competency record — both already exposed
+  // by the API and both trainer-scoped on the server.
+  const { data: evalForms } = useQuery({
+    queryKey: ['tr-eval-forms'],
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/evaluations/forms').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const { data: competencies, refetch: refetchCompetencies } = useQuery({
+    queryKey: ['tr-competencies', selectedTraineeId],
+    queryFn: async () => {
+      const res = await apiClient
+        .get('/logbook/competencies', { params: { traineeId: selectedTraineeId } })
+        .catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+    enabled: !!selectedTraineeId,
+  });
+
+  /** Criteria of the selected form, and the live total they add up to. */
+  const selectedFormItems: Array<{ code: string; nameAr?: string; max?: number }> =
+    ((evalForms ?? []).find((f: any) => f.id === evalFormId)?.items ?? []).filter((i: any) => i?.code);
+
+  const scoreTotals = selectedFormItems.reduce(
+    (acc, item) => {
+      const raw = criterionScores[item.code];
+      const value = raw === undefined || raw === '' ? null : Number(raw);
+      const max = Number(item.max ?? 0);
+      return {
+        awarded: acc.awarded + (value !== null && Number.isFinite(value) ? value : 0),
+        maxTotal: acc.maxTotal + max,
+        complete: acc.complete && value !== null && Number.isFinite(value),
+        valid: acc.valid && (value === null || (value >= 0 && (max === 0 || value <= max))),
+      };
+    },
+    { awarded: 0, maxTotal: 0, complete: selectedFormItems.length > 0, valid: true },
+  );
+  const scorePercentage = scoreTotals.maxTotal > 0
+    ? Math.round((scoreTotals.awarded / scoreTotals.maxTotal) * 100)
+    : null;
+
+  const updateTaskMutation = useMutation({
+    mutationFn: ({ id, titleAr, dueDate }: { id: string; titleAr: string; dueDate?: string }) =>
+      apiClient.patch(`/operations/tasks/${id}`, {
+        titleAr,
+        dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
+      }),
+    onSuccess: () => {
+      setEditingTaskId(null); setTaskError(null); setTaskOk('تم حفظ تعديل المهمة.');
+      refetchTraineeDetail();
+    },
+    onError: (err: any) => setTaskError(err.response?.data?.message || err.message || 'تعذر حفظ التعديل'),
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/operations/tasks/${id}`),
+    onSuccess: () => { setTaskOk('تم حذف المهمة.'); setTaskError(null); refetchTraineeDetail(); },
+    onError: (err: any) => setTaskError(err.response?.data?.message || err.message || 'تعذر حذف المهمة'),
+  });
+
+  const saveCompetencyMutation = useMutation({
+    mutationFn: ({ id, completedCount }: { id: string; completedCount: number }) =>
+      apiClient.patch(`/logbook/competencies/${id}`, { completedCount }),
+    onSuccess: () => refetchCompetencies(),
+  });
+
+  const submitEvaluationMutation = useMutation({
+    mutationFn: () => {
+      const scores: Record<string, number> = {};
+      for (const item of selectedFormItems) scores[item.code] = Number(criterionScores[item.code]);
+      return apiClient.post('/operations/evaluations', {
+        rotationId: traineeDetail?.rotation?.id,
+        evaluateeId: traineeDetail?.traineeAccountId,
+        formId: evalFormId,
+        evaluationType: 'periodic',
+        // Criterion scores; the server re-validates them against the form's
+        // maxima and derives the authoritative total from them.
+        scores,
+        totalScore: scoreTotals.awarded,
+        comments: evalComments || undefined,
+      });
+    },
+    onSuccess: () => {
+      setEvalError(null); setEvalMsg('تم اعتماد التقييم وحفظ الدرجة.');
+      setCriterionScores({}); setEvalComments('');
+      refetchTraineeDetail();
+    },
+    onError: (err: any) => {
+      setEvalMsg(null);
+      setEvalError(err.response?.data?.message || err.message || 'تعذر اعتماد التقييم');
+    },
+  });
+
+  const createTaskMutation = useMutation({
+    mutationFn: (assignedToId: string) =>
+      apiClient.post('/operations/tasks', {
+        assignedToId,
+        titleAr: taskTitle,
+        dueDate: taskDue ? new Date(taskDue).toISOString() : undefined,
+        priority: 'normal',
+      }),
+    onSuccess: () => {
+      setTaskTitle(''); setTaskDue(''); setTaskError(null);
+      setTaskOk('تم إسناد المهمة وإشعار المتدرب.');
+      refetchTraineeDetail();
+      queryClient.invalidateQueries({ queryKey: ['tr-trainee-detail'] });
+    },
+    onError: (err: any) => {
+      setTaskOk(null);
+      setTaskError(err.response?.data?.message || err.message || 'تعذر إسناد المهمة');
+    },
   });
 
   const { data: traineeDetail, isLoading: detailLoading, refetch: refetchTraineeDetail } = useQuery({
@@ -246,7 +381,7 @@ export const TrainerDashboard: React.FC = () => {
           items={[
             { label: 'اعتماد السجل السريري Logbook', icon: BookOpen, onClick: () => navigate('/logbook'), tone: 'primary', hint: `${pendingLogs} سجل معلق` },
             { label: 'سلسلة موافقات الإسناد', icon: CheckSquare, onClick: () => navigate('/acceptance-chain'), tone: 'info', hint: 'متابعة الطلبات' },
-            { label: 'نداءات الطوارئ M-CALL', icon: PhoneCall, onClick: () => navigate('/incidents'), tone: 'danger', hint: `${activeCalls} نداءات نشطة` },
+            { label: 'نداءات الطوارئ M-CALL', icon: PhoneCall, onClick: () => navigate('/calls'), tone: 'danger', hint: `${activeCalls} نداءات نشطة` },
           ]}
         />
       </Panel>
@@ -344,6 +479,175 @@ export const TrainerDashboard: React.FC = () => {
                   />
                 ) : <EmptyState icon={Stethoscope} title="لا يوجد روتيشن نشط حالياً" />}
               </Panel>
+
+              <Panel title="المهام والأنشطة السريرية" icon={CheckSquare} tone="info">
+                {taskOk && <Alert severity="success" onClose={() => setTaskOk(null)} sx={{ marginBottom: space.md }}>{taskOk}</Alert>}
+                {taskError && <Alert severity="error" onClose={() => setTaskError(null)} sx={{ marginBottom: space.md }}>{taskError}</Alert>}
+
+                {(traineeDetail.tasks ?? []).length > 0 ? (
+                  (traineeDetail.tasks ?? []).map((t: any) => (
+                    editingTaskId === t.id ? (
+                      <div key={t.id} style={{ display: 'flex', gap: space.md, alignItems: 'center', flexWrap: 'wrap', padding: space.sm }}>
+                        <TextField size="small" label="المهمة" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
+                        <TextField size="small" type="date" label="تاريخ الاستحقاق" value={editDue} onChange={(e) => setEditDue(e.target.value)} InputLabelProps={{ shrink: true }} />
+                        <Button size="small" variant="contained" disabled={!editTitle.trim() || updateTaskMutation.isPending}
+                          onClick={() => updateTaskMutation.mutate({ id: t.id, titleAr: editTitle, dueDate: editDue })}>
+                          حفظ
+                        </Button>
+                        <Button size="small" onClick={() => setEditingTaskId(null)}>إلغاء</Button>
+                      </div>
+                    ) : (
+                      <ListRow
+                        key={t.id}
+                        title={t.titleAr}
+                        meta={`${t.status === 'completed' ? 'مكتملة' : 'قيد التنفيذ'}${t.dueDate ? ` · تستحق ${String(t.dueDate).slice(0, 10)}` : ''}`}
+                        trailing={
+                          <span style={{ display: 'flex', gap: space.sm }}>
+                            <Button size="small" onClick={() => {
+                              setEditingTaskId(t.id); setEditTitle(t.titleAr ?? '');
+                              setEditDue(t.dueDate ? String(t.dueDate).slice(0, 10) : '');
+                            }}>تعديل</Button>
+                            <Button size="small" color="error" disabled={deleteTaskMutation.isPending}
+                              onClick={() => deleteTaskMutation.mutate(t.id)}>حذف</Button>
+                          </span>
+                        }
+                      />
+                    )
+                  ))
+                ) : (
+                  <EmptyState icon={CheckSquare} title="لا توجد مهام مسندة بعد" />
+                )}
+
+                <div style={{ display: 'flex', gap: space.md, alignItems: 'center', marginTop: space.lg, flexWrap: 'wrap' }}>
+                  <TextField
+                    size="small" label="المهمة / النشاط السريري" value={taskTitle}
+                    onChange={(e) => setTaskTitle(e.target.value)} style={{ flex: 1, minWidth: 200 }}
+                  />
+                  <TextField
+                    size="small" type="date" label="تاريخ الاستحقاق" value={taskDue}
+                    onChange={(e) => setTaskDue(e.target.value)} InputLabelProps={{ shrink: true }}
+                  />
+                  <Button
+                    variant="contained" size="small"
+                    disabled={!taskTitle.trim() || !traineeDetail.traineeAccountId || createTaskMutation.isPending}
+                    onClick={() => createTaskMutation.mutate(traineeDetail.traineeAccountId)}
+                  >
+                    {createTaskMutation.isPending ? <CircularProgress size={16} /> : 'إسناد المهمة'}
+                  </Button>
+                </div>
+              </Panel>
+
+              <Panel title="الكفاءات والإجراءات السريرية" icon={ClipboardCheck} tone="violet">
+                {(competencies ?? []).length ? (
+                  (competencies ?? []).map((c: any) => (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space.md, padding: space.sm, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontWeight: 700, fontSize: 13 }}>{c.procedure?.nameAr ?? 'إجراء سريري'}</span>
+                        <span style={{ fontSize: 11, color: colour.muted }}>
+                          المنجز {c.completedCount} من {c.requiredCount} · {c.status === 'completed' ? 'مكتملة' : 'قيد التقدم'}
+                        </span>
+                      </div>
+                      <span style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
+                        <TextField
+                          size="small" type="number" label="المنجز" style={{ width: 90 }}
+                          value={compEdits[c.id] ?? String(c.completedCount)}
+                          onChange={(e) => setCompEdits({ ...compEdits, [c.id]: e.target.value })}
+                        />
+                        <Button size="small" variant="contained" disabled={saveCompetencyMutation.isPending}
+                          onClick={() => saveCompetencyMutation.mutate({ id: c.id, completedCount: Number(compEdits[c.id] ?? c.completedCount) })}>
+                          حفظ
+                        </Button>
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState icon={ClipboardCheck} title="لا توجد كفاءات مسجلة لهذا المتدرب" />
+                )}
+              </Panel>
+
+              <Panel title="التقييم السريري والدرجات" icon={ClipboardCheck} tone="warning">
+                {evalMsg && <Alert severity="success" onClose={() => setEvalMsg(null)} sx={{ marginBottom: space.md }}>{evalMsg}</Alert>}
+                {evalError && <Alert severity="error" onClose={() => setEvalError(null)} sx={{ marginBottom: space.md }}>{evalError}</Alert>}
+
+                {(traineeDetail.evaluations ?? []).length > 0 && (
+                  (traineeDetail.evaluations ?? []).map((ev: any) => (
+                    <ListRow
+                      key={ev.id}
+                      title={`الدرجة: ${ev.totalScore ?? '—'}`}
+                      meta={`${ev.evaluationType ?? 'تقييم'} · ${String(ev.submittedAt).slice(0, 10)}${ev.comments ? ` · ${ev.comments}` : ''}`}
+                    />
+                  ))
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: space.md, marginTop: space.md }}>
+                  <TextField
+                    select size="small" label="نموذج التقييم" value={evalFormId}
+                    onChange={(e) => { setEvalFormId(e.target.value); setCriterionScores({}); }}
+                    style={{ maxWidth: 320 }}
+                    SelectProps={{ native: true }} InputLabelProps={{ shrink: true }}
+                  >
+                    <option value="">— اختر النموذج —</option>
+                    {(evalForms ?? []).map((f: any) => <option key={f.id} value={f.id}>{f.nameAr}</option>)}
+                  </TextField>
+
+                  {/* One input per criterion the form declares. */}
+                  {selectedFormItems.map((item) => {
+                    const raw = criterionScores[item.code] ?? '';
+                    const value = raw === '' ? null : Number(raw);
+                    const max = Number(item.max ?? 0);
+                    const invalid = value !== null && (value < 0 || (max > 0 && value > max));
+                    return (
+                      <div key={item.code} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space.md }}>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>
+                          {item.nameAr || item.code}
+                          <span style={{ fontSize: 11, color: colour.muted, fontWeight: 500 }}> · الدرجة القصوى {max}</span>
+                        </span>
+                        <TextField
+                          size="small" type="number" label="الدرجة" value={raw}
+                          error={invalid}
+                          helperText={invalid ? `القيمة يجب أن تكون بين 0 و ${max}` : undefined}
+                          inputProps={{ min: 0, max }}
+                          onChange={(e) => setCriterionScores({ ...criterionScores, [item.code]: e.target.value })}
+                          style={{ width: 150 }}
+                        />
+                      </div>
+                    );
+                  })}
+
+                  {evalFormId && selectedFormItems.length === 0 && (
+                    <Alert severity="warning">هذا النموذج لا يحتوي على معايير — أضف معايير للنموذج من «نماذج التقييم».</Alert>
+                  )}
+
+                  {selectedFormItems.length > 0 && (
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: space.md, borderTop: `1px solid ${colour.border}`, fontWeight: 800,
+                    }}>
+                      <span>المجموع المحتسب</span>
+                      <span style={{ color: scoreTotals.valid ? colour.primary : '#B91C1C' }}>
+                        {scoreTotals.awarded} / {scoreTotals.maxTotal}
+                        {scorePercentage !== null ? ` · ${scorePercentage}%` : ''}
+                      </span>
+                    </div>
+                  )}
+
+                  <TextField
+                    size="small" label="ملاحظات المدرب" value={evalComments}
+                    onChange={(e) => setEvalComments(e.target.value)} fullWidth
+                  />
+                  <Button
+                    variant="contained" size="small"
+                    disabled={
+                      !evalFormId || selectedFormItems.length === 0 || !scoreTotals.complete
+                      || !scoreTotals.valid || submitEvaluationMutation.isPending
+                    }
+                    onClick={() => submitEvaluationMutation.mutate()}
+                  >
+                    {submitEvaluationMutation.isPending ? <CircularProgress size={16} /> : 'اعتماد التقييم وحفظ الدرجة'}
+                  </Button>
+                </div>
+              </Panel>
+
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: 20 }}>

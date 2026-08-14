@@ -347,31 +347,87 @@ describe('C. Positive authorisation still works', () => {
     expect(after!.capacity).toBe(before!.capacity);
   });
 
-  it('trainee and department_head stay inside their scope', async () => {
+  it('trainee and the removed department_head identity stay inside their scope', async () => {
     const traineeToken = await login(SCENARIO.accounts.trainee);
-    const deptToken = await login(SCENARIO.accounts.hospital1DeptHead);
+    // department_head is no longer a role in the model, so its account has no
+    // session to act with at all.
+    const deptToken = await login(SCENARIO.accounts.hospital1DeptHead).catch(() => '');
+    expect(deptToken).toBe('');
 
     expect((await http.get('/training-requests').set(auth(traineeToken))).status).toBe(403);
     expect((await http.post('/trainees/reallocate').set(auth(traineeToken))
       .send({ traineeProfileId: 'x', targetHospitalId: s.hospital2.id })).status).toBe(403);
 
-    expect((await http.patch(`/organizations/departments/${s.departments.h1Internal.id}/capacity`)
-      .set(auth(deptToken)).send({ capacity: 3 })).status).toBe(403);
-    expect((await http.post('/trainers/reassign').set(auth(deptToken))
-      .send({ traineeProfileId: 'x', newTrainerId: s.trainers.h1Internal.id })).status).toBe(403);
+    expect([401, 403]).toContain((await http.patch(`/organizations/departments/${s.departments.h1Internal.id}/capacity`)
+      .set(auth(deptToken)).send({ capacity: 3 })).status);
+    expect([401, 403]).toContain((await http.post('/trainers/reassign').set(auth(deptToken))
+      .send({ traineeProfileId: 'x', newTrainerId: s.trainers.h1Internal.id })).status);
   });
 });
 
 describe('D. Phase 2.6.1 P1 Concurrency & P2 Trainee Bypass Regression', () => {
+  // P1 needs a department whose only free seat is the one being raced for.
+  // The shared scenario department cannot provide that: earlier tests in this
+  // file place trainees into it, and the capacity endpoint (correctly) refuses
+  // to lower a department below its current occupancy — so the "capacity = 1"
+  // setup silently failed and both racers fitted. This suite therefore races on
+  // its own department and its own trainer, created empty at capacity 1.
+  let raceDepartmentId: string;
+  let raceTrainerProfileId: string;
+
+  beforeAll(async () => {
+    const department = await prisma.department.create({
+      data: {
+        organizationId: s.hospital1.id,
+        code: `RACE-${Date.now().toString().slice(-6)}`,
+        nameAr: 'قسم اختبار التزامن',
+        capacity: 1,
+        isActive: true,
+      },
+    });
+    raceDepartmentId = department.id;
+
+    const person = await prisma.person.create({
+      data: {
+        nationalId: `9970${Date.now().toString().slice(-6)}`,
+        nameAr: 'مدرب اختبار التزامن',
+        dateOfBirth: new Date('1985-01-01'),
+        gender: 'male',
+        nationality: 'SA',
+      },
+    });
+    const trainer = await prisma.trainerProfile.create({
+      data: {
+        personId: person.id,
+        organizationId: s.hospital1.id,
+        departmentId: department.id,
+        titleAr: 'مدرب اختبار التزامن',
+        maxTrainees: 5,
+      },
+    });
+    raceTrainerProfileId = trainer.id;
+  });
+
+  afterAll(async () => {
+    await prisma.traineeAllocation.deleteMany({ where: { departmentId: raceDepartmentId } });
+    await prisma.rotation.deleteMany({ where: { departmentId: raceDepartmentId } });
+    await prisma.trainerProfile.deleteMany({ where: { id: raceTrainerProfileId } });
+    await prisma.department.deleteMany({ where: { id: raceDepartmentId } });
+  });
+
   it('P1: Concurrent allocation requests for a single remaining seat result in exactly 1 success and 1 capacity rejection', async () => {
     const directorToken = await login(SCENARIO.accounts.clusterTrainingDirector);
     const adminToken = await login(SCENARIO.accounts.hospital1TrainingAdmin);
 
-    // Set department capacity to 1
-    await http
-      .patch(`/organizations/departments/${s.departments.h1Internal.id}/capacity`)
-      .set(auth(adminToken))
-      .send({ capacity: 1 });
+    // The race department starts empty with exactly one seat; assert that
+    // precondition rather than assuming it, so a broken fixture fails loudly
+    // instead of quietly turning the race into a non-race.
+    const beforeOccupancy = await prisma.traineeAllocation.count({
+      where: { departmentId: raceDepartmentId, status: 'open' },
+    });
+    expect(beforeOccupancy).toBe(0);
+    const raceDepartment = await prisma.department.findUniqueOrThrow({ where: { id: raceDepartmentId } });
+    expect(raceDepartment.capacity).toBe(1);
 
     // Create 2 candidate rows in a training request
     const uniToken = await login(SCENARIO.accounts.universityAdmin);
@@ -408,11 +464,11 @@ describe('D. Phase 2.6.1 P1 Concurrency & P2 Trainee Bypass Regression', () => {
       http
         .post(`/training-requests/trainees/${row1.id}/allocations/department`)
         .set(auth(adminToken))
-        .send({ departmentId: s.departments.h1Internal.id, trainerProfileId: s.trainers.h1Internal.id }),
+        .send({ departmentId: raceDepartmentId, trainerProfileId: raceTrainerProfileId }),
       http
         .post(`/training-requests/trainees/${row2.id}/allocations/department`)
         .set(auth(adminToken))
-        .send({ departmentId: s.departments.h1Internal.id, trainerProfileId: s.trainers.h1Internal.id }),
+        .send({ departmentId: raceDepartmentId, trainerProfileId: raceTrainerProfileId }),
     ]);
 
     const statuses = [res1.status, res2.status];
@@ -421,7 +477,7 @@ describe('D. Phase 2.6.1 P1 Concurrency & P2 Trainee Bypass Regression', () => {
 
     // Verify database state: exactly 1 active allocation in the department
     const activeAllocations = await prisma.traineeAllocation.count({
-      where: { departmentId: s.departments.h1Internal.id, status: 'open' },
+      where: { departmentId: raceDepartmentId, status: 'open' },
     });
     expect(activeAllocations).toBe(1);
   }, 120_000);
@@ -453,12 +509,18 @@ describe('D. Phase 2.6.1 P1 Concurrency & P2 Trainee Bypass Regression', () => {
   it('P2: POST /org-members permits legitimate non-trainee staff onboarding', async () => {
     const directorToken = await login(SCENARIO.accounts.hospital1Director);
 
+    // Accounts created through the API are outside the scenario's person set, so
+    // resetE2EScenario does not remove them; a fixed address made the second run
+    // of this suite fail on a duplicate rather than on the behaviour under test.
+    const staffEmail = `staff_doctor_${Date.now()}@miran.health`;
+    const staffNationalId = `9998${String(Date.now()).slice(-6)}`;
+
     const res = await http
       .post('/org-members')
       .set(auth(directorToken))
       .send({
-        email: 'staff_doctor_test@miran.health',
-        nationalId: '9998887772',
+        email: staffEmail,
+        nationalId: staffNationalId,
         roleCode: 'trainer',
         nameAr: 'طبيب مدرب جديد',
       });
@@ -466,7 +528,7 @@ describe('D. Phase 2.6.1 P1 Concurrency & P2 Trainee Bypass Regression', () => {
     expect([200, 201]).toContain(res.status);
 
     const createdProfile = await prisma.trainerProfile.findFirst({
-      where: { person: { email: 'staff_doctor_test@miran.health' } },
+      where: { person: { email: staffEmail } },
     });
     expect(createdProfile).not.toBeNull();
   });

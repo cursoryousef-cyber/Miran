@@ -224,6 +224,16 @@ export class TrainingRequestsService {
 
     await this.assertRequestDirection(sourceOrgId, targetOrgId, dto.requestType);
 
+    // A direct cluster → hospital request carries no university request behind
+    // it, so the university's no-objection letter is the document that proves
+    // the sponsoring university agreed to the training. It is mandatory for this
+    // path only; a university-originated request is itself the authorisation.
+    if (isClusterReq && !dto.clusterLetterUrl?.trim()) {
+      throw new BadRequestException(
+        'خطاب الجامعة بعدم الممانعة من التدريب مطلوب لطلب التدريب المباشر من التجمع الصحي',
+      );
+    }
+
     // Dates and the program/plan/version combination are validated together
     // before anything is written, so an incoherent request is never persisted.
     const dates = this.composition.validateDates(dto);
@@ -424,7 +434,7 @@ export class TrainingRequestsService {
             if (alloc.hospitalId) {
               await this.notificationService.notifyOrgUsers(
                 alloc.hospitalId,
-                'hospital_administrator',
+                'hospital_training_admin',
                 {
                   titleAr: 'تم تخصيص متدربين جدد لمستشفاكم',
                   titleEn: 'New trainees allocated to your hospital',
@@ -976,12 +986,15 @@ export class TrainingRequestsService {
   // ─── Generic acceptance chain (Phase 5) ─────────────────────────────────
   // Maps current status → { next on approve, next on reject, next on return, notifyRole }
   private static readonly CHAIN_MAP: Record<string, { approve: string; notifyRole: string; label: string }> = {
-    approved:                         { approve: 'hospital_administrator_accepted', notifyRole: 'hospital_administrator', label: 'مدير المستشفى' },
-    hospital_accepted:                { approve: 'supervisor_accepted',            notifyRole: 'training_supervisor',    label: 'المشرف التدريبي' },
-    hospital_administrator_accepted:  { approve: 'training_supervisor_accepted',   notifyRole: 'training_supervisor',    label: 'المشرف التدريبي' },
-    supervisor_accepted:              { approve: 'trainer_accepted',               notifyRole: 'trainer',                label: 'المدرب السريري' },
-    training_supervisor_accepted:     { approve: 'trainer_accepted',               notifyRole: 'trainer',                label: 'المدرب السريري' },
-    trainer_accepted:                 { approve: 'active',                         notifyRole: 'trainee',                label: 'طبيب الامتياز' },
+    // The status literals below are preserved because existing rows carry them.
+    // Only the notified role is canonicalised: the hospital step belongs to the
+    // Hospital Training Manager, the next step to the clinical trainer.
+    approved:                         { approve: 'hospital_administrator_accepted', notifyRole: 'hospital_training_admin', label: 'مدير تدريب المستشفى' },
+    hospital_accepted:                { approve: 'supervisor_accepted',             notifyRole: 'hospital_training_admin', label: 'مدير تدريب المستشفى' },
+    hospital_administrator_accepted:  { approve: 'training_supervisor_accepted',    notifyRole: 'hospital_training_admin', label: 'مدير تدريب المستشفى' },
+    supervisor_accepted:              { approve: 'trainer_accepted',                notifyRole: 'trainer',                 label: 'المدرب السريري' },
+    training_supervisor_accepted:     { approve: 'trainer_accepted',                notifyRole: 'trainer',                 label: 'المدرب السريري' },
+    trainer_accepted:                 { approve: 'active',                          notifyRole: 'trainee',                 label: 'طبيب الامتياز' },
   };
 
   async advanceAcceptanceChain(

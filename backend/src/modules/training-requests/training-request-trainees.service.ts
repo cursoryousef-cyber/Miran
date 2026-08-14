@@ -778,7 +778,7 @@ export class TrainingRequestTraineesService {
     titleAr: string,
     bodyAr: string,
   ) {
-    await this.notificationService.notifyOrgUsers(hospitalOrgId, 'hospital_administrator', {
+    await this.notificationService.notifyOrgUsers(hospitalOrgId, 'hospital_training_admin', {
       titleAr,
       bodyAr,
       type: 'trainee_hospital_review',

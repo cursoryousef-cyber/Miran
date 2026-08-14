@@ -50,6 +50,17 @@ export class OrganizationsController {
     return this.organizationsService.findAll(+page, +limit, search, typeId, parentId, scope?.visibleOrgIds ?? null);
   }
 
+  // The clusters a sponsor may address a training request to. Held apart from
+  // the general listing so a university gains no visibility it did not already
+  // have: identity fields of active clusters only, for whoever may create a
+  // training request.
+  @Get('request-targets')
+  @RequireCapability(CAPABILITIES.TRAINING_REQUEST_CREATE)
+  @ApiOperation({ summary: 'التجمعات الصحية المتاحة كجهة مستهدفة لطلب تدريب' })
+  async getRequestTargets() {
+    return this.organizationsService.findRequestTargetClusters();
+  }
+
   // Reference data — the catalogue of organisation types, not any organisation's
   // data. Any authenticated session may read it.
   @Get('types')

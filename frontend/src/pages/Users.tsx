@@ -65,10 +65,8 @@ export const UsersPage: React.FC = () => {
 
   const roleNameMap: Record<string, string> = useMemo(() => ({
     platform_owner: 'مدير المنصة الإلكترونية',
-    cluster_manager: 'مشرف التدريب بالتجمع',
-    hospital_training_admin: 'إدارة التدريب بالمستشفى',
-    department_head: 'رئيس القسم العلمي',
-    training_supervisor: 'مشرف التدريب السريري',
+    cluster_manager: 'مدير تدريب التجمع',
+    hospital_training_admin: 'مدير تدريب المستشفى',
     university_administrator: 'مسؤول الجامعة',
     academic_supervisor: 'المشرف الأكاديمي',
     trainer: 'مدرب سريري',
@@ -558,10 +556,8 @@ export const UsersPage: React.FC = () => {
                 onChange={(e) => setFormData({ ...formData, roleCode: e.target.value })}
               >
                 <MenuItem value="platform_owner">مالك المنصة الإلكترونية (Platform Owner)</MenuItem>
-                <MenuItem value="cluster_manager">مشرف التدريب بالتجمع (Cluster Manager)</MenuItem>
-                <MenuItem value="hospital_training_admin">إدارة التدريب بالمستشفى (Hospital Training Admin)</MenuItem>
-                <MenuItem value="department_head">رئيس القسم السريري (Department Head)</MenuItem>
-                <MenuItem value="training_supervisor">المشرف التدريبي بالمستشفى (Training Supervisor)</MenuItem>
+                <MenuItem value="cluster_manager">مدير تدريب التجمع (Cluster Training Manager)</MenuItem>
+                <MenuItem value="hospital_training_admin">مدير تدريب المستشفى (Hospital Training Manager)</MenuItem>
                 <MenuItem value="university_administrator">مسؤول الجامعة الموفدة (University Administrator)</MenuItem>
                 <MenuItem value="academic_supervisor">المشرف الأكاديمي (Academic Supervisor)</MenuItem>
                 <MenuItem value="trainer">المدرب السريري (Clinical Trainer)</MenuItem>

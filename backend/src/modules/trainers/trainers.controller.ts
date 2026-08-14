@@ -173,7 +173,7 @@ export class TrainersController {
         include: { person: true, organization: true, department: true },
       });
     }
-    if (!profile && (user.roles.includes('trainer') || user.roles.includes('training_supervisor')) && user.personId && user.organizationId) {
+    if (!profile && user.roles.includes('trainer') && user.personId && user.organizationId) {
       profile = await this.prisma.trainerProfile.create({
         data: {
           personId: user.personId,

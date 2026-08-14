@@ -49,7 +49,21 @@ export class TraineesController {
   async getMyProfile(@CurrentUser() user: IAuthenticatedUser) {
     let profile = await this.prisma.traineeProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
-      include: { person: true, organization: true, program: true },
+      include: {
+        person: true,
+        organization: true,
+        program: true,
+        // The trainee's own rotations — their dashboard reads the current one to
+        // show that training is actually running. Omitting them left an activated
+        // trainee reading "لا يوجد روتيشن" with no way to see their placement.
+        rotations: {
+          orderBy: { startDate: 'asc' },
+          include: {
+            department: true,
+            trainerProfile: { include: { person: true } },
+          },
+        },
+      },
     });
 
     if (
@@ -58,7 +72,18 @@ export class TraineesController {
         user.roles.includes('org_manager'))
     ) {
       profile = await this.prisma.traineeProfile.findFirst({
-        include: { person: true, organization: true, program: true },
+        include: {
+          person: true,
+          organization: true,
+          program: true,
+          rotations: {
+            orderBy: { startDate: 'asc' },
+            include: {
+              department: true,
+              trainerProfile: { include: { person: true } },
+            },
+          },
+        },
       });
     }
 
@@ -519,13 +544,11 @@ export class TraineesController {
   // ─── قائمة المتدربين الواردين للتجمع الصحي ────────────────────────────────
   @Get('incoming')
   @RequireRoles(
-    'cluster_administrator',
+    'cluster_administrator', 'cluster_manager',
     'cluster_manager',
     'training_director',
     'platform_owner',
-    'hospital_administrator',
     'hospital_training_admin',
-    'training_supervisor',
   )
   @ApiOperation({ summary: 'قائمة متدربي الامتياز الواردين للتجمع الصحي' })
   async getIncomingTrainees(@CurrentUser() user: IAuthenticatedUser) {

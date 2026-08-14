@@ -71,8 +71,7 @@ export const CallsHub: React.FC = () => {
   const { primaryRole } = useAuth();
   const qc = useQueryClient();
 
-  const isTrainer = ['trainer', 'org_manager', 'platform_owner', 'hospital_administrator',
-    'training_supervisor', 'cluster_administrator'].includes(primaryRole ?? '');
+  const isTrainer = ['trainer', 'org_manager', 'platform_owner', 'hospital_training_admin', 'cluster_administrator'].includes(primaryRole ?? '');
   const isTrainee = primaryRole === 'trainee';
 
   const [launching, setLaunching] = useState(false);

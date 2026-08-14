@@ -387,7 +387,9 @@ describe('Negative authorisation', () => {
     h2Token = await login(SCENARIO.accounts.hospital2TrainingAdmin);
     directorToken = await login(SCENARIO.accounts.clusterTrainingDirector);
     h1DirectorToken = await login(SCENARIO.accounts.hospital1Director);
-    deptHeadToken = await login(SCENARIO.accounts.hospital1DeptHead);
+    // The removed-role account no longer has a Role row, so login refuses it
+    // outright; N9 asserts that directly instead of driving endpoints with it.
+    deptHeadToken = await login(SCENARIO.accounts.hospital1DeptHead).catch(() => '');
     traineeToken = await login(SCENARIO.accounts.trainee);
 
     const row = await prisma.trainingRequestTrainee.findFirst({
@@ -500,18 +502,25 @@ describe('Negative authorisation', () => {
     expect(batch.status).toBe(403);
   });
 
-  it('N9. the department head cannot manage capacity or allocate', async () => {
+  it('N9. the removed department-head role reaches nothing — it cannot even sign in', async () => {
+    const loginRes = await http
+      .post('/auth/login')
+      .send({ email: SCENARIO.accounts.hospital1DeptHead, password: SCENARIO.password });
+    expect(loginRes.status).toBe(403);
+    expect(deptHeadToken).toBe('');
+
+    // And with no session, the hospital-internal routes stay closed to it.
     const cap = await http
       .patch(`/organizations/departments/${s.departments.h1Internal.id}/capacity`)
       .set(auth(deptHeadToken))
       .send({ capacity: 11 });
-    expect(cap.status).toBe(403);
+    expect([401, 403]).toContain(cap.status);
 
     const alloc = await http
       .post(`/training-requests/trainees/${rowId}/allocations/department`)
       .set(auth(deptHeadToken))
       .send({ departmentId: s.departments.h1Paediatrics.id });
-    expect(alloc.status).toBe(403);
+    expect([401, 403]).toContain(alloc.status);
   });
 
   it('N11. a trainee cannot read a training request or its trainees', async () => {
@@ -553,16 +562,60 @@ describe('Negative authorisation', () => {
     expect(await prisma.academicIntake.count()).toBe(before);
   });
 
-  it('N19. a cluster→hospital training request is refused', async () => {
+  it('N19. a cluster→hospital training request is accepted, but only with the university no-objection letter', async () => {
+    // Path B of the approved model: the cluster may address a hospital directly.
+    // What is refused is doing so without the university's no-objection letter,
+    // which is the document standing in for a university-originated request.
     const before = await prisma.trainingRequest.count();
-    const res = await http
+
+    const withoutLetter = await http
       .post('/training-requests')
       .set(auth(directorToken))
-      .send({ targetOrgId: s.hospital1.id, programId: s.program.id, studentCount: 5 });
-    // The director holds no create capability, and the direction is invalid too;
-    // either refusal is correct, and nothing may be written.
-    expect([400, 403]).toContain(res.status);
+      .send({
+        requestType: 'cluster_request',
+        targetOrgId: s.hospital1.id,
+        targetHospitalId: s.hospital1.id,
+        programId: s.program.id,
+        studentCount: 5,
+        trainingStartDate: '2026-09-01T00:00:00.000Z',
+        trainingEndDate: '2027-08-31T00:00:00.000Z',
+      });
+    expect(withoutLetter.status).toBe(400);
+    expect(withoutLetter.body.message).toContain('عدم الممانعة');
     expect(await prisma.trainingRequest.count()).toBe(before);
+
+    const withLetter = await http
+      .post('/training-requests')
+      .set(auth(directorToken))
+      .send({
+        requestType: 'cluster_request',
+        targetOrgId: s.hospital1.id,
+        targetHospitalId: s.hospital1.id,
+        programId: s.program.id,
+        studentCount: 5,
+        trainingStartDate: '2026-09-01T00:00:00.000Z',
+        trainingEndDate: '2027-08-31T00:00:00.000Z',
+        clusterLetterUrl: 'https://miran.health/docs/no-objection-letter.pdf',
+      });
+    expect([200, 201]).toContain(withLetter.status);
+
+    const created = withLetter.body.data ?? withLetter.body;
+    expect(created.targetOrgId).toBe(s.hospital1.id);
+    expect(await prisma.trainingRequest.count()).toBe(before + 1);
+  });
+
+  it('N19b. a trainee cannot open the direct cluster→hospital path', async () => {
+    const res = await http
+      .post('/training-requests')
+      .set(auth(traineeToken))
+      .send({
+        requestType: 'cluster_request',
+        targetOrgId: s.hospital1.id,
+        programId: s.program.id,
+        studentCount: 1,
+        clusterLetterUrl: 'https://miran.health/docs/no-objection-letter.pdf',
+      });
+    expect(res.status).toBe(403);
   });
 
   it('the free-standing academic batch route is gone', async () => {

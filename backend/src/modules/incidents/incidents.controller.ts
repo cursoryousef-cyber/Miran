@@ -59,7 +59,7 @@ export class IncidentsController {
   }
 
   @Post()
-  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_administrator', 'hospital_training_admin', 'cluster_administrator')
+  @RequireRoles('trainee', 'trainer', 'hospital_administrator', 'hospital_training_admin', 'cluster_administrator', 'cluster_manager')
   @ApiOperation({ summary: 'تقديم بلاغ جديد' })
   async create(
     @CurrentUser() user: IAuthenticatedUser,
@@ -79,7 +79,7 @@ export class IncidentsController {
   }
 
   @Patch(':id/status')
-  @RequireRoles('hospital_administrator', 'hospital_training_admin', 'training_supervisor', 'cluster_administrator', 'platform_owner')
+  @RequireRoles('hospital_administrator', 'hospital_training_admin', 'cluster_administrator', 'cluster_manager', 'platform_owner')
   @ApiOperation({ summary: 'تحديث حالة البلاغ' })
   async updateStatus(
     @Param('id') id: string,

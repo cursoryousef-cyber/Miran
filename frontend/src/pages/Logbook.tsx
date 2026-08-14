@@ -89,8 +89,8 @@ export const LogbookPage: React.FC = () => {
   // endpoints additionally require rotationId + evaluateeId (UserAccount.id).
   // That pair is only reachable through the trainer branch of GET /rotations,
   // which embeds each active rotation's trainee and their user accounts.
-  const isTrainerRole = primaryRole === 'trainer' || primaryRole === 'training_supervisor';
-  const canViewSlowEvalReport = ['trainer', 'training_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'academic_supervisor', 'org_manager', 'platform_owner'].includes(primaryRole);
+  const isTrainerRole = primaryRole === 'trainer';
+  const canViewSlowEvalReport = ['trainer', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'academic_supervisor', 'org_manager', 'platform_owner'].includes(primaryRole);
 
   const {
     data: trainerGroupsData,
@@ -553,7 +553,7 @@ export const LogbookPage: React.FC = () => {
           )}
 
           {/* ── Trainer: Submit Evaluation + Midpoint ── */}
-          {(primaryRole === 'trainer' || primaryRole === 'training_supervisor' || primaryRole === 'platform_owner') && (
+          {(primaryRole === 'trainer' || primaryRole === 'platform_owner') && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
               {/* Slow-evaluator report */}

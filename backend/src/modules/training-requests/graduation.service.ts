@@ -4,7 +4,7 @@ import { NotificationService } from '../notifications/notification.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { IAuthenticatedUser } from '../../common/interfaces';
 
-const REQUIRED_APPROVER_ROLES = ['trainer', 'training_supervisor', 'hospital_administrator', 'university_administrator'];
+const REQUIRED_APPROVER_ROLES = ['trainer', 'hospital_training_admin', 'university_administrator'];
 
 @Injectable()
 export class GraduationService {
@@ -79,6 +79,17 @@ export class GraduationService {
     const allDone = REQUIRED_APPROVER_ROLES.every(r => approvedRoles.includes(r));
 
     if (allDone) {
+      // The approval chain alone never graduates anyone: the same readiness the
+      // eligibility endpoint reports is re-checked here, server-side, so a
+      // trainee cannot be graduated with rotations, competencies, logbook items
+      // or evaluations still outstanding. The approvals stay recorded either
+      // way — only the final transition is withheld.
+      const { data: readiness } = await this.timelineService.getGraduationReadiness(traineeProfileId);
+      if (!readiness.readyForGraduation) {
+        throw new BadRequestException(
+          `لا يمكن اعتماد التخرج قبل استيفاء المتطلبات: ${readiness.remainingRequirements.join('، ')}`,
+        );
+      }
       await this.graduateTrainee(traineeProfileId, user.accountId);
     }
 
@@ -111,7 +122,7 @@ export class GraduationService {
 
     // Notify all parties
     try {
-      await this.notificationService.notifyOrgUsers(updated.organizationId, 'hospital_administrator', {
+      await this.notificationService.notifyOrgUsers(updated.organizationId, 'hospital_training_admin', {
         titleAr: 'تهانينا — اكتمل تخرج المتدرب',
         bodyAr: 'أكمل المتدرب جميع متطلبات برنامج التدريب بنجاح',
         type: 'trainee_graduated',

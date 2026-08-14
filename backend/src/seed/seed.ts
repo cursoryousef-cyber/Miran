@@ -26,7 +26,7 @@ async function main() {
     { code: 'university', nameAr: 'جامعة', nameEn: 'University', icon: 'school', sortOrder: 4, canHaveChildren: true, allowedChildTypes: ['college'], autoCreateRole: 'university_administrator' },
     { code: 'college', nameAr: 'كلية صحية', nameEn: 'Health College', icon: 'menu_book', sortOrder: 5, canHaveChildren: true, allowedChildTypes: ['department'], autoCreateRole: 'academic_affairs' },
     { code: 'specialty_center', nameAr: 'مركز تخصصي', nameEn: 'Specialty Center', icon: 'medical_services', sortOrder: 6, canHaveChildren: true, allowedChildTypes: ['department'], autoCreateRole: 'hospital_administrator' },
-    { code: 'department', nameAr: 'قسم سريري / إداري', nameEn: 'Department', icon: 'corporate_fare', sortOrder: 9, canHaveChildren: false, allowedChildTypes: [], autoCreateRole: 'department_head' },
+    { code: 'department', nameAr: 'قسم سريري / إداري', nameEn: 'Department', icon: 'corporate_fare', sortOrder: 9, canHaveChildren: false, allowedChildTypes: [] },
   ];
 
   const createdTypes: Record<string, string> = {};
@@ -53,9 +53,8 @@ async function main() {
     { code: 'university_administrator', nameAr: 'مدير الجامعة', nameEn: 'University Administrator', hierarchyLevel: 70, isSystem: true },
     { code: 'academic_affairs', nameAr: 'مشرف الشؤون الأكاديمية', nameEn: 'Academic Affairs Supervisor', hierarchyLevel: 60, isSystem: true },
     { code: 'training_director', nameAr: 'مدير الشؤون التدريبية', nameEn: 'Training Director', hierarchyLevel: 60, isSystem: true },
-    { code: 'department_head', nameAr: 'رئيس القسم السريري', nameEn: 'Department Head', hierarchyLevel: 50, isSystem: true },
+    { code: 'hospital_training_admin', nameAr: 'مدير تدريب المستشفى', nameEn: 'Hospital Training Manager', hierarchyLevel: 65, isSystem: true },
     { code: 'academic_supervisor', nameAr: 'مشرف أكاديمي', nameEn: 'Academic Supervisor', hierarchyLevel: 40, isSystem: true },
-    { code: 'training_supervisor', nameAr: 'مشرف تدريب ميداني', nameEn: 'Training Supervisor', hierarchyLevel: 40, isSystem: true },
     { code: 'trainer', nameAr: 'مدرب ميداني', nameEn: 'Trainer', hierarchyLevel: 30, isSystem: true },
     { code: 'trainee', nameAr: 'متدرب / طبيب امتياز', nameEn: 'Trainee / Intern', hierarchyLevel: 10, isSystem: true },
     { code: 'org_manager', nameAr: 'مدير الجهة', nameEn: 'Organization Manager', hierarchyLevel: 75, isSystem: true },
@@ -282,10 +281,10 @@ async function main() {
     // 6. Hospital Supervisor (Training Supervisor)
     {
       natId: '1000000003',
-      nameAr: 'د. فهد المشرف — مستشفى برج الشمال',
+      nameAr: 'د. فهد المطيري — مدير تدريب مستشفى برج الشمال',
       email: 'hospital.supervisor@miran.health',
       username: 'hospitalsupervisor',
-      roleCode: 'training_supervisor',
+      roleCode: 'hospital_training_admin',
       orgId: northTowerHosp.id,
     },
     // 7. Trainer
@@ -677,7 +676,7 @@ async function main() {
   await prisma.task.createMany({
     data: [
       { organizationId: northTowerHosp.id, assignedToId: createdUserMap['trainee'].userAccount.id, assignedById: createdUserMap['trainer'].userAccount.id, titleAr: 'إكمال مرفق ECG للحالة السريرية', description: 'رفع صورة ECG وتقرير PDF للحالة المسجلة', dueDate: endDate, priority: 'high', referenceType: 'ClinicalCaseLog', referenceId: caseLog.id },
-      { organizationId: northTowerHosp.id, assignedToId: createdUserMap['trainer'].userAccount.id, assignedById: createdUserMap['training_supervisor'].userAccount.id, titleAr: 'مراجعة طلب تصحيح الحضور', description: 'اعتماد أو رفض طلب التصحيح المرسل من المتدرب', dueDate: endDate, priority: 'normal', referenceType: 'Attendance' },
+      { organizationId: northTowerHosp.id, assignedToId: createdUserMap['trainer'].userAccount.id, assignedById: createdUserMap['hospital_training_admin'].userAccount.id, titleAr: 'مراجعة طلب تصحيح الحضور', description: 'اعتماد أو رفض طلب التصحيح المرسل من المتدرب', dueDate: endDate, priority: 'normal', referenceType: 'Attendance' },
     ],
   });
 
@@ -806,7 +805,7 @@ async function main() {
   console.log('📌 3. Cluster Admin:        cluster@miran.health');
   console.log('📌 4. University Admin:     uni.admin@nbu.edu.sa');
   console.log('📌 5. Hospital Director:    hospital.director@miran.health');
-  console.log('📌 6. Hospital Supervisor:  hospital.supervisor@miran.health');
+  console.log('📌 6. Hospital Training Mgr: hospital.supervisor@miran.health');
   console.log('📌 7. Trainer:              salem@miran.health');
   console.log('📌 8. Trainee:              abdullah@miran.health');
   console.log('📌 9. Academic Supervisor:  academic@nbu.edu.sa');

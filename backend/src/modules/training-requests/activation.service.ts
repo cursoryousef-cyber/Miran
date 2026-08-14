@@ -61,7 +61,7 @@ export class ActivationService {
         referenceId: trainingRequestId,
         channels: ['in_app', 'email', 'push'],
       });
-      await this.notificationService.notifyOrgUsers(req.targetOrgId, 'hospital_administrator', {
+      await this.notificationService.notifyOrgUsers(req.targetOrgId, 'hospital_training_admin', {
         titleAr: `متدربون جدد بدأوا التدريب — ${label}`,
         bodyAr: `تم تفعيل ${activated.length} متدرب في مستشفاكم`,
         type: 'internship_activated',

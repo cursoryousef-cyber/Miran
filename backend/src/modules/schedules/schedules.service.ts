@@ -343,7 +343,7 @@ export class SchedulesService {
    * Publish Schedule: Transitions to published, creates Revision Snapshot, and generates Shifts / Notifications (Idempotently)
    */
   async publish(id: string, user: IAuthenticatedUser, changeReason?: string) {
-    const canPublish = user.roles.some((r) => ['hospital_training_admin', 'hospital_administrator', 'org_manager', 'platform_owner'].includes(r));
+    const canPublish = user.roles.some((r) => ['hospital_training_admin', 'org_manager', 'platform_owner'].includes(r));
     if (!canPublish) {
       throw new ForbiddenException('صلاحية النشر النهائي للجدول محصورة لإدارة التدريب بالمستشفى');
     }

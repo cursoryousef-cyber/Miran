@@ -275,46 +275,11 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
     C.INCIDENT_MANAGE,
     C.REPORT_VIEW,
   ],
-  // Legacy aliases for hospital administration
+  // hospital_administrator is NOT a training role. It administers the hospital
+  // as an organisation (members, incidents, reports) and holds ZERO training
+  // capabilities, so hospital_training_admin is the only hospital training
+  // management role in the model.
   hospital_administrator: [
-    C.DEPARTMENT_MANAGE,
-    C.CAPACITY_VIEW,
-    C.CAPACITY_MANAGE,
-    C.TRAINER_MANAGE,
-    C.ALLOCATION_HOSPITAL_ASSIGN,
-    C.ALLOCATION_HOSPITAL_REASSIGN,
-    C.TRAINEE_VIEW_HOSPITAL,
-    C.TRAINING_OPERATE,
-    C.LOGBOOK_VIEW,
-    C.TIMELINE_VIEW,
-    C.SCHEDULE_CREATE,
-    C.SCHEDULE_VIEW,
-    C.SCHEDULE_UPDATE,
-    C.SCHEDULE_DELETE,
-    C.SCHEDULE_PUBLISH,
-    C.ORG_VIEW,
-    C.ORG_MEMBER_VIEW,
-    C.ORG_MEMBER_MANAGE,
-    C.INCIDENT_VIEW,
-    C.INCIDENT_MANAGE,
-    C.REPORT_VIEW,
-  ],
-  hospitalAdmin: [
-    C.DEPARTMENT_MANAGE,
-    C.CAPACITY_VIEW,
-    C.CAPACITY_MANAGE,
-    C.TRAINER_MANAGE,
-    C.ALLOCATION_HOSPITAL_ASSIGN,
-    C.ALLOCATION_HOSPITAL_REASSIGN,
-    C.TRAINEE_VIEW_HOSPITAL,
-    C.TRAINING_OPERATE,
-    C.LOGBOOK_VIEW,
-    C.TIMELINE_VIEW,
-    C.SCHEDULE_CREATE,
-    C.SCHEDULE_VIEW,
-    C.SCHEDULE_UPDATE,
-    C.SCHEDULE_DELETE,
-    C.SCHEDULE_PUBLISH,
     C.ORG_VIEW,
     C.ORG_MEMBER_VIEW,
     C.ORG_MEMBER_MANAGE,
@@ -323,37 +288,9 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
     C.REPORT_VIEW,
   ],
 
-  // ── Department scope ──────────────────────────────────────────────────────
-  department_head: [
-    C.TRAINEE_VIEW_DEPARTMENT,
-    C.CAPACITY_VIEW,
-    C.EVALUATION_SUBMIT,
-    C.LOGBOOK_VIEW,
-    C.TIMELINE_VIEW,
-    C.SCHEDULE_CREATE,
-    C.SCHEDULE_VIEW,
-    C.SCHEDULE_UPDATE,
-    C.ORG_VIEW,
-    C.ORG_MEMBER_VIEW,
-    C.INCIDENT_VIEW,
-    C.REPORT_VIEW,
-  ],
-
-  // ── Field supervision — follow-up, not allocation ─────────────────────────
-  training_supervisor: [
-    C.TRAINEE_VIEW_HOSPITAL,
-    C.LOGBOOK_VIEW,
-    C.LOGBOOK_APPROVE,
-    C.EVALUATION_SUBMIT,
-    C.TIMELINE_VIEW,
-    C.SCHEDULE_CREATE,
-    C.SCHEDULE_VIEW,
-    C.SCHEDULE_UPDATE,
-    C.ORG_VIEW,
-    C.ORG_MEMBER_VIEW,
-    C.INCIDENT_VIEW,
-    C.REPORT_VIEW,
-  ],
+  // department_head, training_supervisor and hospitalAdmin are NOT roles. They have been
+  // removed. Any account still carrying those codes resolves to zero
+  // capabilities and is rejected by ScopeContextService.
 
   trainer: [
     C.TRAINEE_VIEW_ASSIGNED,

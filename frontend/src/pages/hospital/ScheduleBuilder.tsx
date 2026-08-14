@@ -101,7 +101,7 @@ export const ScheduleBuilder: React.FC = () => {
   });
 
   const isTrainerOrAdmin = user?.roles?.some((r: string) =>
-    ['trainer', 'training_supervisor', 'hospital_training_admin', 'hospital_administrator', 'org_manager', 'platform_owner'].includes(r),
+    ['trainer', 'hospital_training_admin', 'org_manager', 'platform_owner'].includes(r),
   );
 
   const { data: trainees } = useQuery({
@@ -241,7 +241,7 @@ export const ScheduleBuilder: React.FC = () => {
   };
 
   const canPublish = user?.roles?.some((r) =>
-    ['hospital_training_admin', 'hospital_administrator', 'org_manager', 'platform_owner'].includes(r),
+    ['hospital_training_admin', 'org_manager', 'platform_owner'].includes(r),
   );
 
   const daysHeader = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];

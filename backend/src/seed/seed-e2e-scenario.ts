@@ -117,20 +117,24 @@ async function account(params: {
     },
   });
 
+  // A role code with no Role row is exactly the state a removed legacy identity
+  // leaves behind (department_head and friends are gone from the model, and are
+  // deliberately NOT recreated here). The account is still seeded, roleless, so
+  // the authorisation tests can prove it reaches nothing.
   const role = await prisma.role.findUnique({ where: { code: params.roleCode } });
-  if (!role) throw new Error(`Role ${params.roleCode} missing — run seed-rbac first`);
-
-  await prisma.userRole.upsert({
-    where: {
-      userAccountId_roleId_organizationId: {
+  if (role) {
+    await prisma.userRole.upsert({
+      where: {
+        userAccountId_roleId_organizationId: {
+          userAccountId: acct.id, roleId: role.id, organizationId: params.organizationId,
+        },
+      },
+      update: {},
+      create: {
         userAccountId: acct.id, roleId: role.id, organizationId: params.organizationId,
       },
-    },
-    update: {},
-    create: {
-      userAccountId: acct.id, roleId: role.id, organizationId: params.organizationId,
-    },
-  });
+    });
+  }
 
   await prisma.userOrganization.upsert({
     where: {
@@ -145,10 +149,12 @@ async function account(params: {
     },
   });
 
-  const existingAssignment = await prisma.organizationAssignment.findFirst({
-    where: { userAccountId: acct.id, organizationId: params.organizationId, roleId: role.id },
-  });
-  if (!existingAssignment) {
+  const existingAssignment = role
+    ? await prisma.organizationAssignment.findFirst({
+        where: { userAccountId: acct.id, organizationId: params.organizationId, roleId: role.id },
+      })
+    : null;
+  if (role && !existingAssignment) {
     await prisma.organizationAssignment.create({
       data: {
         userAccountId: acct.id,
@@ -160,7 +166,7 @@ async function account(params: {
         sourceType: 'manual',
       },
     });
-  } else if (params.departmentId && !existingAssignment.departmentId) {
+  } else if (existingAssignment && params.departmentId && !existingAssignment.departmentId) {
     await prisma.organizationAssignment.update({
       where: { id: existingAssignment.id },
       data: { departmentId: params.departmentId },
@@ -202,6 +208,15 @@ export async function seedE2EScenario() {
     parentId: cluster.id,
   });
 
+  // A hospital's own capacity column is not the source of truth — the department
+  // sum is. Tests that exercise the capacity endpoints write to it, so it is
+  // reset here; otherwise a later run inherits the previous run's number and the
+  // "capacity equals the sum of its departments" invariant reads as broken.
+  await prisma.organization.updateMany({
+    where: { id: { in: [hospital1.id, hospital2.id] } },
+    data: { capacity: 0 },
+  });
+
   // ── Departments: hospital capacity is their sum, so these are the only
   //    place capacity is declared. H1 = 5 + 3 = 8, H2 = 4.
   const departments = {
@@ -209,6 +224,27 @@ export async function seedE2EScenario() {
     h1Paediatrics: await upsertDepartment(hospital1.id, 'PAED', 'الأطفال', 3),
     h2Internal: await upsertDepartment(hospital2.id, 'IM', 'الباطنة', 4),
   };
+
+  // Evaluation forms belong to the hospital that grades with them. Without at
+  // least one, a trainer has no form to attach a score to and the clinical
+  // grading path cannot run at all.
+  for (const [i, form] of [
+    { formType: 'mid_rotation', nameAr: 'استمارة تقييم منتصف الروتيشن', nameEn: 'Mid Rotation' },
+    { formType: 'end_rotation', nameAr: 'استمارة تقييم نهاية الروتيشن', nameEn: 'End Rotation' },
+  ].entries()) {
+    await prisma.evaluationForm.upsert({
+      where: { id: `e2e00000-0000-4000-8000-00000000000${i + 1}` },
+      create: {
+        id: `e2e00000-0000-4000-8000-00000000000${i + 1}`,
+        organizationId: hospital1.id,
+        nameAr: form.nameAr,
+        nameEn: form.nameEn,
+        formType: form.formType,
+        items: [{ code: 'clinical_reasoning', max: 5 }, { code: 'professionalism', max: 5 }],
+      },
+      update: { organizationId: hospital1.id, nameAr: form.nameAr, formType: form.formType, isActive: true },
+    });
+  }
 
   // Specialty codes live in the lookup table; the validation engine rejects any
   // trainee row carrying a code that is not registered there.
@@ -264,7 +300,10 @@ export async function seedE2EScenario() {
       nationalId: '9100000006', roleCode: 'hospital_administrator', organizationId: hospital1.id,
     }),
     h1DeptHead: await account({
-      email: SCENARIO.accounts.hospital1DeptHead, nameAr: 'رئيس قسم الباطنة',
+      // Deliberately carries a role code that is NOT part of the model.
+      // Every authorisation test using this account asserts it is refused, which
+      // is the regression guard for removed roles regaining access.
+      email: SCENARIO.accounts.hospital1DeptHead, nameAr: 'حساب بدور ملغى',
       nationalId: '9100000007', roleCode: 'department_head', organizationId: hospital1.id,
       departmentId: departments.h1Internal.id,
     }),
@@ -389,6 +428,11 @@ export async function resetE2EScenario() {
     await prisma.attendance.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
     await prisma.shift.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
     await prisma.clinicalCaseLog.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
+    // Call participation references the profile too; without this the profile
+    // delete below fails on the FK and every suite dies in its own setup.
+    await prisma.callParticipant.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
+    // Graduation approvals hold the same reference once a trainee completes.
+    await prisma.graduationApproval.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
     await prisma.competencyProgress.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
     await prisma.document.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });
     await prisma.traineeAllocation.deleteMany({ where: { traineeProfileId: { in: testProfileIds } } });

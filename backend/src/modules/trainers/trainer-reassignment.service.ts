@@ -567,10 +567,10 @@ export class TrainerReassignmentService {
         });
       }
 
-      // 4. Notify hospital training supervisor
+      // 4. Notify the hospital training management
       await this.notificationService.notifyOrgUsers(
         params.organizationId,
-        'training_supervisor',
+        'hospital_training_admin',
         {
           titleAr: 'تم تنفيذ إعادة إسناد مدرب',
           bodyAr: `تم نقل ${params.traineeName} من ${params.previousTrainerName} إلى ${params.newTrainerName}. السبب: ${params.reason}`,

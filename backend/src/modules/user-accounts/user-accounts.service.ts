@@ -28,10 +28,8 @@ export class UserAccountsService implements OnModuleInit {
   private async migrateDeprecatedRoles() {
     const canonicalRoles = [
       { code: 'platform_owner', nameAr: 'مالك المنصة الإلكترونية', nameEn: 'Platform Owner' },
-      { code: 'cluster_manager', nameAr: 'مشرف التدريب بالتجمع', nameEn: 'Cluster Training Manager' },
-      { code: 'hospital_training_admin', nameAr: 'إدارة التدريب بالمستشفى', nameEn: 'Hospital Training Admin' },
-      { code: 'department_head', nameAr: 'رئيس القسم السريري', nameEn: 'Department Head' },
-      { code: 'training_supervisor', nameAr: 'المشرف التدريبي بالمستشفى', nameEn: 'Training Supervisor' },
+      { code: 'cluster_manager', nameAr: 'مدير تدريب التجمع', nameEn: 'Cluster Training Manager' },
+      { code: 'hospital_training_admin', nameAr: 'مدير تدريب المستشفى', nameEn: 'Hospital Training Manager' },
       { code: 'university_administrator', nameAr: 'مسؤول الجامعة الموفدة', nameEn: 'University Administrator' },
       { code: 'academic_supervisor', nameAr: 'المشرف الأكاديمي', nameEn: 'Academic Supervisor' },
       { code: 'trainer', nameAr: 'المدرب السريري', nameEn: 'Clinical Trainer' },
@@ -52,7 +50,6 @@ export class UserAccountsService implements OnModuleInit {
     const legacyMap: [string, string][] = [
       ['system_admin', 'platform_owner'],
       ['cluster_administrator', 'cluster_manager'],
-      ['hospital_administrator', 'hospital_training_admin'],
       ['hospitalAdmin', 'hospital_training_admin'],
       ['academic_affairs', 'academic_supervisor'],
     ];
@@ -342,12 +339,12 @@ export class UserAccountsService implements OnModuleInit {
       throw new BadRequestException('تعذّر تحديد نطاق الحساب — يجب تحديد الجهة أو المستشفى');
     }
 
-    if (dto.roleCode && ['hospital_training_admin', 'hospital_administrator', 'hospitalAdmin'].includes(dto.roleCode)) {
+    if (dto.roleCode && dto.roleCode === 'hospital_training_admin') {
       const targetHospitalId = scope.hospitalId || primaryOrgId;
       const existingAdmin = await this.prisma.userRole.findFirst({
         where: {
           organizationId: targetHospitalId,
-          role: { code: { in: ['hospital_training_admin', 'hospital_administrator', 'hospitalAdmin'] } },
+          role: { code: 'hospital_training_admin' },
           userAccount: { deletedAt: null, isActive: true },
         },
         select: { userAccount: { select: { email: true } } },

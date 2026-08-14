@@ -97,8 +97,14 @@ afterAll(async () => {
 
 describe('Trainees: GET /trainees/incoming', () => {
   it('hospital 1 sees only its own hospital\'s incoming trainees, never hospital 2\'s', async () => {
+    // hospital_administrator is a non-training role: the incoming-trainee queue
+    // is a training route and is refused outright. Hospital scoping is proven
+    // through the role that legitimately reads that queue.
     const h1DirectorToken = await login(SCENARIO.accounts.hospital1Director);
-    const res = await http.get('/trainees/incoming').set(auth(h1DirectorToken));
+    expect((await http.get('/trainees/incoming').set(auth(h1DirectorToken))).status).toBe(403);
+
+    const h1TrainingToken = await login(SCENARIO.accounts.hospital1TrainingAdmin);
+    const res = await http.get('/trainees/incoming').set(auth(h1TrainingToken));
     expect(res.status).toBe(200);
     const ids = res.body.data.map((t: any) => t.id);
     expect(ids).not.toContain(h2Rotation.traineeProfileId);
@@ -472,14 +478,30 @@ describe('Independent Hospital & Hospital Training Admin Creation Workflow', () 
       expect(reqRes.status).toBe(201);
       const reqData = reqRes.body.data || reqRes.body;
       expect(reqData.targetOrgId).toBe(s.hospital1.id);
-      expect(reqData.status).toBe('hospital_review');
+      // Both paths enter the pipeline at 'submitted'. ('hospital_review' is a
+      // per-trainee row status with no outgoing TrainingRequest transitions.)
+      expect(reqData.status).toBe('submitted');
+      // The no-objection letter is carried in the request's notes payload
+      // (existing storage — no dedicated column is introduced for it).
+      const notes = JSON.parse(reqData.notes ?? '{}');
+      expect(notes.clusterLetterUrl).toBeTruthy();
 
-      // 2. Hospital 1 training admin receives this request under Hospital Scope
+      // 2. The cluster sends the roster, which is what puts it in front of the
+      //    hospital — the same step a university performs on Path A.
+      const submitRes = await http
+        .post(`/training-requests/${reqData.id}/trainees/submit`)
+        .set(auth(clusterToken));
+      expect([200, 201]).toContain(submitRes.status);
+
+      // 3. Hospital 1 training admin receives this request under Hospital Scope
       const reviewQueueRes = await http.get('/training-requests/hospital-review').set(auth(hospital1Token));
       expect(reviewQueueRes.status).toBe(200);
       const rows = reviewQueueRes.body.data || reviewQueueRes.body || [];
       const foundRow = rows.find((r: any) => r.trainingRequestId === reqData.id || r.trainingRequest?.id === reqData.id);
       expect(foundRow).toBeDefined();
+      // 4. The training period declared on the request reaches the trainee row.
+      expect(String(foundRow.startDate).slice(0, 10)).toBe('2026-09-01');
+      expect(String(foundRow.endDate).slice(0, 10)).toBe('2027-08-31');
     });
   });
 });

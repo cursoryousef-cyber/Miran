@@ -39,6 +39,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const LogbookPage = lazy(() => import('./pages/Logbook'));
 const Reports = lazy(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
 const HospitalWorkspace = lazy(() => import('./pages/hospital/HospitalWorkspace'));
+const CallsHub = lazy(() => import('./pages/hospital/CallsHub').then(m => ({ default: m.CallsHub })));
 const TrainerReassignment = lazy(() => import('./pages/TrainerReassignment').then(m => ({ default: m.TrainerReassignment })));
 const TrainerLeaveManagement = lazy(() => import('./pages/TrainerLeaveManagement').then(m => ({ default: m.TrainerLeaveManagement })));
 const ProfilePage = lazy(() => import('./pages/Profile'));
@@ -75,10 +76,15 @@ const RoleRoute: React.FC<{ allowedRoles: string[]; children: React.ReactNode }>
 };
 
 // ─── Role constants ──────────────────────────────────────────────────────
+// Only canonical roles are listed here.
 const PLATFORM = ['platform_owner', 'system_admin', 'holding_administrator', 'org_manager'];
 const UNIVERSITY = ['university_administrator', 'academic_affairs'];
 const CLUSTER = ['cluster_administrator', 'cluster_manager', 'training_director'];
-const HOSPITAL = ['hospital_administrator', 'hospital_training_admin', 'department_head', 'training_supervisor'];
+// Hospital TRAINING management — hospital_training_admin only.
+// hospital_administrator is not a training role and gates no training route.
+const HOSPITAL = ['hospital_training_admin'];
+/** Generic (non-training) hospital administration. */
+const HOSPITAL_ADMIN = ['hospital_administrator'];
 const TRAINER = ['trainer'];
 const TRAINEE = ['trainee'];
 const ACADEMIC = ['academic_supervisor'];
@@ -129,22 +135,32 @@ export const App: React.FC = () => {
                   <Route path="intakes" element={<RoleRoute allowedRoles={[...UNIVERSITY, ...CLUSTER, ...HOSPITAL, ...ACADEMIC]}><AcademicIntakes /></RoleRoute>} />
                   <Route path="corrections" element={<RoleRoute allowedRoles={UNIVERSITY}><UniversityCorrections /></RoleRoute>} />
                   {/* Hospital operational workspace — the single hospital surface. */}
-                  <Route path="hospital" element={<RoleRoute allowedRoles={[...HOSPITAL, 'training_supervisor', ...PLATFORM]}><HospitalWorkspace /></RoleRoute>} />
+                  <Route path="hospital" element={<RoleRoute allowedRoles={[...HOSPITAL, ...PLATFORM]}><HospitalWorkspace /></RoleRoute>} />
                   {/* The former standalone hospital pages now live as workspace
                       sections. The routes are kept so existing links and
                       bookmarks land on the right section instead of 404-ing. */}
                   <Route path="hospital-capacity" element={<Navigate to="/hospital?tab=capacity" replace />} />
                   <Route path="hospital-review" element={<Navigate to="/hospital?tab=requests" replace />} />
 
-                  {/* Calls → Hospital Workspace calls tab */}
-                  <Route path="calls" element={<Navigate to="/hospital?tab=calls" replace />} />
+                  {/* Calls. Hospital training management drives them from its
+                      workspace tab; the trainer launches them and the trainee
+                      answers them, and neither may enter the hospital workspace,
+                      so they get the same hub on its own route. */}
+                  <Route
+                    path="calls"
+                    element={
+                      <RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...TRAINEE, ...PLATFORM]}>
+                        <CallsHub />
+                      </RoleRoute>
+                    }
+                  />
 
-                  <Route path="acceptance-chain" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, 'training_supervisor', ...PLATFORM]}><AcceptanceChain /></RoleRoute>} />
-                  <Route path="incidents" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...CLUSTER, TRAINEE[0], ...PLATFORM]}><Incidents /></RoleRoute>} />
-                  <Route path="graduation" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, 'training_supervisor', 'university_administrator', ...PLATFORM]}><Graduation /></RoleRoute>} />
+                  <Route path="acceptance-chain" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...PLATFORM]}><AcceptanceChain /></RoleRoute>} />
+                  <Route path="incidents" element={<RoleRoute allowedRoles={[...HOSPITAL, ...HOSPITAL_ADMIN, ...TRAINER, ...CLUSTER, TRAINEE[0], ...PLATFORM]}><Incidents /></RoleRoute>} />
+                  <Route path="graduation" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, 'university_administrator', ...PLATFORM]}><Graduation /></RoleRoute>} />
 
                   {/* Hospital + Trainer */}
-                  <Route path="org-members" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...UNIVERSITY]}><OrgMembersPage /></RoleRoute>} />
+                  <Route path="org-members" element={<RoleRoute allowedRoles={[...HOSPITAL, ...HOSPITAL_ADMIN, ...TRAINER, ...UNIVERSITY]}><OrgMembersPage /></RoleRoute>} />
                   <Route path="trainer-reassignment" element={<Navigate to="/hospital?tab=reassignment" replace />} />
                   <Route path="trainer-leaves" element={<Navigate to="/hospital?tab=leaves" replace />} />
 
