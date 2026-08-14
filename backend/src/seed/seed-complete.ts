@@ -1,13 +1,14 @@
 // Complete remaining seed data: trainees, rotations, calls, notifications
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { devSeedPassword } from './dev-password';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🔧 Completing remaining seed data...');
 
-  const rootPasswordHash = await bcrypt.hash('Miran@Admin2024!', 10);
+  const rootPasswordHash = await bcrypt.hash(devSeedPassword(), 10);
 
   // Find existing data
   const hosp1 = await prisma.organization.findUnique({ where: { code: 'HOSP-PABMH' } });

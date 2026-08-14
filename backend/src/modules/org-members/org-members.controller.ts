@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { roleScope } from '../../common/role-scope';
 import { OrganizationAssignmentService } from '../organization-assignments/organization-assignment.service';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 
 @ApiTags('Org Members (إدارة أعضاء الجهة)')
 @Controller('org-members')
@@ -160,7 +161,16 @@ export class OrgMembersController {
       }
     }
 
-    const passwordHash = await bcrypt.hash(dto.password || 'Miran@Admin2024!', 10);
+    // No shared fallback password. This previously defaulted to a fixed string
+    // that was also published as the Swagger example for POST /auth/login, so
+    // every member created without an explicit password shared one publicly
+    // documented credential. When the caller supplies no password the account
+    // gets a random one that nobody holds — it cannot be logged into until a
+    // password is set through the normal reset/activation path.
+    const passwordHash = await bcrypt.hash(
+      dto.password || randomBytes(32).toString('base64url'),
+      10,
+    );
 
     // إنشاء/تحديث Person
     const person = await this.prisma.person.upsert({

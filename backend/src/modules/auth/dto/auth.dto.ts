@@ -2,12 +2,12 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class LoginDto {
-  @ApiProperty({ example: 'admin@miran.health', description: 'البريد الإلكتروني' })
+  @ApiProperty({ example: 'user@example.com', description: 'البريد الإلكتروني' })
   @IsEmail({}, { message: 'البريد الإلكتروني غير صالح' })
   @IsNotEmpty({ message: 'البريد الإلكتروني مطلوب' })
   email!: string;
 
-  @ApiProperty({ example: 'Miran@Admin2024!', description: 'كلمة المرور' })
+  @ApiProperty({ example: '********', description: 'كلمة المرور' })
   @IsString()
   @MinLength(6, { message: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' })
   password!: string;

@@ -1,14 +1,18 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { devSeedPassword } from './dev-password';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🚀 Seeding Production Demo Accounts (Linked Supervisor, Trainer, Trainee)...');
 
-  const passwordSupervisor = await bcrypt.hash('Demo@Supervisor2026!', 10);
-  const passwordTrainer = await bcrypt.hash('Demo@Trainer2026!', 10);
-  const passwordTrainee = await bcrypt.hash('Demo@Trainee2026!', 10);
+  // Demo fixture credentials come from DEV_SEED_PASSWORD (or a random per-run
+  // value), not from committed literals. See dev-password.ts.
+  const demoPasswordHash = await bcrypt.hash(devSeedPassword(), 10);
+  const passwordSupervisor = demoPasswordHash;
+  const passwordTrainer = demoPasswordHash;
+  const passwordTrainee = demoPasswordHash;
 
   // 1. Fetch main hospital organization
   let hospital = await prisma.organization.findFirst({

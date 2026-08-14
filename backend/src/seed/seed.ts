@@ -8,6 +8,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { devSeedPassword } from './dev-password';
 
 const prisma = new PrismaClient();
 
@@ -70,7 +71,8 @@ async function main() {
     createdRoles[r.code] = record.id;
   }
 
-  const defaultPasswordHash = await bcrypt.hash('Miran@Admin2024!', 10);
+  const devPassword = devSeedPassword();
+  const defaultPasswordHash = await bcrypt.hash(devPassword, 10);
 
   // --------------------------------------------------------------------------
   // 3. ORGANIZATIONS (تجمع الحدود الشمالية + جامعة الحدود الشمالية + برج الشمال)
@@ -809,7 +811,7 @@ async function main() {
   console.log('📌 7. Trainer:              salem@miran.health');
   console.log('📌 8. Trainee:              abdullah@miran.health');
   console.log('📌 9. Academic Supervisor:  academic@nbu.edu.sa');
-  console.log('🔑 Password for ALL:        Miran@Admin2024!');
+  console.log('🔑 Password for ALL:        (see DEV_SEED_PASSWORD note printed above)');
   console.log('========================================================================');
 }
 

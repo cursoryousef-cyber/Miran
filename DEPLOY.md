@@ -26,7 +26,7 @@ Configure these in Render Dashboard (**Environment Settings**):
 | `NODE_ENV` | `production` | `production` |
 | `PORT` | `10000` (Render default port) | `10000` |
 | `API_PREFIX` | `api/v1` | `api/v1` |
-| `DATABASE_URL` | Neon PostgreSQL Connection String | `postgresql://neondb_owner:...@ep-...neon.tech/neondb?sslmode=require` |
+| `DATABASE_URL` | Neon PostgreSQL Connection String | `postgresql://<user>:<password>@<host>/<database>?sslmode=require` |
 | `JWT_ACCESS_SECRET` | Secret key for access tokens (min 32 chars) | `miran-prod-jwt-access-secret-2024` |
 | `JWT_REFRESH_SECRET` | Secret key for refresh tokens (min 32 chars) | `miran-prod-jwt-refresh-secret-2024` |
 | `CARD_HMAC_SECRET` | Secret key for Digital ID Cards HMAC | `miran-prod-card-hmac-secret-2024` |
@@ -59,4 +59,7 @@ npx ts-node src/seed/seed.ts
 
 ## 🔑 Initial Admin Credentials (Platform Owner)
 - **Email**: `admin@miran.health`
-- **Password**: `Miran@Admin2024!`
+- **Password**: supplied per environment via `SEED_PASSWORD_PLATFORM_OWNER`.
+  Never commit a password here. The production seed
+  (`src/seed/seed-production.ts`) reads every account password from its own
+  environment variable and refuses to run if any is missing.

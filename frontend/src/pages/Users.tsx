@@ -40,7 +40,7 @@ export const UsersPage: React.FC = () => {
     nameEn: '',
     email: '',
     phone: '',
-    password: 'Miran@Admin2024!',
+    password: '',
     roleCode: 'trainer',
     organizationId: '',
     hospitalId: '',
@@ -197,7 +197,7 @@ export const UsersPage: React.FC = () => {
       if (payload.roleCode) cleanPayload.roleCode = payload.roleCode;
       if (payload.organizationId) cleanPayload.organizationId = payload.organizationId;
       if (payload.hospitalId) cleanPayload.hospitalId = payload.hospitalId;
-      if (payload.password && payload.password.trim().length > 0 && payload.password !== 'Miran@Admin2024!') {
+      if (payload.password && payload.password.trim().length > 0) {
         cleanPayload.password = payload.password;
       }
       const res = await apiClient.patch(`/user-accounts/${id}`, cleanPayload);
@@ -230,7 +230,7 @@ export const UsersPage: React.FC = () => {
       nameEn: '',
       email: '',
       phone: '',
-      password: 'Miran@Admin2024!',
+      password: '',
       roleCode: 'trainer',
       organizationId: defaultOrg,
       hospitalId: defaultHosp,

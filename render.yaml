@@ -31,8 +31,11 @@ services:
       # and breaks all clients — confirmed locally against the production build.
       - key: API_PREFIX
         value: api
+      # Off in production. /api/docs served the full API surface — every route,
+      # schema, and request example — to anonymous callers. Set to "true" only
+      # for a deliberate, temporary investigation.
       - key: SWAGGER_ENABLED
-        value: true
+        value: false
       - key: CORS_ORIGIN
         value: "*"
       - key: DATABASE_URL

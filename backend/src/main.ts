@@ -63,7 +63,15 @@ async function bootstrap() {
   app.useGlobalInterceptors(new AuditInterceptor(reflector, prismaService));
 
   // Production-Safe Swagger Documentation Setup
-  const isSwaggerEnabled = process.env.SWAGGER_ENABLED !== 'false';
+  //
+  // Outside production the docs stay on unless explicitly switched off. In
+  // production they are OFF unless SWAGGER_ENABLED is exactly 'true' — the old
+  // `!== 'false'` default meant an unset variable published the entire API
+  // surface, including request examples, to anonymous callers at /api/docs.
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isSwaggerEnabled = isProduction
+    ? process.env.SWAGGER_ENABLED === 'true'
+    : process.env.SWAGGER_ENABLED !== 'false';
   if (isSwaggerEnabled) {
     const config = new DocumentBuilder()
       .setTitle('مِران (Miran) API Documentation')

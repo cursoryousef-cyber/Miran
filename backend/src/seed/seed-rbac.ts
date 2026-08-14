@@ -1,13 +1,14 @@
 // seed-rbac.ts — Seed الأدوار الأربعة وصلاحياتها وحسابات اختبار لكل دور
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { devSeedPassword } from './dev-password';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🎭 Seeding RBAC — 4 Roles + Permissions + Test Accounts...\n');
 
-  const passwordHash = await bcrypt.hash('Miran@Admin2024!', 10);
+  const passwordHash = await bcrypt.hash(devSeedPassword(), 10);
 
   // ── 1. الصلاحيات الكاملة ──────────────────────────────────────────────────
   const allPermissions = [
@@ -421,11 +422,11 @@ async function main() {
 
   console.log('\n✅ RBAC Seed Completed!\n');
   console.log('Test Accounts:');
-  console.log('  platform@miran.health / Miran@Admin2024!  → platform_owner');
-  console.log('  admin@miran.health    / Miran@Admin2024!  → org_manager');
-  console.log('  academic@miran.health / Miran@Admin2024!  → academic_supervisor');
-  console.log('  salem@miran.health    / Miran@Admin2024!  → trainer');
-  console.log('  abdullah@miran.health / Miran@Admin2024!  → trainee');
+  console.log('  platform@miran.health → platform_owner');
+  console.log('  admin@miran.health    → org_manager');
+  console.log('  academic@miran.health → academic_supervisor');
+  console.log('  salem@miran.health    → trainer');
+  console.log('  abdullah@miran.health → trainee');
 }
 
 main()
