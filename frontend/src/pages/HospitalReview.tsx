@@ -12,7 +12,9 @@ import {
 } from '@mui/material';
 
 const STATUS_LABELS: Record<string, { label: string; color: 'success' | 'warning' | 'error' | 'info' | 'default' }> = {
-  allocated: { label: 'موزَّع — بانتظار المراجعة', color: 'info' },
+  submitted: { label: 'مرسل من التجمع — بانتظار التخصيص', color: 'info' },
+  cluster_approved: { label: 'معتمد من التجمع — بانتظار المستشفى', color: 'info' },
+  allocated: { label: 'موزَّع — بانتظار مراجعة المستشفى', color: 'info' },
   hospital_review: { label: 'قيد مراجعة المستشفى', color: 'warning' },
   on_hold: { label: 'موقوف مؤقتاً', color: 'default' },
   hospital_returned_to_cluster: { label: 'مُعاد للتجمع', color: 'error' },
@@ -77,6 +79,9 @@ export const HospitalReview: React.FC = () => {
   });
 
   const rows: any[] = data?.data || [];
+  // pendingUpstreamRows: submitted / cluster_approved — visible but NOT actionable.
+  // These require Cluster approval + allocation before the hospital can act.
+  const pendingUpstreamRows: any[] = data?.pendingUpstreamRows || [];
 
   const startReviewMut = useMutation({
     mutationFn: (rowId: string) =>
@@ -161,11 +166,21 @@ export const HospitalReview: React.FC = () => {
     setDialog(type);
   };
 
+  const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'accepted' | 'rejected'>('all');
+
+  // Stats are computed over actionable rows only — upstream-pending rows are shown separately.
   const pendingRows = rows.filter((r: any) => ['allocated', 'hospital_review'].includes(r.status)).length;
   const onHold = rows.filter((r: any) => r.status === 'on_hold').length;
-  const acceptedRows = rows.filter((r: any) => ['accepted', 'active', 'cluster_approved'].includes(r.status)).length;
-  const rejectedRows = rows.filter((r: any) => ['rejected', 'returned'].includes(r.status)).length;
+  const acceptedRows = rows.filter((r: any) => ['accepted', 'active', 'hospital_administrator_accepted', 'supervisor_accepted', 'training_supervisor_accepted', 'trainer_accepted'].includes(r.status)).length;
+  const rejectedRows = rows.filter((r: any) => ['rejected', 'returned', 'hospital_returned_to_cluster'].includes(r.status)).length;
   const missingDocs = rows.filter((r: any) => (r.requiredDocuments?.length ?? 0) > 0).length;
+
+  const filteredRows = rows.filter((r: any) => {
+    if (filterTab === 'pending') return ['allocated', 'hospital_review', 'on_hold'].includes(r.status);
+    if (filterTab === 'accepted') return ['accepted', 'active', 'hospital_administrator_accepted', 'supervisor_accepted', 'training_supervisor_accepted', 'trainer_accepted'].includes(r.status);
+    if (filterTab === 'rejected') return ['rejected', 'returned', 'hospital_returned_to_cluster'].includes(r.status);
+    return true;
+  });
 
   return (
     <DataPageShell
@@ -173,25 +188,64 @@ export const HospitalReview: React.FC = () => {
         subtitle={<>{user?.activeOrganization?.nameAr} — إسناد المتدربين الموزَّعين للأقسام والمدربين وإدارة التوزيع الداخلي</>}
         loading={isLoading}
         stats={[
-          { label: 'إجمالي الصفوف', value: rows.length, icon: Inbox, tone: 'primary' },
-          { label: 'بانتظار المراجعة', value: pendingRows, icon: Clock3, tone: pendingRows ? 'warning' : 'success' },
-          { label: 'مقبولون', value: acceptedRows, icon: CheckCircle2, tone: 'success' },
-          { label: 'معلّقون', value: onHold, icon: PauseCircle, tone: onHold ? 'warning' : 'neutral' },
+          { label: 'إجمالي السجلات القابلة للإجراء', value: rows.length, icon: Inbox, tone: 'primary' },
+          { label: 'بانتظار إجراء المستشفى', value: pendingRows + onHold, icon: Clock3, tone: (pendingRows + onHold) ? 'warning' : 'success' },
+          { label: 'مقبولون ونشطون', value: acceptedRows, icon: CheckCircle2, tone: 'success' },
+          { label: 'معلّقون مؤقتاً', value: onHold, icon: PauseCircle, tone: onHold ? 'warning' : 'neutral' },
           { label: 'مرفوضون/مُعادون', value: rejectedRows, icon: XCircle, tone: rejectedRows ? 'danger' : 'neutral' },
           { label: 'تنتظر مستندات', value: missingDocs, icon: FileWarning, tone: missingDocs ? 'warning' : 'neutral' },
         ]}
     >
-      <div style={{ marginBottom: '16px' }}><ViewToggle value={view} onChange={setView} /></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <Button
+            variant={filterTab === 'all' ? 'contained' : 'outlined'}
+            size="small"
+            onClick={() => setFilterTab('all')}
+            style={{ borderRadius: '20px' }}
+          >
+            الكل ({rows.length})
+          </Button>
+          <Button
+            variant={filterTab === 'pending' ? 'contained' : 'outlined'}
+            size="small"
+            color="warning"
+            onClick={() => setFilterTab('pending')}
+            style={{ borderRadius: '20px' }}
+          >
+            بانتظار إجراء المستشفى ({pendingRows + onHold})
+          </Button>
+          <Button
+            variant={filterTab === 'accepted' ? 'contained' : 'outlined'}
+            size="small"
+            color="success"
+            onClick={() => setFilterTab('accepted')}
+            style={{ borderRadius: '20px' }}
+          >
+            المقبولون والنشطون ({acceptedRows})
+          </Button>
+          <Button
+            variant={filterTab === 'rejected' ? 'contained' : 'outlined'}
+            size="small"
+            color="error"
+            onClick={() => setFilterTab('rejected')}
+            style={{ borderRadius: '20px' }}
+          >
+            المرفوضون والمعادون ({rejectedRows})
+          </Button>
+        </div>
+        <ViewToggle value={view} onChange={setView} />
+      </div>
 
       {successMsg && <Alert severity="success" onClose={() => setSuccessMsg(null)}>{successMsg}</Alert>}
       {errorMsg && <Alert severity="error" onClose={() => setErrorMsg(null)}>{errorMsg}</Alert>}
 
       {view === 'cards' ? (
-        (rows).length === 0 ? (
-          <div className="glass-card"><EmptyState icon={Inbox} title="لا توجد طلبات تدريب واردة للمراجعة حالياً" hint="سيتم ظهور الطلبات المحالة من التجمع الصحي تلقائياً فور إرسالها." /></div>
+        filteredRows.length === 0 ? (
+          <div className="glass-card"><EmptyState icon={Inbox} title="لا توجد سجلات تطابق الفلتر الحالي" hint="تأكد من اختيار التبويب المناسب أو انتظار تحويل طلبات جديدة من التجمع الصحي." /></div>
         ) : (
           <CardGrid>
-            {rows.map((row: any) => {
+            {filteredRows.map((row: any) => {
               const st = STATUS_LABELS[row.status] || { label: row.status };
               const req = row.trainingRequest;
               const specialtyName = row.specialty || req?.specialtyAr || req?.specialtyEn || 'غير محدد';
@@ -212,7 +266,7 @@ export const HospitalReview: React.FC = () => {
                   badges={[
                     { label: st.label, tone: row.status === 'on_hold' ? 'warning' : row.status === 'rejected' ? 'danger' : 'info' },
                     { label: `التخصص: ${specialtyName}`, tone: 'success' as const },
-                    ...(req?.studentCount || req?.totalTraineesRequested || 1 ? [{ label: `عدد المطلوبين بالطلب: ${req.totalTraineesRequested}`, tone: 'violet' as const }] : []),
+                    ...(req?.totalTraineesRequested ?? req?.studentCount ?? 1 ? [{ label: `عدد المطلوبين بالطلب: ${req?.totalTraineesRequested ?? req?.studentCount ?? 1}`, tone: 'violet' as const }] : []),
                   ]}
                   metrics={[
                     { label: 'القسم السريري', value: row.assignedDepartment?.nameAr ?? 'غير محدد', tone: 'info' },
@@ -220,10 +274,12 @@ export const HospitalReview: React.FC = () => {
                   ]}
                   footnote={`رقم الطلب: ${req?.requestNumber ?? '—'} · الفترة: ${periodText}`}
                   actions={[
-                    ...(row.status === 'allocated' ? [{
+                    // start-review: only valid from allocated or on_hold (backend: allocated→hospital_review, on_hold→hospital_review)
+                    ...(['allocated', 'on_hold'].includes(row.status) ? [{
                       label: 'بدء المراجعة والقبول', icon: PlayCircle, tone: 'info' as const,
                       onClick: () => startReviewMut.mutate(row.id),
                     }] : []),
+                    // assign/docs/correction: available once hospital has control (allocated, hospital_review, on_hold)
                     ...(['allocated', 'hospital_review', 'on_hold'].includes(row.status) ? [{
                       label: 'توزيع قسم/مدرب', icon: Edit3, tone: 'success' as const,
                       onClick: () => openDialog(row, 'assign'),
@@ -236,10 +292,12 @@ export const HospitalReview: React.FC = () => {
                       label: 'طلب تصحيح بيانات', icon: FileWarning, tone: 'warning' as const,
                       onClick: () => openDialog(row, 'correction'),
                     }] : []),
+                    // hold: allocated or hospital_review (not on_hold — already held)
                     ...(['allocated', 'hospital_review'].includes(row.status) ? [{
                       label: 'إيقاف مؤقت', icon: PauseCircle, tone: 'neutral' as const,
                       onClick: () => openDialog(row, 'hold'),
                     }] : []),
+                    // return/reject: only once in active hospital review
                     ...(['hospital_review', 'on_hold'].includes(row.status) ? [{
                       label: 'إعادة للتجمع', icon: ArrowRightLeft, tone: 'warning' as const,
                       onClick: () => openDialog(row, 'return'),
@@ -248,10 +306,12 @@ export const HospitalReview: React.FC = () => {
                       label: 'رفض', icon: XCircle, tone: 'danger' as const,
                       onClick: () => openDialog(row, 'reject'),
                     }] : []),
+                    // resume: only from on_hold
                     ...(row.status === 'on_hold' ? [{
                       label: 'استئناف المراجعة', icon: PlayCircle, tone: 'success' as const,
                       onClick: () => resumeMut.mutate(row.id),
                     }] : []),
+                    // details: always visible
                     { label: 'عرض التفاصيل', icon: Eye, tone: 'neutral' as const, onClick: () => openDialog(row, 'details') },
                   ]}
                 />
@@ -275,10 +335,10 @@ export const HospitalReview: React.FC = () => {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={6} align="center"><CircularProgress size={24} /></TableCell></TableRow>
-            ) : rows.length === 0 ? (
-              <TableRow><TableCell colSpan={6} align="center" style={{ color: '#64748B', padding: '32px' }}>لا توجد طلبات تدريب واردة للمراجعة حالياً</TableCell></TableRow>
+            ) : filteredRows.length === 0 ? (
+              <TableRow><TableCell colSpan={6} align="center" style={{ color: '#64748B', padding: '32px' }}>لا توجد سجلات تطابق الفلتر الحالي</TableCell></TableRow>
             ) : (
-              rows.map((row: any) => {
+              filteredRows.map((row: any) => {
                 const st = STATUS_LABELS[row.status] || { label: row.status, color: 'default' as const };
                 const req = row.trainingRequest;
                 const specialtyName = row.specialty || req?.specialtyAr || req?.specialtyEn || 'غير محدد';
@@ -317,7 +377,8 @@ export const HospitalReview: React.FC = () => {
                             <Eye size={14} />
                           </Button>
                         </Tooltip>
-                        {row.status === 'allocated' && (
+                        {/* start-review: only allocated or on_hold (backend valid source states) */}
+                        {['allocated', 'on_hold'].includes(row.status) && (
                           <Tooltip title="بدء المراجعة والقبول">
                             <Button size="small" variant="contained" style={{ background: '#0284c7', minWidth: 0, padding: '4px 8px' }}
                               onClick={() => startReviewMut.mutate(row.id)} disabled={startReviewMut.isPending}>
@@ -325,6 +386,7 @@ export const HospitalReview: React.FC = () => {
                             </Button>
                           </Tooltip>
                         )}
+                        {/* assign/docs/correction: available when hospital has control */}
                         {['allocated', 'hospital_review', 'on_hold'].includes(row.status) && (
                           <Tooltip title="توزيع على القسم والمدرب">
                             <Button size="small" variant="contained" style={{ background: '#059669', minWidth: 0, padding: '4px 8px' }}
@@ -349,6 +411,7 @@ export const HospitalReview: React.FC = () => {
                             </Tooltip>
                           </>
                         )}
+                        {/* hold: allocated or hospital_review only */}
                         {['allocated', 'hospital_review'].includes(row.status) && (
                           <Tooltip title="إيقاف مؤقت">
                             <Button size="small" variant="outlined" style={{ borderColor: '#64748B', color: '#64748B', minWidth: 0, padding: '4px 8px' }}
@@ -357,6 +420,7 @@ export const HospitalReview: React.FC = () => {
                             </Button>
                           </Tooltip>
                         )}
+                        {/* return/reject: only once in active hospital review */}
                         {['hospital_review', 'on_hold'].includes(row.status) && (
                           <Tooltip title="إعادة للتجمع">
                             <Button size="small" variant="outlined" style={{ borderColor: '#D97706', color: '#D97706', minWidth: 0, padding: '4px 8px' }}
@@ -617,6 +681,58 @@ export const HospitalReview: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* ── Upstream-Pending Section (read-only, no hospital actions) ──────── */}
+      {pendingUpstreamRows.length > 0 && (
+        <div style={{ marginTop: '32px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', padding: '12px 16px', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: '12px' }}>
+            <AlertTriangle size={18} style={{ color: '#D97706', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '15px', color: '#92400E' }}>بانتظار إجراء التجمع الصحي ({pendingUpstreamRows.length} سجل)</div>
+              <div style={{ fontSize: '12px', color: '#B45309', marginTop: '2px' }}>هذه الطلبات وردت من التجمع أو الجامعة وتنتظر اعتماد التجمع وتخصيصها قبل أن يتمكن المستشفى من مراجعتها. لا يمكن اتخاذ أي إجراء عليها في الوقت الحالي.</div>
+            </div>
+          </div>
+          <TableContainer component={Paper} className="glass-card">
+            <Table size="small">
+              <TableHead>
+                <TableRow style={{ background: 'rgba(251,191,36,0.06)' }}>
+                  <TableCell style={{ fontWeight: 700 }}>المتدرب</TableCell>
+                  <TableCell style={{ fontWeight: 700 }}>رقم الطلب</TableCell>
+                  <TableCell style={{ fontWeight: 700 }}>التخصص</TableCell>
+                  <TableCell style={{ fontWeight: 700 }}>الجهة المرسلة</TableCell>
+                  <TableCell style={{ fontWeight: 700 }}>حالة الصف</TableCell>
+                  <TableCell style={{ fontWeight: 700 }}>المرحلة المطلوبة</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {pendingUpstreamRows.map((row: any) => {
+                  const req = row.trainingRequest;
+                  const nextStep = row.status === 'submitted'
+                    ? 'اعتماد التجمع (approveTrainee)'
+                    : 'تخصيص التجمع (allocation engine)';
+                  return (
+                    <TableRow key={row.id} hover>
+                      <TableCell>{row.nameAr}<br/><span style={{ color: '#64748b', fontSize: '12px' }}>{row.nationalId}</span></TableCell>
+                      <TableCell>{req?.requestNumber || '—'}</TableCell>
+                      <TableCell>{row.specialty || req?.specialty || '—'}</TableCell>
+                      <TableCell>{req?.sourceOrg?.nameAr || '—'}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={row.status === 'submitted' ? 'مرسل — بانتظار اعتماد التجمع' : 'معتمد من التجمع — بانتظار التخصيص'}
+                          size="small"
+                          style={{ background: 'rgba(251,191,36,0.15)', color: '#92400E', fontWeight: 600, fontSize: '11px' }}
+                        />
+                      </TableCell>
+                      <TableCell style={{ color: '#B45309', fontSize: '12px', fontStyle: 'italic' }}>{nextStep}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </div>
+      )}
+
     </DataPageShell>
   );
 };

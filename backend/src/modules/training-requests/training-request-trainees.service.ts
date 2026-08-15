@@ -293,12 +293,19 @@ export class TrainingRequestTraineesService {
       data: { status: TRAINEE_ROW_STATUS.SUBMITTED, updatedById: user?.accountId },
     });
 
-    const validation = await this.validationEngine.validateTrainees(trainingRequestId);
+    // Resolve request type before running validation — Direct Cluster Requests
+    // must not be penalised for missing universityOrgId.
+    const requestForValidation = await this.prisma.trainingRequest.findUnique({
+      where: { id: trainingRequestId },
+      select: { notes: true, targetOrgId: true, requestNumber: true },
+    });
+    const isDirectRequest = this.resolveIsDirectRequest(requestForValidation ?? null);
 
-    const request = await this.prisma.trainingRequest.findUnique({ where: { id: trainingRequestId } });
-    if (request) {
-      await this.notificationService.notifyOrgUsers(request.targetOrgId, 'cluster_administrator', {
-        titleAr: `دفعة متدربين جديدة بانتظار المراجعة (${request.requestNumber})`,
+    const validation = await this.validationEngine.validateTrainees(trainingRequestId, isDirectRequest);
+
+    if (requestForValidation) {
+      await this.notificationService.notifyOrgUsers(requestForValidation.targetOrgId, 'cluster_administrator', {
+        titleAr: `دفعة متدربين جديدة بانتظار المراجعة (${requestForValidation.requestNumber})`,
         bodyAr: `تم إرسال ${rows.length} متدرب للمراجعة من الجامعة.`,
         type: 'training_request_batch_submitted',
         referenceType: 'TrainingRequest',
@@ -316,12 +323,48 @@ export class TrainingRequestTraineesService {
   }
 
   async runValidation(trainingRequestId: string) {
-    const results = await this.validationEngine.validateTrainees(trainingRequestId);
+    // Resolve request type so the validation engine can exempt Direct Cluster
+    // Requests from the university check without weakening University Request rules.
+    const request = await this.prisma.trainingRequest.findUnique({
+      where: { id: trainingRequestId },
+      select: { notes: true },
+    });
+    const isDirectRequest = this.resolveIsDirectRequest(request);
+
+    const results = await this.validationEngine.validateTrainees(trainingRequestId, isDirectRequest);
     const invalidCount = results.filter((r) => r.errors.length > 0).length;
     return {
       data: results,
       summary: { total: results.length, valid: results.length - invalidCount, invalid: invalidCount },
     };
+  }
+
+  /**
+   * Determines whether a request is a Direct Cluster Request.
+   *
+   * Detection relies exclusively on requestType stored in the notes JSON
+   * (set at creation time in training-requests.service.ts):
+   *   requestType === 'cluster_request'  → Direct, universityOrgId may be NULL
+   *   requestType === 'university_request' (or absent) → University, must have universityOrgId
+   *
+   * We deliberately do NOT infer this from sourceOrg.organizationType.code because
+   * a request whose source org happens to be a cluster is not automatically a
+   * Direct Request — the caller’s intent (requestType) is the authoritative signal.
+   */
+  private resolveIsDirectRequest(
+    request: { notes: unknown } | null,
+  ): boolean {
+    if (!request?.notes) return false;
+    try {
+      const parsed =
+        typeof request.notes === 'string'
+          ? JSON.parse(request.notes)
+          : (request.notes as Record<string, unknown>);
+      return (parsed as any)?.requestType === 'cluster_request';
+    } catch {
+      // notes is not valid JSON — treat as University request (safe default)
+      return false;
+    }
   }
 
   // ─── التعديل مع سجل الإصدارات (المرحلة 2/3) ───────────────────────────────
@@ -1036,45 +1079,128 @@ export class TrainingRequestTraineesService {
     return { success: true, message: 'تمت استعادة مراجعة المتدرب' };
   }
 
-  /** قائمة الصفوف بحالة hospital_review/on_hold لوحة مراجعة المستشفى وسلسلة القبول */
+  // ─── Status groups used to split the Hospital Inbox response ────────────────
+
+  /**
+   * States in which a Hospital user has a valid backend action:
+   *   allocated    → hospital_review (startHospitalReview)
+   *   hospital_review → accepted / rejected / returned / on_hold
+   *   on_hold      → hospital_review (resume) or returned_to_cluster
+   *   hospital_returned_to_cluster / accepted / active — historical visibility
+   */
+  private static readonly HOSPITAL_ACTIONABLE_STATUSES = [
+    'allocated',
+    'hospital_review',
+    'on_hold',
+    'hospital_returned_to_cluster',
+    'accepted',
+    'active',
+  ] as const;
+
+  /**
+   * States awaiting an upstream Cluster action before the hospital can act.
+   * These rows are returned as read-only context so the hospital can see incoming
+   * requests, but the UI must not offer any state-mutating actions for them.
+   *   submitted       → Cluster must call approveTrainee() first
+   *   cluster_approved → Cluster must run the allocation engine first
+   */
+  private static readonly UPSTREAM_PENDING_STATUSES = [
+    'submitted',
+    'cluster_approved',
+  ] as const;
+
+  /**
+   * Hospital Inbox query — returns two distinct groups:
+   *
+   * data                — rows in HOSPITAL_ACTIONABLE_STATUSES that the hospital
+   *                       can act on right now.
+   * pendingUpstreamRows — rows in UPSTREAM_PENDING_STATUSES that are visible as
+   *                       incoming context but require Cluster action before the
+   *                       hospital can review them. These must be treated as
+   *                       read-only by the caller.
+   *
+   * Both groups respect the same cross-hospital isolation (assignedHospitalId,
+   * sourceOrgId, or targetOrgId must match the resolved hospital org set).
+   */
   async findForHospitalReview(hospitalOrgId: string) {
     const childHospitals = await this.prisma.organization.findMany({
       where: { parentId: hospitalOrgId },
       select: { id: true },
     });
-    const hospitalOrgIds = Array.from(new Set([hospitalOrgId, ...childHospitals.map(h => h.id)]));
+    const hospitalOrgIds = Array.from(new Set([hospitalOrgId, ...childHospitals.map((h) => h.id)]));
 
-    const data = await this.prisma.trainingRequestTrainee.findMany({
+    const allStatuses = [
+      ...TrainingRequestTraineesService.HOSPITAL_ACTIONABLE_STATUSES,
+      ...TrainingRequestTraineesService.UPSTREAM_PENDING_STATUSES,
+    ];
+
+    const include = {
+      documents: true,
+      assignedHospital: { select: { id: true, nameAr: true, nameEn: true } },
+      assignedDepartment: { select: { id: true, nameAr: true, nameEn: true, capacity: true } },
+      assignedTrainer: { select: { id: true, person: { select: { id: true, nameAr: true, nameEn: true } } } },
+      trainingRequest: {
+        select: {
+          id: true,
+          requestNumber: true,
+          specialty: true,
+          trainingStartDate: true,
+          trainingEndDate: true,
+          createdAt: true,
+          studentCount: true,
+          status: true,
+          notes: true,
+          // organizationType is needed to tell Path B (cluster-originated) apart
+          // from Path A when classifying a `submitted` row below.
+          sourceOrg: {
+            select: {
+              id: true,
+              nameAr: true,
+              nameEn: true,
+              organizationType: { select: { code: true } },
+            },
+          },
+          targetOrg: { select: { id: true, nameAr: true, nameEn: true } },
+        },
+      },
+    } as const;
+
+    const allRows = await this.prisma.trainingRequestTrainee.findMany({
       where: {
         OR: [
           { assignedHospitalId: { in: hospitalOrgIds } },
           { trainingRequest: { sourceOrgId: { in: hospitalOrgIds } } },
           { trainingRequest: { targetOrgId: { in: hospitalOrgIds } } },
         ],
-        status: { in: ['allocated', 'submitted', 'cluster_approved', 'hospital_review', 'on_hold', 'hospital_returned_to_cluster', 'accepted', 'active'] },
+        status: { in: allStatuses },
       },
-      include: {
-        documents: true,
-        assignedHospital: { select: { id: true, nameAr: true, nameEn: true } },
-        assignedDepartment: { select: { id: true, nameAr: true, nameEn: true, capacity: true } },
-        assignedTrainer: { select: { id: true, person: { select: { id: true, nameAr: true, nameEn: true } } } },
-        trainingRequest: {
-          select: {
-            id: true,
-            requestNumber: true,
-            specialty: true,
-            trainingStartDate: true,
-            trainingEndDate: true,
-            createdAt: true,
-            studentCount: true,
-            status: true,
-            sourceOrg: { select: { id: true, nameAr: true, nameEn: true } },
-            targetOrg: { select: { id: true, nameAr: true, nameEn: true } },
-          },
-        },
-      },
+      include,
       orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
     });
-    return { data };
+
+    const actionableSet = new Set<string>(TrainingRequestTraineesService.HOSPITAL_ACTIONABLE_STATUSES);
+
+    // Path-conditional classification.
+    //
+    // On Path A (university → cluster → hospital) a `submitted` row is still
+    // awaiting the cluster's approveTrainee(), so it is read-only context.
+    //
+    // On Path B the cluster IS the originator: it raised the request and attached
+    // the university's no-objection letter, so submitting the roster is itself the
+    // cluster's action. Requiring a second cluster approval would insert a step the
+    // approved workflow does not have, so a `submitted` row on this path reaches
+    // the hospital as immediately actionable.
+    const isDirectClusterRow = (row: { trainingRequest?: { sourceOrg?: { organizationType?: { code?: string } | null } | null } | null }) =>
+      row.trainingRequest?.sourceOrg?.organizationType?.code === 'cluster';
+
+    const isActionable = (row: (typeof allRows)[number]) =>
+      actionableSet.has(row.status) || (row.status === 'submitted' && isDirectClusterRow(row));
+
+    // The two groups are mutually exclusive by construction: every row is tested
+    // once and lands in exactly one of them, so no row can appear twice.
+    const data = allRows.filter((r) => isActionable(r));
+    const pendingUpstreamRows = allRows.filter((r) => !isActionable(r));
+
+    return { data, pendingUpstreamRows };
   }
 }

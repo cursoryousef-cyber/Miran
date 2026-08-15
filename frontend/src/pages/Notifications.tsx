@@ -78,7 +78,7 @@ export const Notifications: React.FC = () => {
           <PanelSkeleton rows={6} />
         ) : error ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: space.md, padding: space['2xl'] }}>
-            <EmptyState icon={BellRing} title="تعذر تحميل الإشعارات" hint="تحقق من اتصالك وأعد المحاولة" />
+            <EmptyState icon={BellRing} title="تعذر تحميل الإشعارات — حاول مرة أخرى" hint="تحقق من اتصالك وأعد المحاولة" />
             <Button variant="outlined" size="small" onClick={() => refetch()}>إعادة المحاولة</Button>
           </div>
         ) : rows.length === 0 ? (

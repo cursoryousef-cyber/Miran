@@ -26,12 +26,16 @@ const MANDATORY_DOCUMENT_TYPES = [
 /**
  * محرك التحقق لمرحلة مراجعة التجمع الصحي (Stage 2).
  * يفحص كل صف متدرب ضمن الدفعة ويكتب الأخطاء في validationErrors.
+ *
+ * isDirectRequest — عند تمريرها true (طلب تجمع مباشر)، تُعفى الصفوف من اشتراط
+ * universityOrgId لأن التجمع نفسه هو الجهة المُرسِلة ولا توجد جامعة راعية.
+ * طلبات الجامعات تستمر في اشتراط universityOrgId صالح.
  */
 @Injectable()
 export class ValidationEngineService {
   constructor(private prisma: PrismaService) {}
 
-  async validateTrainees(trainingRequestId: string): Promise<RowValidationResult[]> {
+  async validateTrainees(trainingRequestId: string, isDirectRequest = false): Promise<RowValidationResult[]> {
     const rows = await this.prisma.trainingRequestTrainee.findMany({
       where: {
         trainingRequestId,
@@ -178,7 +182,13 @@ export class ValidationEngineService {
       // the university's no-objection letter attached to the request is what
       // authorises the training, so the sponsor-organisation rule applies to
       // university-originated requests only.
+      //
+      // The rule itself is Miran's, unchanged: the path is derived from the source
+      // organisation type. `isDirectRequest` is the explicit flag newer callers
+      // pass; it defaults to false, so every existing caller behaves exactly as
+      // before and only callers that opt in add the second signal.
       const isDirectClusterRequest =
+        isDirectRequest ||
         row.trainingRequest?.sourceOrg?.organizationType?.code === 'cluster';
       if (isDirectClusterRequest) {
         // no sponsor-organisation requirement on this path

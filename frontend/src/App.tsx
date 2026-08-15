@@ -167,7 +167,7 @@ export const App: React.FC = () => {
 
                   {/* Trainer + Trainee */}
                   <Route path="logbook" element={<RoleRoute allowedRoles={[...TRAINER, ...TRAINEE, ...HOSPITAL]}><LogbookPage /></RoleRoute>} />
-                  <Route path="notifications" element={<RoleRoute allowedRoles={[...TRAINER, ...TRAINEE]}><Notifications /></RoleRoute>} />
+                  <Route path="notifications" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...TRAINEE]}><Notifications /></RoleRoute>} />
 
                   {/* Trainee only */}
                   <Route path="declarations" element={<RoleRoute allowedRoles={TRAINEE}><Declarations /></RoleRoute>} />
