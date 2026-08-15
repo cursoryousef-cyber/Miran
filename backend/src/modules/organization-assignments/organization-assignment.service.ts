@@ -265,58 +265,72 @@ export class OrganizationAssignmentService {
       orderBy: [{ isPrimary: 'desc' }, { startDate: 'asc' }],
     });
 
-    let rows: Array<{
-      userAccountId: string; isActive: boolean; isPrimary: boolean; userAccount: any;
-      assignedRoles: Array<{ id: string; code: string; nameAr: string }>;
-    }>;
-
-    if (assignments.length > 0) {
-      // A representative row decides the membership flags (active/primary), the
-      // same as before. Roles are collected separately from every assignment the
-      // account holds in this org — the earlier version kept only the
-      // representative row's own fields and never exposed `role` at all, so an
-      // account whose role lived on OrganizationAssignment (rather than the
-      // legacy UserRole table) reached the caller with an empty role list. That
-      // is what made every role filter and role badge on the org-members screen
-      // silently miss anyone assigned through the newer model.
-      const byAccount = new Map<string, { userAccountId: string; isActive: boolean; isPrimary: boolean; userAccount: any }>();
-      const rolesByAccount = new Map<string, Map<string, { id: string; code: string; nameAr: string }>>();
-      for (const a of assignments) {
-        const existing = byAccount.get(a.userAccountId);
-        if (!existing || (a.isActive && !existing.isActive) || (a.isPrimary && !existing.isPrimary)) {
-          byAccount.set(a.userAccountId, {
-            userAccountId: a.userAccountId,
-            isActive: a.isActive,
-            isPrimary: a.isPrimary,
-            userAccount: a.userAccount,
-          });
-        }
-        if (a.role) {
-          if (!rolesByAccount.has(a.userAccountId)) rolesByAccount.set(a.userAccountId, new Map());
-          rolesByAccount.get(a.userAccountId)!.set(a.role.id, {
-            id: a.role.id, code: a.role.code, nameAr: a.role.nameAr,
-          });
-        }
+    // A representative row decides the membership flags (active/primary), the
+    // same as before. Roles are collected separately from every assignment the
+    // account holds in this org — the earlier version kept only the
+    // representative row's own fields and never exposed `role` at all, so an
+    // account whose role lived on OrganizationAssignment (rather than the
+    // legacy UserRole table) reached the caller with an empty role list. That
+    // is what made every role filter and role badge on the org-members screen
+    // silently miss anyone assigned through the newer model.
+    const byAccount = new Map<string, { userAccountId: string; isActive: boolean; isPrimary: boolean; userAccount: any }>();
+    const rolesByAccount = new Map<string, Map<string, { id: string; code: string; nameAr: string }>>();
+    for (const a of assignments) {
+      const existing = byAccount.get(a.userAccountId);
+      if (!existing || (a.isActive && !existing.isActive) || (a.isPrimary && !existing.isPrimary)) {
+        byAccount.set(a.userAccountId, {
+          userAccountId: a.userAccountId,
+          isActive: a.isActive,
+          isPrimary: a.isPrimary,
+          userAccount: a.userAccount,
+        });
       }
-      rows = [...byAccount.values()].map((r) => ({
-        ...r,
-        assignedRoles: [...(rolesByAccount.get(r.userAccountId)?.values() ?? [])],
-      }));
-    } else {
-      const userOrgs = await this.prisma.userOrganization.findMany({
-        where: { organizationId: { in: orgIds } },
-        include: { userAccount: userAccountInclude },
-      });
-      rows = userOrgs.map((uo) => ({
+      if (a.role) {
+        if (!rolesByAccount.has(a.userAccountId)) rolesByAccount.set(a.userAccountId, new Map());
+        rolesByAccount.get(a.userAccountId)!.set(a.role.id, {
+          id: a.role.id, code: a.role.code, nameAr: a.role.nameAr,
+        });
+      }
+    }
+
+    // Legacy fallback — resolved per account, not per organisation. The
+    // previous version only queried UserOrganization when the *whole org* had
+    // zero OrganizationAssignment rows, and used OrganizationAssignment
+    // exclusively otherwise. Every membership write (POST /org-members) always
+    // creates an OrganizationAssignment row for the new member, so the moment
+    // one member existed under the new model, this branch flipped for the
+    // entire org and every legacy-only member (no assignment row yet) vanished
+    // from the very next list call — the exact "11 members disappear after
+    // adding one" symptom. Accounts already covered by an assignment row are
+    // left untouched; only accounts with no assignment row fall back to their
+    // UserOrganization record, so both sources contribute to the same list.
+    const coveredAccountIds = [...byAccount.keys()];
+    const legacyUserOrgs = await this.prisma.userOrganization.findMany({
+      where: {
+        organizationId: { in: orgIds },
+        ...(coveredAccountIds.length > 0 ? { userAccountId: { notIn: coveredAccountIds } } : {}),
+      },
+      include: { userAccount: userAccountInclude },
+    });
+    for (const uo of legacyUserOrgs) {
+      if (byAccount.has(uo.userAccountId)) continue;
+      byAccount.set(uo.userAccountId, {
         userAccountId: uo.userAccountId,
         isActive: uo.isActive,
         isPrimary: uo.isPrimary,
         userAccount: uo.userAccount,
-        // Legacy membership carries no role of its own; the account's UserRole
-        // rows (merged in by the controller) are the only source here.
-        assignedRoles: [],
-      }));
+      });
+      // Legacy membership carries no role of its own; the account's UserRole
+      // rows (merged in by the controller) are the only source here.
     }
+
+    let rows: Array<{
+      userAccountId: string; isActive: boolean; isPrimary: boolean; userAccount: any;
+      assignedRoles: Array<{ id: string; code: string; nameAr: string }>;
+    }> = [...byAccount.values()].map((r) => ({
+      ...r,
+      assignedRoles: [...(rolesByAccount.get(r.userAccountId)?.values() ?? [])],
+    }));
 
     // Stable ordering so paging is deterministic (the legacy query had none).
     rows.sort((a, b) => a.userAccountId.localeCompare(b.userAccountId));
@@ -350,21 +364,23 @@ export class OrganizationAssignmentService {
       distinct.get(r.organizationId)!.add(r.userAccountId);
     }
 
-    const missing: string[] = [];
-    for (const id of organizationIds) {
-      if (distinct.has(id)) counts.set(id, distinct.get(id)!.size);
-      else missing.push(id);
+    // Legacy accounts are merged in per organization, not only for organizations
+    // with zero assignment rows — the same per-org "any assignment row present
+    // disqualifies the whole legacy fallback" bug that made org-members list
+    // drop legacy-only accounts the moment one member existed under the new
+    // model also undercounted here, since this powers the same member-count
+    // KPI shown on the directory list and hospital cards.
+    const legacyRows = await this.prisma.userOrganization.findMany({
+      where: { organizationId: { in: organizationIds } },
+      select: { organizationId: true, userAccountId: true },
+    });
+    for (const r of legacyRows) {
+      if (!distinct.has(r.organizationId)) distinct.set(r.organizationId, new Set());
+      distinct.get(r.organizationId)!.add(r.userAccountId);
     }
 
-    // Legacy fallback only for organizations with no assignment rows at all.
-    if (missing.length > 0) {
-      const legacy = await this.prisma.userOrganization.groupBy({
-        by: ['organizationId'],
-        where: { organizationId: { in: missing } },
-        _count: { userAccountId: true },
-      });
-      for (const id of missing) counts.set(id, 0);
-      for (const g of legacy) counts.set(g.organizationId, g._count.userAccountId);
+    for (const id of organizationIds) {
+      counts.set(id, distinct.get(id)?.size ?? 0);
     }
 
     return counts;

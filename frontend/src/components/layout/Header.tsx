@@ -17,6 +17,9 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
   // (name only) and the avatar. Labels and the email are dropped rather than
   // allowed to wrap or clip.
   const isCompact = useMediaQuery(theme.breakpoints.down('sm'));
+  const isPlatformRole = ['platform_owner', 'system_admin', 'holding_administrator'].some(
+    (r) => user?.roles?.includes(r),
+  );
   const [orgAnchorEl, setOrgAnchorEl] = useState<null | HTMLElement>(null);
   const [userAnchorEl, setUserAnchorEl] = useState<null | HTMLElement>(null);
 
@@ -83,7 +86,17 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
           }}
         >
           <Building size={16} color="#0F766E" style={{ flexShrink: 0 }} />
-          {!isCompact && <span style={{ flexShrink: 0 }}>الجهة الحالية:</span>}
+          {!isCompact && (
+            <span style={{ flexShrink: 0 }}>
+              {/* Platform-level roles are national by default — their "home"
+                  organisation is only a display/switch anchor, never a scope
+                  filter, so the label must not read as "your organisation".
+                  Showing it unqualified was what made a platform_owner whose
+                  home org happens to be a cluster look cluster-scoped, even
+                  though every list/KPI on the page was actually national. */}
+              {isPlatformRole ? 'النطاق (وطني) — الجهة النشطة:' : 'الجهة الحالية:'}
+            </span>
+          )}
           <span style={{
             color: '#0D9488', fontWeight: 800, minWidth: 0,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',

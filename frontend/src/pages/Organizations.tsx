@@ -710,6 +710,36 @@ export const Organizations: React.FC = () => {
           <Button onClick={() => setOpenDetails(null)}>إغلاق</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Delete confirmation. The row/tree delete buttons only ever set
+          `deleteId`; nothing rendered this dialog and nothing called
+          `deleteMutation.mutate`, so the mutation was unreachable and the
+          delete action was silently inert. */}
+      <Dialog open={Boolean(deleteId)} onClose={() => setDeleteId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800 }}>تأكيد حذف الجهة</DialogTitle>
+        <DialogContent dividers>
+          <Typography>
+            سيتم حذف الجهة (حذف مؤقت Soft Delete) وإخفاؤها من القوائم والشجرة التنظيمية. هل تريد المتابعة؟
+          </Typography>
+          {deleteMutation.isError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              <AlertTitle>تعذر حذف الجهة</AlertTitle>
+              {(deleteMutation.error as any)?.response?.data?.message || 'حدث خطأ غير متوقع'}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setDeleteId(null)} disabled={deleteMutation.isPending}>إلغاء</Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={deleteMutation.isPending}
+            onClick={() => deleteId && deleteMutation.mutate(deleteId)}
+          >
+            {deleteMutation.isPending ? 'جارٍ الحذف...' : 'حذف'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </DataPageShell>
   );
 };

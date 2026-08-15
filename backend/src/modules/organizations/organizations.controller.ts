@@ -75,8 +75,19 @@ export class OrganizationsController {
   async getHospitalCards(
     @Query('clusterId') clusterId?: string,
     @CurrentUser() user?: IAuthenticatedUser,
+    @Scope() scope?: ScopeContext,
   ) {
-    const targetClusterId = clusterId || user?.organizationId;
+    // Platform sessions (visibleOrgIds === null) are national by default — an
+    // explicit ?clusterId is an optional, soft display filter, but this must
+    // never fall back to the caller's own home organisation for a
+    // platform-level role. That fallback previously fired unconditionally,
+    // so a platform_owner/system_admin whose home org happens to be a
+    // cluster saw hospital cards (capacity/occupied — merged into the
+    // /organizations list) scoped to that one cluster, while /statistics
+    // (which has no such fallback) stayed correctly national. Non-platform
+    // roles keep the original behaviour: default to their own organisation.
+    const isPlatformScope = !scope || scope.visibleOrgIds === null;
+    const targetClusterId = clusterId || (isPlatformScope ? undefined : user?.organizationId);
     return this.organizationsService.getHospitalCardsMetrics(targetClusterId);
   }
 
