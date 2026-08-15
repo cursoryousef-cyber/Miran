@@ -1,9 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength, ValidateIf } from 'class-validator';
 
 export class CreateUserAccountDto {
   @ApiPropertyOptional({ description: 'معرف الشخص (Person ID) المرتبط' })
   @IsOptional()
+  @ValidateIf((o) => !!o.personId && o.personId.trim().length > 0)
   @IsUUID('4', { message: 'معرف الشخص غير صالح' })
   personId?: string;
 

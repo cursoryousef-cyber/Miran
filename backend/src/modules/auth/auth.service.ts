@@ -100,8 +100,15 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const account = await this.prisma.userAccount.findUnique({
-      where: { email: dto.email.toLowerCase() },
+    const input = (dto.email || '').trim().toLowerCase();
+    const account = await this.prisma.userAccount.findFirst({
+      where: {
+        OR: [
+          { email: input },
+          { username: input },
+        ],
+        deletedAt: null,
+      },
       include: { person: true },
     });
 

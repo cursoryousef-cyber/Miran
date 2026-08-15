@@ -35,7 +35,7 @@ async function bootstrap() {
   // Global Prefix & API Versioning
   const apiPrefix = process.env.API_PREFIX || 'api';
   app.setGlobalPrefix(apiPrefix, {
-    exclude: ['/', 'health', 'api/docs'],
+    exclude: ['/', 'api/docs'],
   });
   app.enableVersioning({
     type: VersioningType.URI,

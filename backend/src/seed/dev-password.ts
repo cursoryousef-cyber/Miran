@@ -28,12 +28,9 @@ export function devSeedPassword(): string {
     return cached;
   }
 
-  // Local fixture only — printed deliberately so the developer can sign in.
-  cached = `Dev-${randomBytes(12).toString('base64url')}`;
-  console.log(
-    '🔑 DEV_SEED_PASSWORD is not set — generated a random password for this run:\n' +
-      `   ${cached}\n` +
-      '   Set DEV_SEED_PASSWORD to choose your own. Development databases only.',
-  );
+  // Local fixture only — default unified password for dev accounts.
+  cached = process.env.DEV_SEED_PASSWORD || 'Aa123456';
+  // randomBytes available for dynamic generation if required: randomBytes(12).toString('base64url');
+  console.log(`🔑 DEV_SEED_PASSWORD set to: ${cached}`);
   return cached;
 }

@@ -21,7 +21,7 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 export const SCENARIO = {
-  password: 'Test@12345',
+  password: process.env.DEV_SEED_PASSWORD ?? 'Aa123456',
   accounts: {
     platform: 'e2e.platform@miran.test',
     universityAdmin: 'e2e.uni@miran.test',

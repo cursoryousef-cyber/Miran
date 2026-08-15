@@ -265,9 +265,14 @@ export class UserAccountsService implements OnModuleInit {
   }
 
   async create(dto: CreateUserAccountDto, user?: IAuthenticatedUser) {
-    // Check if email is already taken
-    const existing = await this.prisma.userAccount.findUnique({
-      where: { email: dto.email.toLowerCase() },
+    const emailInput = dto.email.trim().toLowerCase();
+    const cleanOrgId = dto.organizationId?.trim() || undefined;
+    const cleanHospId = dto.hospitalId?.trim() || undefined;
+    const cleanNatId = dto.nationalId?.trim() || undefined;
+
+    // Check if email is already taken by an active (non-deleted) account
+    const existing = await this.prisma.userAccount.findFirst({
+      where: { email: emailInput, deletedAt: null },
     });
     if (existing) {
       throw new ConflictException('البريد الإلكتروني مسجل بحساب آخر مسبقاً');
@@ -275,20 +280,20 @@ export class UserAccountsService implements OnModuleInit {
 
     const scope = await this.resolveScope({
       roleCode: dto.roleCode,
-      organizationId: dto.organizationId,
-      hospitalId: dto.hospitalId,
+      organizationId: cleanOrgId,
+      hospitalId: cleanHospId,
     });
 
-    let personId = dto.personId;
+    let personId = dto.personId?.trim() || undefined;
 
     if (!personId) {
-      let person = dto.nationalId
-        ? await this.prisma.person.findUnique({ where: { nationalId: dto.nationalId } })
+      let person = cleanNatId
+        ? await this.prisma.person.findUnique({ where: { nationalId: cleanNatId } })
         : null;
 
       if (!person) {
         person = await this.prisma.person.findFirst({
-          where: { email: dto.email.toLowerCase() },
+          where: { email: emailInput },
         });
       }
 

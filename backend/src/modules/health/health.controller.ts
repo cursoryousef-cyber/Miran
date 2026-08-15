@@ -57,6 +57,13 @@ export class HealthController {
   }
 
   @Public()
+  @Get('services')
+  @ApiOperation({ summary: 'مراقبة خدمات المنصة والتجهيزات (Health Services)' })
+  async getServicesHealth() {
+    return this.getDetailedHealth();
+  }
+
+  @Public()
   @Get()
   @ApiOperation({ summary: 'فحص الجاهزية البسيط' })
   async check() {
