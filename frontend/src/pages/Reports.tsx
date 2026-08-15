@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { PageHeader, DataPageShell } from '../components/ui';
 import { apiClient } from '../api/client';
 import { FileSpreadsheet, Download, RefreshCw, CheckCircle2, FileText, Clock3, XCircle } from 'lucide-react';
-import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Alert, LinearProgress } from '@mui/material';
+import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Alert, LinearProgress, Tooltip } from '@mui/material';
 
 export const Reports: React.FC = () => {
   const [generatedMsg, setGeneratedMsg] = useState<string | null>(null);
@@ -16,7 +16,7 @@ export const Reports: React.FC = () => {
     },
   });
 
-  const { data: myReports, refetch, isLoading: isLoadingReports } = useQuery({
+  const { data: myReports, refetch, isLoading: isLoadingReports, isError: isErrorReports } = useQuery({
     queryKey: ['my-reports'],
     queryFn: async () => {
       const res = await apiClient.get('/reports/my-reports');
@@ -39,6 +39,18 @@ export const Reports: React.FC = () => {
 
   const defs: any[] = definitions ?? [];
   const reports: any[] = myReports ?? [];
+
+  // The chip must read the row's own status: the stats below already count
+  // pending and failed runs, so rendering every row as "مكتمل" contradicts them.
+  const statusChip = (status: string) => {
+    if (['completed', 'ready'].includes(status)) {
+      return { icon: <CheckCircle2 size={14} />, label: 'مكتمل', color: 'success' as const };
+    }
+    if (status === 'failed') {
+      return { icon: <XCircle size={14} />, label: 'فشل', color: 'error' as const };
+    }
+    return { icon: <Clock3 size={14} />, label: 'قيد التوليد', color: 'warning' as const };
+  };
   const ready = reports.filter((r: any) => ['completed', 'ready'].includes(r.status)).length;
   const running = reports.filter((r: any) => ['pending', 'processing', 'running'].includes(r.status)).length;
   const failed = reports.filter((r: any) => r.status === 'failed').length;
@@ -59,6 +71,7 @@ export const Reports: React.FC = () => {
 
       {(isLoadingDefs || isLoadingReports) && <LinearProgress sx={{ borderRadius: 1 }} />}
       {isErrorDefs && <Alert severity="error">تعذر تحميل قوالب التقارير من الخادم</Alert>}
+      {isErrorReports && <Alert severity="error">تعذر تحميل سجل التقارير المُنتجة من الخادم</Alert>}
 
       {generatedMsg && <Alert severity="success" onClose={() => setGeneratedMsg(null)}>{generatedMsg}</Alert>}
 
@@ -76,7 +89,14 @@ export const Reports: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {definitions?.map((def: any) => (
+              {!isLoadingDefs && !isErrorDefs && defs.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} style={{ padding: '24px', color: '#64748B' }}>
+                    لا توجد قوالب تقارير معرّفة لجهتك. القوالب تُعرَّف مركزياً، ولا يمكن توليد أي تقرير قبل إضافة قالب واحد على الأقل.
+                  </TableCell>
+                </TableRow>
+              )}
+              {defs.map((def: any) => (
                 <TableRow key={def.id}>
                   <TableCell style={{ fontWeight: 700, color: '#0F172A' }}>{def.nameAr}</TableCell>
                   <TableCell><Chip label={def.reportType} size="small" variant="outlined" /></TableCell>
@@ -114,19 +134,35 @@ export const Reports: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {myReports?.map((rep: any) => (
-                <TableRow key={rep.id}>
-                  <TableCell style={{ fontWeight: 700, color: '#0F172A' }}>{rep.reportDefinition?.nameAr}</TableCell>
-                  <TableCell>{new Date(rep.createdAt).toLocaleString('ar-SA')}</TableCell>
-                  <TableCell style={{ fontWeight: 700, color: '#047857' }}>{rep.rowCount} سجل</TableCell>
-                  <TableCell><Chip icon={<CheckCircle2 size={14} />} label="مكتمل" color="success" size="small" /></TableCell>
-                  <TableCell>
-                    <Button variant="outlined" size="small" startIcon={<Download size={14} />}>
-                      تحميل PDF
-                    </Button>
+              {!isLoadingReports && !isErrorReports && reports.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} style={{ padding: '24px', color: '#64748B' }}>
+                    لم تولّد أي تقرير بعد. اختر قالباً من الأعلى واضغط «توليد الآن».
                   </TableCell>
                 </TableRow>
-              ))}
+              )}
+              {reports.map((rep: any) => {
+                const st = statusChip(rep.status);
+                return (
+                  <TableRow key={rep.id}>
+                    <TableCell style={{ fontWeight: 700, color: '#0F172A' }}>{rep.reportDefinition?.nameAr ?? '—'}</TableCell>
+                    <TableCell>{rep.createdAt ? new Date(rep.createdAt).toLocaleString('ar-SA') : '—'}</TableCell>
+                    <TableCell style={{ fontWeight: 700, color: '#047857' }}>{rep.rowCount ?? 0} سجل</TableCell>
+                    <TableCell><Chip icon={st.icon} label={st.label} color={st.color} size="small" /></TableCell>
+                    <TableCell>
+                      {/* No download endpoint exists on the API yet, so the control
+                          states that plainly instead of pretending to download. */}
+                      <Tooltip title="خدمة تنزيل الملفات غير متاحة بعد — التقرير مولَّد ومحفوظ">
+                        <span>
+                          <Button variant="outlined" size="small" startIcon={<Download size={14} />} disabled>
+                            تحميل PDF
+                          </Button>
+                        </span>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
