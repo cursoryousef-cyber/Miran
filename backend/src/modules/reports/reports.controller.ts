@@ -2,7 +2,7 @@ import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
 import { GenerateReportDto } from './dto/report.dto';
-import { CurrentUser, OrgContext, RequirePermissions } from '../../common/decorators';
+import { CurrentUser, RequirePermissions } from '../../common/decorators';
 import { JwtAuthGuard, PermissionsGuard } from '../../common/guards';
 import { IAuthenticatedUser } from '../../common/interfaces';
 
@@ -16,8 +16,8 @@ export class ReportsController {
   @Get('definitions')
   @ApiOperation({ summary: 'قائمة قوالب التقارير المتاحة' })
   @RequirePermissions('view_reports')
-  async findAllDefinitions(@OrgContext() orgId: string) {
-    return this.reportsService.findAllDefinitions(orgId);
+  async findAllDefinitions(@CurrentUser() user: IAuthenticatedUser) {
+    return this.reportsService.findAllDefinitions(user);
   }
 
   @Post('generate')
