@@ -59,15 +59,10 @@ const PLATFORM_ROLES = [
   'system_admin',
   'holding_administrator',
 ];
-const DEPARTMENT_ROLES = ['department_head'];
-
 /** Roles that are confined to a single hospital when that hospital is active. */
 const HOSPITAL_ROLES = [
   'hospital_training_admin',
   'hospital_administrator',
-  'hospitalAdmin',
-  'training_supervisor',
-  'department_head',
   'trainer',
   'trainee',
 ];
@@ -116,22 +111,14 @@ export class ScopeContextService {
     );
     const isHospitalContext = orgTypeCode === 'hospital';
 
-    const isDepartmentScoped =
-      !isPlatform &&
-      isHospitalContext &&
-      roles.some((r) => DEPARTMENT_ROLES.includes(r));
-
-    const departmentIds = isDepartmentScoped
-      ? await this.resolveDepartmentIds(user.accountId, user.organizationId)
-      : [];
+    // No role is department-scoped: department_head is not a role in this model.
+    const departmentIds: string[] = [];
 
     const level: ScopeLevel = isPlatform
       ? 'PLATFORM'
-      : isDepartmentScoped
-        ? 'DEPARTMENT'
-        : isHospitalContext && roles.some((r) => HOSPITAL_ROLES.includes(r))
-          ? 'HOSPITAL'
-          : 'ORGANIZATION';
+      : isHospitalContext && roles.some((r) => HOSPITAL_ROLES.includes(r))
+        ? 'HOSPITAL'
+        : 'ORGANIZATION';
 
     return {
       accountId: user.accountId,

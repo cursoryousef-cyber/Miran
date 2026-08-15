@@ -161,6 +161,13 @@ struct SystemAdminTabView: View {
                     Label("السجلات والتقارير", systemImage: "shield.checkered")
                 }
                 .tag(3)
+
+            // 5. الملف الشخصي
+            UniversalProfileView()
+                .tabItem {
+                    Label("حسابي", systemImage: "person.crop.circle.fill")
+                }
+                .tag(4)
         }
         .tint(MiranTheme.primary)
     }

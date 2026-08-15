@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
@@ -32,12 +32,10 @@ export class OperationsController {
   ) {}
 
   @Get('trainer/dashboard')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
   async trainerDashboard(@CurrentUser() user: IAuthenticatedUser) {
     const trainer = await this.myTrainer(user);
-    const traineeWhere = trainer
-      ? { rotations: { some: { trainerProfileId: trainer.id, organizationId: user.organizationId, status: 'active' } } }
-      : { organizationId: user.organizationId };
+    const traineeWhere = this.trainerTraineeScope(trainer, user);
     const assignedTrainees = await this.prisma.traineeProfile.count({ where: traineeWhere });
     const pendingAttendance = await this.prisma.attendance.count({ where: { organizationId: user.organizationId, status: 'correction_requested' } });
     const pendingLogbook = await this.prisma.clinicalCaseLog.count({
@@ -77,12 +75,26 @@ export class OperationsController {
     };
   }
 
+  /**
+   * Refuses work assigned onto a graduated (locked) trainee file. The lock is
+   * set by graduation itself; existing tasks and their history are untouched.
+   */
+  private async assertTraineeAccountNotLocked(accountId: string): Promise<void> {
+    const profile = await this.prisma.traineeProfile.findFirst({
+      where: { person: { userAccounts: { some: { id: accountId } } } },
+      select: { isLocked: true },
+    });
+    if (profile?.isLocked) {
+      throw new ForbiddenException('ملف المتدرب مغلق بعد التخرج — لا يمكن إسناد مهام جديدة');
+    }
+  }
+
   @Get('trainer/assigned-interns')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
   async assignedInterns(@CurrentUser() user: IAuthenticatedUser) {
     const trainer = await this.myTrainer(user);
     const data = await this.prisma.traineeProfile.findMany({
-      where: trainer ? { rotations: { some: { trainerProfileId: trainer.id, organizationId: user.organizationId, status: 'active' } } } : { organizationId: user.organizationId },
+      where: this.trainerTraineeScope(trainer, user),
       include: { person: true, organization: true, rotations: { where: { status: 'active' }, include: { department: true, trainerProfile: { include: { person: true } } } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -96,7 +108,7 @@ export class OperationsController {
    * they themselves are trainerProfileId.
    */
   @Get('trainer/assignment-requests')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
   async assignmentRequests(@CurrentUser() user: IAuthenticatedUser) {
     const trainer = await this.myTrainer(user);
     if (!trainer) return { data: [] };
@@ -113,7 +125,7 @@ export class OperationsController {
   }
 
   @Post('trainer/assignment-requests/:rotationId/accept')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
   async acceptAssignmentRequest(@Param('rotationId') rotationId: string, @CurrentUser() user: IAuthenticatedUser) {
     const trainer = await this.myTrainer(user);
     const rotation = await this.prisma.rotation.findFirst({
@@ -162,7 +174,7 @@ export class OperationsController {
   }
 
   @Post('trainer/assignment-requests/:rotationId/reject')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
   async rejectAssignmentRequest(
     @Param('rotationId') rotationId: string,
     @CurrentUser() user: IAuthenticatedUser,
@@ -233,7 +245,7 @@ export class OperationsController {
    * department/dates, so there is nothing here to persist.
    */
   @Get('trainer/groups')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
   async trainerGroups(@CurrentUser() user: IAuthenticatedUser) {
     const trainer = await this.myTrainer(user);
     const trainees = await this.prisma.traineeProfile.findMany({
@@ -267,7 +279,7 @@ export class OperationsController {
    * to the trainer) into one worklist; no new workflow or storage.
    */
   @Get('trainer/incoming-requests')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
   async trainerIncomingRequests(@CurrentUser() user: IAuthenticatedUser) {
     const trainer = await this.myTrainer(user);
     const [pendingEvaluations, pendingLogs] = await Promise.all([
@@ -298,11 +310,10 @@ export class OperationsController {
    * param and must not by itself grant access).
    */
   @Get('trainer/trainee/:id')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
   async trainerTraineeDetail(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
     const isPlainTrainer =
       user.roles.includes('trainer') &&
-      !user.roles.includes('training_supervisor') &&
       !user.roles.includes('org_manager') &&
       !user.roles.includes('platform_owner');
     if (isPlainTrainer) {
@@ -320,7 +331,13 @@ export class OperationsController {
 
     const profile = await this.prisma.traineeProfile.findUnique({
       where: { id },
-      include: { person: true, organization: true, program: true },
+      include: {
+        // The account id is what a task is addressed to; without it the trainer
+        // has the trainee's profile but no way to assign them anything.
+        person: { include: { userAccounts: { select: { id: true }, take: 1 } } },
+        organization: true,
+        program: true,
+      },
     });
     if (!profile) return { data: null };
 
@@ -337,6 +354,7 @@ export class OperationsController {
     return {
       data: {
         profile,
+        traineeAccountId: profile.person.userAccounts[0]?.id ?? null,
         rotation,
         attendance,
         attendanceToday: attendance.find((a) => new Date(a.date).toDateString() === new Date().toDateString()) ?? null,
@@ -509,7 +527,7 @@ export class OperationsController {
   }
 
   @Patch('attendance/:id/approve')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
   async approveAttendance(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
     await this.assertAttendanceInScope(id, user);
     const data = await this.prisma.attendance.update({ where: { id }, data: { status: 'present', approvedById: user.accountId } });
@@ -518,7 +536,7 @@ export class OperationsController {
   }
 
   @Patch('attendance/:id/reject')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
   async rejectAttendance(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser, @Body() dto: { reason?: string }) {
     await this.assertAttendanceInScope(id, user);
     const data = await this.prisma.attendance.update({ where: { id }, data: { status: 'rejected', excuseReason: dto.reason, approvedById: user.accountId } });
@@ -558,9 +576,55 @@ export class OperationsController {
     return { data };
   }
 
+  // ── Evaluation form templates — hospital training administration only ──────
+  // The trainer reads GET evaluations/forms (active only) to grade with; these
+  // manage what that list contains. Trainers and trainees hold no write here.
+  @Get('evaluations/forms/manage')
+  @RequireRoles('hospital_training_admin', 'org_manager', 'platform_owner')
+  @ApiOperation({ summary: 'نماذج التقييم بالمستشفى — بما فيها المعطّلة' })
+  async listEvaluationForms(@CurrentUser() user: IAuthenticatedUser) {
+    return this.evaluationService.listForms(user.organizationId);
+  }
+
+  @Post('evaluations/forms')
+  @RequireRoles('hospital_training_admin', 'org_manager', 'platform_owner')
+  @ApiOperation({ summary: 'إنشاء نموذج تقييم جديد للمستشفى' })
+  async createEvaluationForm(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
+    return this.evaluationService.createForm(dto, user);
+  }
+
+  @Patch('evaluations/forms/:id')
+  @RequireRoles('hospital_training_admin', 'org_manager', 'platform_owner')
+  @ApiOperation({ summary: 'تعديل نموذج تقييم — المعايير مقفلة بعد أول استخدام' })
+  async updateEvaluationForm(
+    @Param('id') id: string,
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body() dto: any,
+  ) {
+    return this.evaluationService.updateForm(id, dto, user);
+  }
+
+  @Patch('evaluations/forms/:id/active')
+  @RequireRoles('hospital_training_admin', 'org_manager', 'platform_owner')
+  @ApiOperation({ summary: 'تفعيل أو تعطيل نموذج تقييم' })
+  async setEvaluationFormActive(
+    @Param('id') id: string,
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body() dto: { isActive: boolean },
+  ) {
+    return this.evaluationService.setFormActive(id, !!dto.isActive, user);
+  }
+
+  @Delete('evaluations/forms/:id')
+  @RequireRoles('hospital_training_admin', 'org_manager', 'platform_owner')
+  @ApiOperation({ summary: 'حذف نموذج تقييم غير مستخدم' })
+  async deleteEvaluationForm(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
+    return this.evaluationService.deleteForm(id, user);
+  }
+
   // ── POST /operations/evaluations  — trainer submits evaluation with all guards ──
   @Post('evaluations')
-  @RequireRoles('trainer', 'academic_supervisor', 'training_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner')
   @ApiOperation({ summary: 'إرسال تقييم المدرب للمتدرب — مع تطبيق القفل المتبادل وحارس اجتماع منتصف الدورة' })
   async createEvaluation(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
     return this.evaluationService.submitTrainerEvaluation(dto, user);
@@ -576,7 +640,7 @@ export class OperationsController {
 
   // ── GET /operations/evaluations/midpoint/:rotationId  — midpoint meeting status ──
   @Get('evaluations/midpoint/:rotationId')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner', 'trainee')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner', 'trainee')
   @ApiOperation({ summary: 'حالة اجتماع منتصف الدورة للروتيشن' })
   async midpointStatus(@Param('rotationId') rotationId: string, @CurrentUser() user: IAuthenticatedUser) {
     return this.evaluationService.midpointStatus(rotationId, user.organizationId);
@@ -584,7 +648,7 @@ export class OperationsController {
 
   // ── PATCH /operations/evaluations/midpoint/:rotationId/complete  — record meeting ──
   @Patch('evaluations/midpoint/:rotationId/complete')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
   @ApiOperation({ summary: 'تسجيل اجتماع منتصف الدورة كمكتمل — شرط مسبق للتقييم النهائي' })
   async completeMidpointMeeting(
     @Param('rotationId') rotationId: string,
@@ -596,7 +660,7 @@ export class OperationsController {
 
   // ── GET /operations/evaluations/mutual-lock — mutual lock status ──────────
   @Get('evaluations/mutual-lock')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner', 'trainee')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner', 'trainee')
   @ApiOperation({ summary: 'حالة القفل المتبادل للتقييم — كلا الطرفين يجب أن يكمل تقييمه' })
   async mutualLockStatus(
     @Query('rotationId') rotationId: string,
@@ -607,7 +671,7 @@ export class OperationsController {
 
   // ── GET /operations/evaluations/slow-evaluators  — academic supervisor report ──
   @Get('evaluations/slow-evaluators')
-  @RequireRoles('trainer', 'training_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'academic_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'hospital_training_admin', 'cluster_administrator', 'cluster_manager', 'training_director', 'academic_supervisor', 'org_manager', 'platform_owner')
   @ApiOperation({ summary: 'تقرير كاشف التقييم الآلي — المدربون الذين أرسلوا تقييمات مشبوهة (أقل من 40 ثانية)' })
   async slowEvaluators(@CurrentUser() user: IAuthenticatedUser) {
     return this.evaluationService.slowEvaluatorReport(user.organizationId);
@@ -615,7 +679,7 @@ export class OperationsController {
 
   // ── GET /operations/evaluations/my-pending  — trainee/trainer pending evals ────
   @Get('evaluations/my-pending')
-  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'platform_owner', 'org_manager')
+  @RequireRoles('trainee', 'trainer', 'hospital_training_admin', 'cluster_administrator', 'cluster_manager', 'training_director', 'platform_owner', 'org_manager')
   @ApiOperation({ summary: 'التقييمات المعلقة للمتدرب أو المدرب — التقييمات التي تنتظر الإكمال' })
   async myPendingEvaluations(@CurrentUser() user: IAuthenticatedUser) {
     return this.evaluationService.myPendingEvaluations(user);
@@ -631,14 +695,13 @@ export class OperationsController {
   }
 
   @Post('tasks')
-  @RequireRoles('trainer', 'training_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
   async createTask(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
     // A plain trainer may only assign tasks to a trainee currently assigned to
     // them — otherwise nothing stopped dto.assignedToId from naming any account
     // on the platform.
     const isPlainTrainer =
       user.roles.includes('trainer') &&
-      !user.roles.includes('training_supervisor') &&
       !user.roles.includes('org_manager') &&
       !user.roles.includes('platform_owner');
     if (isPlainTrainer) {
@@ -660,6 +723,8 @@ export class OperationsController {
       }
     }
 
+    await this.assertTraineeAccountNotLocked(dto.assignedToId);
+
     const data = await this.prisma.task.create({
       data: {
         organizationId: user.organizationId,
@@ -675,6 +740,45 @@ export class OperationsController {
     });
     await this.notify(user.organizationId, dto.assignedToId, dto.titleAr, dto.description || '', 'task', 'Task', data.id);
     return { success: true, data };
+  }
+
+  /**
+   * Edit a task the caller assigned. Scoped to the assigner, mirroring the
+   * ownership boundary POST /tasks already enforces on creation — a trainer may
+   * only ever touch tasks they issued to their own trainee.
+   */
+  @Patch('tasks/:id')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
+  async updateTask(
+    @Param('id') id: string,
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body() dto: { titleAr?: string; description?: string; dueDate?: string; priority?: string; status?: string },
+  ) {
+    const own = await this.prisma.task.findFirst({ where: { id, assignedById: user.accountId } });
+    if (!own) throw new BadRequestException('المهمة غير موجودة أو لم تُسندها أنت');
+    const data = await this.prisma.task.update({
+      where: { id },
+      data: {
+        titleAr: dto.titleAr ?? undefined,
+        description: dto.description ?? undefined,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+        priority: dto.priority ?? undefined,
+        status: dto.status ?? undefined,
+      },
+    });
+    await this.audit(user, 'task.update', 'Task', id, data);
+    return { success: true, data };
+  }
+
+  /** Delete a task the caller assigned — same ownership boundary as the edit. */
+  @Delete('tasks/:id')
+  @RequireRoles('trainer', 'org_manager', 'platform_owner')
+  async deleteTask(@Param('id') id: string, @CurrentUser() user: IAuthenticatedUser) {
+    const own = await this.prisma.task.findFirst({ where: { id, assignedById: user.accountId } });
+    if (!own) throw new BadRequestException('المهمة غير موجودة أو لم تُسندها أنت');
+    await this.prisma.task.delete({ where: { id } });
+    await this.audit(user, 'task.delete', 'Task', id, own);
+    return { success: true };
   }
 
   @Patch('tasks/:id/complete')
@@ -795,7 +899,7 @@ export class OperationsController {
         include: { person: true, department: true },
       });
     }
-    if (!profile && (user.roles.includes('trainer') || user.roles.includes('training_supervisor')) && user.personId && user.organizationId) {
+    if (!profile && user.roles.includes('trainer') && user.personId && user.organizationId) {
       profile = await this.prisma.trainerProfile.create({
         data: {
           personId: user.personId,
@@ -806,6 +910,32 @@ export class OperationsController {
       });
     }
     return profile;
+  }
+
+  /**
+   * Trainee filter for a trainer-facing endpoint.
+   *
+   * A trainer sees ONLY trainees assigned to them via an active rotation. When
+   * no trainer profile resolves, the filter matches nothing — it must never
+   * widen to the whole organisation, which would expose every trainee in the
+   * hospital to any account holding the trainer role.
+   */
+  private trainerTraineeScope(
+    trainer: { id: string } | null,
+    user: IAuthenticatedUser,
+  ): Prisma.TraineeProfileWhereInput {
+    if (trainer) {
+      return {
+        rotations: {
+          some: {
+            trainerProfileId: trainer.id,
+            organizationId: user.organizationId,
+            status: 'active',
+          },
+        },
+      };
+    }
+    return { id: { in: [] } };
   }
 
   private async assertAttendanceInScope(id: string, user: IAuthenticatedUser) {

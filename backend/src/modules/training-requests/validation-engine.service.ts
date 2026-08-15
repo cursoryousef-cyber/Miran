@@ -41,7 +41,13 @@ export class ValidationEngineService {
         trainingRequestId,
         status: { notIn: [TRAINEE_ROW_STATUS.MERGED, TRAINEE_ROW_STATUS.SPLIT, TRAINEE_ROW_STATUS.REJECTED] },
       },
-      include: { documents: true, university: { include: { organizationType: true } } },
+      include: {
+        documents: true,
+        university: { include: { organizationType: true } },
+        trainingRequest: {
+          select: { sourceOrg: { select: { organizationType: { select: { code: true } } } } },
+        },
+      },
     });
 
     const validSpecialties = await this.prisma.lookupTable.findMany({
@@ -172,19 +178,28 @@ export class ValidationEngineService {
       }
 
       // ── الجامعة ──
-      // Direct Cluster Requests (requestType = cluster_request) intentionally have
-      // no sponsoring university — universityOrgId = NULL is valid and expected.
-      // Only University Requests must supply a verified universityOrgId.
-      if (!isDirectRequest) {
-        if (!row.universityOrgId) {
-          errors.push({ code: 'missing_university', field: 'universityOrgId', messageAr: 'الجامعة غير محددة' });
-        } else if (row.university?.organizationType?.code !== 'university') {
-          errors.push({
-            code: 'invalid_university',
-            field: 'universityOrgId',
-            messageAr: 'الجهة المحددة ليست جامعة معتمدة في النظام',
-          });
-        }
+      // Path B (cluster → hospital) has no sponsoring university row behind it:
+      // the university's no-objection letter attached to the request is what
+      // authorises the training, so the sponsor-organisation rule applies to
+      // university-originated requests only.
+      //
+      // The rule itself is Miran's, unchanged: the path is derived from the source
+      // organisation type. `isDirectRequest` is the explicit flag newer callers
+      // pass; it defaults to false, so every existing caller behaves exactly as
+      // before and only callers that opt in add the second signal.
+      const isDirectClusterRequest =
+        isDirectRequest ||
+        row.trainingRequest?.sourceOrg?.organizationType?.code === 'cluster';
+      if (isDirectClusterRequest) {
+        // no sponsor-organisation requirement on this path
+      } else if (!row.universityOrgId) {
+        errors.push({ code: 'missing_university', field: 'universityOrgId', messageAr: 'الجامعة غير محددة' });
+      } else if (row.university?.organizationType?.code !== 'university') {
+        errors.push({
+          code: 'invalid_university',
+          field: 'universityOrgId',
+          messageAr: 'الجهة المحددة ليست جامعة معتمدة في النظام',
+        });
       }
 
       results.push({ rowId: row.id, nationalId: row.nationalId, nameAr: row.nameAr, errors });

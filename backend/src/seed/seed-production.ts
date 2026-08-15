@@ -4,10 +4,85 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+// Trainee logins follow the same per-account convention as staff, derived from the
+// email local part: abdullah@… -> SEED_PASSWORD_TRAINEE_ABDULLAH.
+const traineePasswordEnv = (email: string) =>
+  `SEED_PASSWORD_TRAINEE_${email.split('@')[0].toUpperCase()}`;
+
+// The complete set of credentials this seed requires, declared at module scope so
+// it can be validated before main() performs a single write. Kept in sync with the
+// account definitions by assertPasswordEnvCoverage() below — a definition whose
+// variable is missing from this list aborts the run rather than silently seeding
+// an account with no configured password.
+const REQUIRED_PASSWORD_ENV = [
+  'SEED_PASSWORD_PLATFORM_OWNER',
+  'SEED_PASSWORD_CLUSTER_MANAGER',
+  'SEED_PASSWORD_ORG_MANAGER',
+  'SEED_PASSWORD_ACADEMIC_MANAGER',
+  'SEED_PASSWORD_UNI_SUPERVISOR',
+  'SEED_PASSWORD_UNIVERSITY_ADMINISTRATOR',
+  'SEED_PASSWORD_HOSPITAL_ADMINISTRATOR',
+  'SEED_PASSWORD_HOSPITAL_TRAINING_ADMIN',
+  'SEED_PASSWORD_TRAINER',
+  'SEED_PASSWORD_TRAINEE_ABDULLAH',
+  'SEED_PASSWORD_TRAINEE_FATIMA',
+  'SEED_PASSWORD_TRAINEE_KHALID',
+  'SEED_PASSWORD_TRAINEE_SARA',
+  'SEED_PASSWORD_TRAINEE_FAISAL',
+];
+
+// Fails fast, before any database write, if a required password variable is absent
+// or too short. Only variable NAMES are ever printed.
+function assertPasswordEnvPresent(): void {
+  const missing = REQUIRED_PASSWORD_ENV.filter((key) => {
+    const value = process.env[key];
+    return !value || value.length < 8;
+  });
+  if (missing.length === 0) return;
+
+  console.error(
+    '\n❌ Production seed aborted — required password environment variables are missing or shorter than 8 characters.',
+  );
+  console.error('   Set each of the following before running the seed (names only, values are never logged):');
+  for (const key of missing) console.error(`   - ${key}`);
+  console.error(
+    '\n   No data was written. Existing accounts keep their current passwords; ' +
+      'to deliberately reset them, set SEED_OVERWRITE_PASSWORDS=true.\n',
+  );
+  process.exit(1);
+}
+
+// Guards against drift between the account definitions and REQUIRED_PASSWORD_ENV.
+function assertPasswordEnvCoverage(keys: string[]): void {
+  const unlisted = keys.filter((k) => !REQUIRED_PASSWORD_ENV.includes(k));
+  if (unlisted.length > 0) {
+    throw new Error(
+      `Seed definition references password variables absent from REQUIRED_PASSWORD_ENV: ${unlisted.join(', ')}`,
+    );
+  }
+}
+
 async function main() {
+  assertPasswordEnvPresent();
+
   console.log('🚀 Starting Full Production Seed Data for Miran Platform...\n');
 
-  const passwordHash = await bcrypt.hash('Miran@Admin2024!', 10);
+  // Initial passwords come from the environment — never from source.
+  // One variable per account so no shared production password exists. Missing
+  // variables abort the run before anything is written; only the NAMES of the
+  // missing variables are printed, never any value.
+  const OVERWRITE_PASSWORDS = process.env.SEED_OVERWRITE_PASSWORDS === 'true';
+
+  const hashFor = async (envKey: string): Promise<string> =>
+    bcrypt.hash(process.env[envKey] as string, 10);
+
+  // Builds the `update` payload for a userAccount upsert. An existing account's
+  // password is left untouched unless SEED_OVERWRITE_PASSWORDS=true is set
+  // explicitly — re-running the seed must never silently reset a live login.
+  const accountUpdate = async (envKey: string): Promise<Record<string, unknown>> =>
+    OVERWRITE_PASSWORDS
+      ? { isActive: true, passwordHash: await hashFor(envKey) }
+      : { isActive: true };
 
   // 1. Types & Roles Foundations
   console.log('1️⃣ Ensuring Roles & Organization Types...');
@@ -48,8 +123,10 @@ async function main() {
     { code: 'platform_owner', nameAr: 'مدير المنصة الإلكترونية', hierarchyLevel: 100 },
     { code: 'cluster_manager', nameAr: 'مدير التجمع الصحي', hierarchyLevel: 20 },
     { code: 'org_manager', nameAr: 'مدير مستشفى / جهة', hierarchyLevel: 10 },
+    { code: 'university_administrator', nameAr: 'مدير الجامعة', hierarchyLevel: 70 },
+    { code: 'hospital_administrator', nameAr: 'مدير المستشفى / المركز', hierarchyLevel: 70 },
     { code: 'academic_supervisor', nameAr: 'مشرف أكاديمي / مشرف امتياز', hierarchyLevel: 7 },
-    { code: 'training_supervisor', nameAr: 'مشرف تدريب', hierarchyLevel: 6 },
+    { code: 'hospital_training_admin', nameAr: 'مدير تدريب المستشفى', hierarchyLevel: 6 },
     { code: 'trainer', nameAr: 'مدرب سريري', hierarchyLevel: 5 },
     { code: 'trainee', nameAr: 'متدرب / طبيب امتياز', hierarchyLevel: 1 },
   ];
@@ -178,6 +255,7 @@ async function main() {
       nameAr: 'مدير المنصة الإلكترونية',
       nationalId: '1099999999',
       roleCode: 'platform_owner',
+      passwordEnv: 'SEED_PASSWORD_PLATFORM_OWNER',
       orgId: northTowerHosp.id,
     },
     {
@@ -185,6 +263,7 @@ async function main() {
       nameAr: 'د. خالد الشمالي — مدير التجمع الصحي',
       nationalId: '1011111111',
       roleCode: 'cluster_manager',
+      passwordEnv: 'SEED_PASSWORD_CLUSTER_MANAGER',
       orgId: nbCluster.id,
     },
     {
@@ -192,6 +271,7 @@ async function main() {
       nameAr: 'د. أحمد العنزي — مدير مستشفى برج الشمال',
       nationalId: '1022222222',
       roleCode: 'org_manager',
+      passwordEnv: 'SEED_PASSWORD_ORG_MANAGER',
       orgId: northTowerHosp.id,
     },
     {
@@ -199,6 +279,7 @@ async function main() {
       nameAr: 'د. نورة العمري — مدير الشؤون الأكاديمية',
       nationalId: '1033333333',
       roleCode: 'academic_supervisor',
+      passwordEnv: 'SEED_PASSWORD_ACADEMIC_MANAGER',
       orgId: northTowerHosp.id,
     },
     {
@@ -206,13 +287,34 @@ async function main() {
       nameAr: 'د. سعود الحربي — مشرف الامتياز (جامعة الحدود الشمالية)',
       nationalId: '1044444444',
       roleCode: 'academic_supervisor',
+      passwordEnv: 'SEED_PASSWORD_UNI_SUPERVISOR',
       orgId: nbuUni.id,
     },
     {
+      // University-side owner of the training-request workflow. The role existed in
+      // role-scope.ts but no production-safe seed could provision it.
+      email: 'uni.administrator@miran.health',
+      nameAr: 'د. منيرة الدوسري — مدير الجامعة',
+      nationalId: '1077777777',
+      roleCode: 'university_administrator',
+      passwordEnv: 'SEED_PASSWORD_UNIVERSITY_ADMINISTRATOR',
+      orgId: nbuUni.id,
+    },
+    {
+      // Administrative-only hospital role: no training capabilities by design.
+      email: 'hospital.administrator@miran.health',
+      nameAr: 'د. بندر القحطاني — مدير المستشفى',
+      nationalId: '1088888888',
+      roleCode: 'hospital_administrator',
+      passwordEnv: 'SEED_PASSWORD_HOSPITAL_ADMINISTRATOR',
+      orgId: northTowerHosp.id,
+    },
+    {
       email: 'training.supervisor@miran.health',
-      nameAr: 'د. فهد المطيري — مشرف التدريب السريري',
+      nameAr: 'د. فهد المطيري — مدير التدريب السريري',
       nationalId: '1055555555',
-      roleCode: 'training_supervisor',
+      roleCode: 'hospital_training_admin',
+      passwordEnv: 'SEED_PASSWORD_HOSPITAL_TRAINING_ADMIN',
       orgId: northTowerHosp.id,
     },
     {
@@ -222,8 +324,25 @@ async function main() {
       roleCode: 'trainer',
       orgId: northTowerHosp.id,
       deptCode: 'INTERNAL_MED',
+      passwordEnv: 'SEED_PASSWORD_TRAINER',
     },
   ];
+
+  // Pilot trainee cohort. Declared here so the credential preflight below can
+  // validate their password variables together with the staff accounts.
+  const traineesList = [
+    { natId: '1070000001', nameAr: 'عبدالله محمد الشمري', email: 'abdullah@miran.health', num: '11023', level: 'intern', spec: 'طب وجراحة البشرية' },
+    { natId: '1070000002', nameAr: 'فاطمة علي الرويلي', email: 'fatima@miran.health', num: '11024', level: 'intern', spec: 'طب وجراحة البشرية' },
+    { natId: '1070000003', nameAr: 'خالد سعود العنزي', email: 'khalid@miran.health', num: '11025', level: 'intern', spec: 'طب وجراحة البشرية' },
+    { natId: '1070000004', nameAr: 'سارة محمد الرشيد', email: 'sara@miran.health', num: '11026', level: 'resident', spec: 'طب الأسرة — سنة ٢' },
+    { natId: '1070000005', nameAr: 'فيصل عبدالرحمن الحميد', email: 'faisal@miran.health', num: '11027', level: 'resident', spec: 'طب الباطنية — سنة ١' },
+  ];
+
+
+  assertPasswordEnvCoverage([
+    ...accountsDef.map((a) => a.passwordEnv),
+    ...traineesList.map((t) => traineePasswordEnv(t.email)),
+  ]);
 
   for (const acc of accountsDef) {
     const person = await prisma.person.upsert({
@@ -243,11 +362,11 @@ async function main() {
         personId: person.id,
         email: acc.email,
         username: acc.email.split('@')[0],
-        passwordHash,
+        passwordHash: await hashFor(acc.passwordEnv),
         isEmailVerified: true,
         isActive: true,
       },
-      update: { isActive: true },
+      update: await accountUpdate(acc.passwordEnv),
     });
 
     const role = await prisma.role.findUnique({ where: { code: acc.roleCode } });
@@ -288,13 +407,6 @@ async function main() {
 
   // 5. Seeding Production Trainees & Rotations
   console.log('5️⃣ Seeding Official Trainees group & Clinical Rotations...');
-  const traineesList = [
-    { natId: '1070000001', nameAr: 'عبدالله محمد الشمري', email: 'abdullah@miran.health', num: '11023', level: 'intern', spec: 'طب وجراحة البشرية' },
-    { natId: '1070000002', nameAr: 'فاطمة علي الرويلي', email: 'fatima@miran.health', num: '11024', level: 'intern', spec: 'طب وجراحة البشرية' },
-    { natId: '1070000003', nameAr: 'خالد سعود العنزي', email: 'khalid@miran.health', num: '11025', level: 'intern', spec: 'طب وجراحة البشرية' },
-    { natId: '1070000004', nameAr: 'سارة محمد الرشيد', email: 'sara@miran.health', num: '11026', level: 'resident', spec: 'طب الأسرة — سنة ٢' },
-    { natId: '1070000005', nameAr: 'فيصل عبدالرحمن الحميد', email: 'faisal@miran.health', num: '11027', level: 'resident', spec: 'طب الباطنية — سنة ١' },
-  ];
 
   const traineeRole = await prisma.role.findUnique({ where: { code: 'trainee' } });
   const salemProfile = await prisma.trainerProfile.findFirst();
@@ -312,11 +424,11 @@ async function main() {
         personId: p.id,
         email: t.email,
         username: t.email.split('@')[0],
-        passwordHash,
+        passwordHash: await hashFor(traineePasswordEnv(t.email)),
         isEmailVerified: true,
         isActive: true,
       },
-      update: {},
+      update: await accountUpdate(traineePasswordEnv(t.email)),
     });
 
     if (traineeRole) {
@@ -440,7 +552,18 @@ async function main() {
     ];
 
     for (const c of sampleCases) {
-      const log = await prisma.clinicalCaseLog.create({
+      // clinical_case_logs has no natural unique key, so a bare create() appended a
+      // duplicate set on every run. Match on the trainee + procedure + diagnosis
+      // triple that identifies these sample cases and skip if already present.
+      const existingLog = await prisma.clinicalCaseLog.findFirst({
+        where: {
+          traineeProfileId: firstTrainee.id,
+          procedureId: createdProcs[c.procCode]?.id,
+          diagnosis: c.diagnosis,
+        },
+      });
+
+      const log = existingLog ?? await prisma.clinicalCaseLog.create({
         data: {
           organizationId: northTowerHosp.id,
           traineeProfileId: firstTrainee.id,

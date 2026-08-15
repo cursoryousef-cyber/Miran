@@ -2,7 +2,10 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@mui/material';
 import { BellRing, CheckCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import { notificationTarget } from '../utils/notificationTarget';
 import {
   Badge, EmptyState, ListRow, Panel, PanelSkeleton, PageHeader,
   colour, space,
@@ -16,6 +19,11 @@ import {
  */
 export const Notifications: React.FC = () => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { hasAnyRole } = useAuth();
+  const isUniversity = hasAnyRole(['university_administrator', 'academic_affairs']);
+  const isCluster = hasAnyRole(['cluster_manager', 'cluster_administrator', 'training_director']);
+  const isHospital = hasAnyRole(['hospital_training_admin']);
 
   const { data: unreadData } = useQuery({
     queryKey: ['notifications-unread-count'],
@@ -90,7 +98,12 @@ export const Notifications: React.FC = () => {
               title={n.titleAr}
               meta={`${n.bodyAr ? `${n.bodyAr} · ` : ''}${timeAgo(n.createdAt)}`}
               trailing={!n.isRead && <Badge label="جديد" tone="primary" />}
-              onClick={!n.isRead ? () => markReadMutation.mutate(n.id) : undefined}
+              onClick={() => {
+                // Marking read is a side effect of opening it, never the whole action.
+                if (!n.isRead) markReadMutation.mutate(n.id);
+                const target = notificationTarget(n, isUniversity, isCluster, isHospital);
+                if (target) navigate(target);
+              }}
             />
           ))
         )}

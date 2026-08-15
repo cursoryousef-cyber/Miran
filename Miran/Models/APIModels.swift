@@ -141,6 +141,12 @@ struct TraineeProfileModel: Codable, Identifiable {
     let photoApproved: Bool
     let person: PersonModel?
     let organization: OrganizationModel?
+    let rotations: [RotationModel]?
+
+    /// Active rotation (first with status == "active")
+    var activeRotation: RotationModel? {
+        rotations?.first(where: { $0.status == "active" }) ?? rotations?.first
+    }
 }
 
 // MARK: - Trainer Profile

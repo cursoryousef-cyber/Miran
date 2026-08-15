@@ -1,13 +1,14 @@
 // seed-rbac.ts — Seed الأدوار الأربعة وصلاحياتها وحسابات اختبار لكل دور
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { devSeedPassword } from './dev-password';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🎭 Seeding RBAC — 4 Roles + Permissions + Test Accounts...\n');
 
-  const passwordHash = await bcrypt.hash('Miran@Admin2024!', 10);
+  const passwordHash = await bcrypt.hash(devSeedPassword(), 10);
 
   // ── 1. الصلاحيات الكاملة ──────────────────────────────────────────────────
   const allPermissions = [
@@ -222,32 +223,6 @@ async function main() {
       ],
     },
     {
-      code: 'department_head',
-      nameAr: 'رئيس القسم',
-      nameEn: 'Department Head',
-      descriptionAr: 'يشرف على مدربي ومتدربي قسمه',
-      hierarchyLevel: 12,
-      permissions: [
-        'view_users', 'manage_trainers', 'view_trainees', 'manage_trainees',
-        'assign_rotations', 'view_rotations', 'track_attendance',
-        'submit_evaluations', 'view_evaluations', 'view_reports',
-        'view_active_calls', 'receive_notifications',
-      ],
-    },
-    {
-      code: 'training_supervisor',
-      nameAr: 'مشرف التدريب الميداني',
-      nameEn: 'Training Supervisor',
-      descriptionAr: 'يتابع تقدم المتدربين والاعتمادات داخل المستشفى',
-      hierarchyLevel: 11,
-      permissions: [
-        'view_users', 'view_trainees', 'manage_trainees',
-        'assign_rotations', 'view_rotations', 'track_attendance',
-        'submit_evaluations', 'view_evaluations', 'view_reports',
-        'view_active_calls', 'track_call_responses', 'receive_notifications',
-      ],
-    },
-    {
       code: 'auditor',
       nameAr: 'مدقق',
       nameEn: 'Auditor',
@@ -447,11 +422,11 @@ async function main() {
 
   console.log('\n✅ RBAC Seed Completed!\n');
   console.log('Test Accounts:');
-  console.log('  platform@miran.health / Miran@Admin2024!  → platform_owner');
-  console.log('  admin@miran.health    / Miran@Admin2024!  → org_manager');
-  console.log('  academic@miran.health / Miran@Admin2024!  → academic_supervisor');
-  console.log('  salem@miran.health    / Miran@Admin2024!  → trainer');
-  console.log('  abdullah@miran.health / Miran@Admin2024!  → trainee');
+  console.log('  platform@miran.health → platform_owner');
+  console.log('  admin@miran.health    → org_manager');
+  console.log('  academic@miran.health → academic_supervisor');
+  console.log('  salem@miran.health    → trainer');
+  console.log('  abdullah@miran.health → trainee');
 }
 
 main()

@@ -60,32 +60,16 @@ struct RBACMainView: View {
             if let user = user {
                 switch user.primaryRole {
                 case "platform_owner", "system_admin", "holding_administrator":
-                    // 1. مدير المنصة / مدير النظام: مركز التحكم الوطني (Control Center)
                     SystemAdminTabView()
 
                 case "university_administrator", "university_admin", "academic_affairs":
-                    // 2. إدارة الجامعة: رفع الطلاب والبرامج والخطط وتقديم الطلبات للتجمع
                     UniversityAdminTabView()
 
-                case "training_director", "cluster_administrator", "cluster_manager", "training_manager", "org_manager":
-                    // 3. إدارة التدريب بالتجمع الصحي: مراجعة طلبات الجامعات وتوزيع السعة على المستشفيات
-                    ClusterTrainingAdminTabView()
-
-                case "hospital_training_admin", "hospital_administrator", "hospital_supervisor", "training_supervisor", "department_head":
-                    // 4. مشرف امتياز المستشفى: قبول الطلاب، تحديد التواريخ، توزيع الأقسام وإسناد المدرب
-                    HospitalSupervisorTabView()
-
-                case "trainer":
-                    // 5. المدرب الميداني (استشاري/أخصائي): الطلاب المسندين إليه، الحضور، Logbook Sign-off والتقييم النهائي
-                    TrainerTabView()
-
-                case "trainee":
-                    // 6. المتدرب (طبيب الامتياز): جدولي، البرنامج، القسم، المدرب المباشر، والمهام والبطاقة
-                    TraineeTabView()
-
-                case "academic_supervisor":
-                    // 7. المشرف الأكاديمي (MVP): اعتماد النتيجة وإكمال البرنامج النهائي فقط
-                    AcademicSupervisorTabView()
+                case "training_director", "cluster_administrator", "cluster_manager", "training_manager", "org_manager",
+                     "hospital_training_admin", "hospital_administrator", "hospital_supervisor", "training_supervisor", "department_head",
+                     "trainer", "trainee", "academic_supervisor":
+                    // التبويبات والخدمات المحلولة ديناميكيًا حسب الـ RBAC والمستشفى
+                    DynamicMainTabView()
 
                 default:
                     UnknownRoleView(roleCode: user.primaryRole)
@@ -159,68 +143,23 @@ struct UniversityAdminTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            UniversityAdminDashboardView()
-                .tabItem {
-                    Label("الجامعة والبرامج", systemImage: "graduationcap.fill")
-                }
+            NavigationView { UniversityAdminDashboardView() }
+                .tabItem { Label("لوحة القيادة", systemImage: "house.fill") }
                 .tag(0)
+
+            RoleReportsView()
+                .tabItem { Label("التقارير", systemImage: "chart.bar.doc.horizontal.fill") }
+                .tag(1)
+
+            UniversalProfileView()
+                .tabItem { Label("حسابي", systemImage: "person.crop.circle.fill") }
+                .tag(2)
         }
         .tint(MiranTheme.primary)
     }
 }
 
-// MARK: - University Admin Dashboard
-struct UniversityAdminDashboardView: View {
-    @EnvironmentObject var authViewModel: AuthViewModel
-    @Environment(\.colorScheme) var systemColorScheme
 
-    var body: some View {
-        NavigationView {
-            ZStack {
-                MiranTheme.background(for: systemColorScheme).ignoresSafeArea()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("إدارة جامعة الحدود الشمالية (University Admin)")
-                                    .font(.title2.bold())
-                                    .foregroundColor(MiranTheme.primaryText(for: systemColorScheme))
-                                Spacer()
-                                Image(systemName: "graduationcap.circle.fill")
-                                    .font(.system(size: 28))
-                                    .foregroundColor(MiranTheme.accent)
-                            }
-                            Text("رفع خطط الامتياز وتقديم طلبات التدريب للكلية")
-                                .font(.subheadline)
-                                .foregroundColor(MiranTheme.secondaryText(for: systemColorScheme))
-                        }
-                        .padding(.horizontal)
-
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            DynamicMetricCard(title: "طلاب الامتياز المسجلين", count: "140", icon: "person.3.fill", color: MiranTheme.accent)
-                            DynamicMetricCard(title: "طلبات التدريب المرسلة", count: "4", icon: "paperplane.fill", color: MiranTheme.primary)
-                            DynamicMetricCard(title: "البرامج التدريبية", count: "3", icon: "book.fill", color: MiranTheme.info(for: systemColorScheme))
-                            DynamicMetricCard(title: "النتائج النهائية المعتمدة", count: "128", icon: "award.fill", color: MiranTheme.warning)
-                        }
-                        .padding(.horizontal)
-                    }
-                    .padding(.vertical)
-                }
-            }
-            .navigationTitle("إدارة الجامعة")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { authViewModel.logout() } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .foregroundColor(MiranTheme.error)
-                    }
-                }
-            }
-        }
-    }
-}
 
 // MARK: - Cluster Training Admin TabView
 struct ClusterTrainingAdminTabView: View {

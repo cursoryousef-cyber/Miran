@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import { notificationTarget } from '../utils/notificationTarget';
 import { Bell, CheckCheck } from 'lucide-react';
 import {
   Badge,
@@ -35,6 +38,12 @@ export const NotificationCenter: React.FC = () => {
     },
     enabled: open && hasToken,
   });
+
+  const navigate = useNavigate();
+  const { hasAnyRole } = useAuth();
+  const isUniversity = hasAnyRole(['university_administrator', 'academic_affairs']);
+  const isCluster = hasAnyRole(['cluster_manager', 'cluster_administrator', 'training_director']);
+  const isHospital = hasAnyRole(['hospital_training_admin']);
 
   const markReadMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -150,7 +159,11 @@ export const NotificationCenter: React.FC = () => {
                   backgroundColor: n.isRead ? 'transparent' : '#F0FDF4',
                   transition: 'background-color 0.2s',
                 }}
-                onClick={() => !n.isRead && markReadMutation.mutate(n.id)}
+                onClick={() => {
+                  if (!n.isRead) markReadMutation.mutate(n.id);
+                  const target = notificationTarget(n, isUniversity, isCluster, isHospital);
+                  if (target) { setAnchorEl(null); navigate(target); }
+                }}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                   <div style={{

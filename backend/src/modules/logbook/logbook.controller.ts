@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Patch, Put, Query, UseGuards, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Put, Query, UseGuards, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser, RequireRoles } from '../../common/decorators';
@@ -21,7 +21,7 @@ export class LogbookController {
    * the previous version bypassed the check entirely for anyone holding a
    * supervisory/admin role (including a user with BOTH 'trainer' and any of
    * those roles), which meant no scoping at all for hospital_training_admin,
-   * cluster_administrator, training_director, training_supervisor and
+   * cluster_administrator, training_director and
    * academic_supervisor.
    *
    *   trainer            → only a trainee currently assigned to them (open
@@ -34,6 +34,22 @@ export class LogbookController {
    *                         resolver every other correctly-scoped endpoint in
    *                         the codebase uses — nothing bespoke here.
    */
+  /**
+   * A graduated trainee's file is closed. `TraineeProfile.isLocked` is set the
+   * moment graduation completes, and this refuses any further clinical write
+   * against it — new entries, approvals, rejections or competency edits.
+   * Nothing already recorded is touched; the history stays readable.
+   */
+  private async assertProfileNotLocked(traineeProfileId: string): Promise<void> {
+    const profile = await this.prisma.traineeProfile.findUnique({
+      where: { id: traineeProfileId },
+      select: { isLocked: true },
+    });
+    if (profile?.isLocked) {
+      throw new ForbiddenException('ملف المتدرب مغلق بعد التخرج — لا يمكن إضافة أو تعديل السجلات السريرية');
+    }
+  }
+
   private async assertTrainerScope(user: IAuthenticatedUser, traineeProfileId: string): Promise<void> {
     if (user.roles.includes('platform_owner')) return;
 
@@ -77,7 +93,7 @@ export class LogbookController {
 
   // ─── 1. مكتبة الإجراءات الطبية (Procedures Catalog) ──────────────────────
   @Get('procedures')
-  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_training_admin', 'academic_supervisor', 'cluster_administrator', 'training_director', 'org_manager', 'platform_owner')
+  @RequireRoles('trainee', 'trainer', 'hospital_training_admin', 'academic_supervisor', 'cluster_administrator', 'training_director', 'org_manager', 'platform_owner')
   @ApiOperation({ summary: 'استعراض مكتبة الإجراءات والمهارات السريرية المتاحة' })
   async getProcedures(@Query('category') category?: string, @Query('includeInactive') includeInactive?: string) {
     const where: any = {};
@@ -145,7 +161,7 @@ export class LogbookController {
 
   // ─── 2. سجل الحالات والإجراءات للمتدرب (Case & Procedure Logs) ─────────────
   @Get('my-logs')
-  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'platform_owner', 'org_manager')
+  @RequireRoles('trainee', 'trainer', 'hospital_training_admin', 'cluster_administrator', 'cluster_manager', 'training_director', 'platform_owner', 'org_manager')
   @ApiOperation({ summary: 'عرض سجل الحالات والإجراءات الخاصة بالمتدرب الحالي أو المدرب/المشرف' })
   async getMyLogs(@CurrentUser() user: IAuthenticatedUser) {
     if (user.roles.includes('hospital_administrator')) {
@@ -215,7 +231,7 @@ export class LogbookController {
   }
 
   @Get('trainee-logs/:traineeId')
-  @RequireRoles('trainer', 'academic_supervisor', 'training_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'org_manager', 'platform_owner')
+  @RequireRoles('trainer', 'academic_supervisor', 'hospital_training_admin', 'cluster_administrator', 'cluster_manager', 'training_director', 'org_manager', 'platform_owner')
   @ApiOperation({ summary: 'عرض سجل الحالات لمتدرب محدد — للمدرب والمشرف الأكاديمي' })
   async getTraineeLogs(@Param('traineeId') traineeId: string, @CurrentUser() user: IAuthenticatedUser) {
     await this.assertTrainerScope(user, traineeId);
@@ -234,7 +250,7 @@ export class LogbookController {
   }
 
   @Post('entries')
-  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_training_admin', 'cluster_administrator', 'training_director', 'platform_owner', 'org_manager')
+  @RequireRoles('trainee', 'trainer', 'hospital_training_admin', 'cluster_administrator', 'cluster_manager', 'training_director', 'platform_owner', 'org_manager')
   @ApiOperation({ summary: 'تسجيل حالة سريرية أو إجراء طبي جديد' })
   async createLogEntry(@CurrentUser() user: IAuthenticatedUser, @Body() dto: {
     traineeProfileId?: string;
@@ -305,6 +321,7 @@ export class LogbookController {
       where: { id: targetTraineeId },
     });
     if (!profile) throw new BadRequestException('ملف المتدرب غير موجود');
+    await this.assertProfileNotLocked(profile.id);
 
     const activeRotation = await this.prisma.rotation.findFirst({
       where: { traineeProfileId: profile.id, status: 'active' },
@@ -367,7 +384,7 @@ export class LogbookController {
   }
 
   @Get('cases')
-  @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner', 'training_supervisor', 'hospital_administrator', 'department_head', 'trainee')
+  @RequireRoles('trainer', 'academic_supervisor', 'org_manager', 'platform_owner', 'hospital_training_admin', 'trainee')
   async getCases(@CurrentUser() user: IAuthenticatedUser) {
     const isTrainee = user.roles?.includes('trainee');
     const trainer = isTrainee ? null : await this.prisma.trainerProfile.findFirst({
@@ -417,6 +434,7 @@ export class LogbookController {
     const previous = await this.prisma.clinicalCaseLog.findUnique({ where: { id: logId } });
     if (!previous) throw new BadRequestException('السجل غير موجود');
     await this.assertTrainerScope(user, previous.traineeProfileId);
+    await this.assertProfileNotLocked(previous.traineeProfileId);
     const updatedLog = await this.prisma.clinicalCaseLog.update({
       where: { id: logId },
       data: {
@@ -541,6 +559,7 @@ export class LogbookController {
     const target = await this.prisma.clinicalCaseLog.findUnique({ where: { id } });
     if (!target) throw new BadRequestException('السجل غير موجود');
     await this.assertTrainerScope(user, target.traineeProfileId);
+    await this.assertProfileNotLocked(target.traineeProfileId);
     if (target.organizationId !== user.organizationId && !user.roles.includes('platform_owner')) {
       throw new ForbiddenException('غير مصرح بالوصول لسجل خارج جهتك');
     }
@@ -588,7 +607,7 @@ export class LogbookController {
 
   // ─── 4. حقيبة الكفاءات والتقدم (Competency Portfolio Progress) ───────────
   @Get('competencies')
-  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_training_admin', 'academic_supervisor', 'org_manager', 'platform_owner')
+  @RequireRoles('trainee', 'trainer', 'hospital_training_admin', 'academic_supervisor', 'org_manager', 'platform_owner')
   @ApiOperation({ summary: 'عرض كفاءات وتقدم المتدرب ونسبة الإنجاز المطلوبة' })
   async getCompetencies(@CurrentUser() user: IAuthenticatedUser, @Query('traineeId') traineeId?: string) {
     let targetTraineeId = traineeId;
@@ -622,15 +641,53 @@ export class LogbookController {
     };
   }
 
+  /**
+   * Trainer records the trainee's progress on a competency. The counters and
+   * status already exist on CompetencyProgress and are maintained automatically
+   * when a case log is approved; this is the manual correction path the trainer
+   * needs, guarded by the same trainer→trainee scope as the read above.
+   */
+  @Patch('competencies/:id')
+  @RequireRoles('trainer', 'hospital_training_admin', 'org_manager', 'platform_owner')
+  @ApiOperation({ summary: 'تحديث تقدم كفاءة للمتدرب — للمدرب المسؤول فقط' })
+  async updateCompetency(
+    @Param('id') id: string,
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body() dto: { completedCount?: number; requiredCount?: number; status?: string },
+  ) {
+    const existing = await this.prisma.competencyProgress.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('سجل الكفاءة غير موجود');
+    await this.assertTrainerScope(user, existing.traineeProfileId);
+    await this.assertProfileNotLocked(existing.traineeProfileId);
+
+    const completedCount = dto.completedCount ?? existing.completedCount;
+    const requiredCount = dto.requiredCount ?? existing.requiredCount;
+    if (completedCount < 0 || requiredCount < 0) {
+      throw new BadRequestException('القيم يجب أن تكون أرقاماً موجبة');
+    }
+
+    const data = await this.prisma.competencyProgress.update({
+      where: { id },
+      data: {
+        completedCount,
+        requiredCount,
+        status: dto.status ?? (completedCount >= requiredCount ? 'completed' : 'in_progress'),
+        lastUpdated: new Date(),
+      },
+      include: { procedure: true },
+    });
+    return { success: true, data };
+  }
+
   // ─── 5. إحصائيات والتحليلات اللحظية للـ Logbook ──────────────────────────
   @Get('dashboard-stats')
-  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_training_admin', 'academic_supervisor', 'org_manager', 'platform_owner', 'hospital_administrator')
+  @RequireRoles('trainee', 'trainer', 'hospital_training_admin', 'academic_supervisor', 'org_manager', 'platform_owner')
   @ApiOperation({ summary: 'إحصائيات Logbook اللحظية للدشبورد' })
   async getLogbookStats(@CurrentUser() user: IAuthenticatedUser) {
     let profile = await this.prisma.traineeProfile.findFirst({
       where: { person: { userAccounts: { some: { id: user.accountId } } } },
     });
-    if (!profile && !user.roles.includes('platform_owner') && !user.roles.includes('org_manager') && !user.roles.includes('hospital_administrator')) {
+    if (!profile && !user.roles.includes('platform_owner') && !user.roles.includes('org_manager')) {
     }
 
     const whereCondition = profile ? { traineeProfileId: profile.id } : { organizationId: user.organizationId };

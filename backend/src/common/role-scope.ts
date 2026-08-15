@@ -61,10 +61,7 @@ export const ROLE_SCOPES: Record<string, RoleScopeRule> = {
 
   // ── Hospital ──────────────────────────────────────────────────────────────
   hospital_administrator: { ...HOSPITAL, labelAr: 'مستشفى واحد' },
-  hospitalAdmin: { ...HOSPITAL, labelAr: 'مستشفى واحد' },
   hospital_training_admin: { ...HOSPITAL, labelAr: 'مستشفى واحد' },
-  training_supervisor: { ...HOSPITAL, labelAr: 'مستشفى واحد' },
-  department_head: { ...HOSPITAL, labelAr: 'مستشفى واحد' },
   trainer: { ...HOSPITAL, labelAr: 'مستشفى واحد' },
   trainee: { ...HOSPITAL, labelAr: 'مستشفى واحد' },
 };

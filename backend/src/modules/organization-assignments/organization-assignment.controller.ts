@@ -13,21 +13,21 @@ export class OrganizationAssignmentController {
   constructor(private svc: OrganizationAssignmentService) {}
 
   @Get('my')
-  @RequireRoles('platform_owner', 'cluster_administrator', 'hospital_administrator', 'training_director', 'university_administrator', 'training_supervisor', 'trainer', 'trainee')
+  @RequireRoles('platform_owner', 'cluster_administrator', 'cluster_manager', 'hospital_administrator', 'training_director', 'university_administrator', 'trainer', 'trainee')
   @ApiOperation({ summary: 'تعيينات المستخدم الحالي' })
   async myAssignments(@CurrentUser() user: IAuthenticatedUser) {
     return this.svc.getAssignments(user.accountId);
   }
 
   @Get('org/:orgId/members')
-  @RequireRoles('platform_owner', 'cluster_administrator', 'hospital_administrator', 'training_director', 'university_administrator')
+  @RequireRoles('platform_owner', 'cluster_administrator', 'cluster_manager', 'hospital_administrator', 'training_director', 'university_administrator')
   @ApiOperation({ summary: 'أعضاء الجهة من خلال التعيينات' })
   async membersInOrg(@Param('orgId') orgId: string) {
     return this.svc.getMembersInOrg(orgId);
   }
 
   @Post('transfer')
-  @RequireRoles('platform_owner', 'cluster_administrator', 'hospital_administrator')
+  @RequireRoles('platform_owner', 'cluster_administrator', 'cluster_manager', 'hospital_administrator')
   @ApiOperation({ summary: 'نقل مستخدم إلى جهة أو قسم آخر' })
   async transfer(
     @Body() body: {

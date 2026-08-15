@@ -118,7 +118,7 @@ export class IncidentsController {
   }
 
   @Post()
-  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_administrator', 'hospital_training_admin', 'cluster_administrator')
+  @RequireRoles('trainee', 'trainer', 'hospital_administrator', 'hospital_training_admin', 'cluster_administrator', 'cluster_manager')
   @ApiOperation({ summary: 'تقديم بلاغ جديد' })
   async create(
     @CurrentUser() user: IAuthenticatedUser,
@@ -173,7 +173,7 @@ export class IncidentsController {
   }
 
   @Post(':id/comments')
-  @RequireRoles('trainee', 'trainer', 'training_supervisor', 'hospital_administrator', 'hospital_training_admin', 'cluster_administrator', 'platform_owner')
+  @RequireRoles('trainee', 'trainer', 'hospital_administrator', 'hospital_training_admin', 'cluster_administrator', 'platform_owner')
   @ApiOperation({ summary: 'إضافة تعليق / رد على البلاغ' })
   async addComment(
     @Param('id') id: string,
@@ -218,7 +218,7 @@ export class IncidentsController {
   }
 
   @Post(':id/assign')
-  @RequireRoles('hospital_administrator', 'hospital_training_admin', 'training_supervisor', 'cluster_administrator', 'platform_owner')
+  @RequireRoles('hospital_administrator', 'hospital_training_admin', 'cluster_administrator', 'platform_owner')
   @ApiOperation({ summary: 'تعيين مسؤول لمتابعة البلاغ' })
   async assign(
     @Param('id') id: string,
@@ -262,7 +262,7 @@ export class IncidentsController {
   }
 
   @Post(':id/escalate')
-  @RequireRoles('hospital_administrator', 'hospital_training_admin', 'training_supervisor', 'cluster_administrator', 'platform_owner')
+  @RequireRoles('hospital_administrator', 'hospital_training_admin', 'cluster_administrator', 'platform_owner')
   @ApiOperation({ summary: 'تصعيد البلاغ للجهة الأعلى (التجمع أو الهيئة الأكاديمية)' })
   async escalate(
     @Param('id') id: string,
@@ -333,7 +333,7 @@ export class IncidentsController {
   }
 
   @Patch(':id/status')
-  @RequireRoles('hospital_administrator', 'hospital_training_admin', 'training_supervisor', 'cluster_administrator', 'platform_owner')
+  @RequireRoles('hospital_administrator', 'hospital_training_admin', 'cluster_administrator', 'cluster_manager', 'platform_owner')
   @ApiOperation({ summary: 'تحديث حالة البلاغ' })
   async updateStatus(
     @Param('id') id: string,
@@ -381,7 +381,7 @@ export class IncidentsController {
   }
 
   @Post(':id/resolve')
-  @RequireRoles('hospital_administrator', 'hospital_training_admin', 'training_supervisor', 'cluster_administrator', 'platform_owner')
+  @RequireRoles('hospital_administrator', 'hospital_training_admin', 'cluster_administrator', 'platform_owner')
   @ApiOperation({ summary: 'حل البلاغ' })
   async resolve(
     @Param('id') id: string,
@@ -393,7 +393,7 @@ export class IncidentsController {
   }
 
   @Post(':id/close')
-  @RequireRoles('hospital_administrator', 'hospital_training_admin', 'training_supervisor', 'cluster_administrator', 'platform_owner')
+  @RequireRoles('hospital_administrator', 'hospital_training_admin', 'cluster_administrator', 'platform_owner')
   @ApiOperation({ summary: 'إغلاق البلاغ' })
   async close(
     @Param('id') id: string,

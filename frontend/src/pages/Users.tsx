@@ -40,7 +40,7 @@ export const UsersPage: React.FC = () => {
     nameEn: '',
     email: '',
     phone: '',
-    password: 'Miran@Admin2024!',
+    password: '',
     roleCode: 'trainer',
     organizationId: '',
     hospitalId: '',
@@ -65,10 +65,8 @@ export const UsersPage: React.FC = () => {
 
   const roleNameMap: Record<string, string> = useMemo(() => ({
     platform_owner: 'مدير المنصة الإلكترونية',
-    cluster_manager: 'مشرف التدريب بالتجمع',
-    hospital_training_admin: 'إدارة التدريب بالمستشفى',
-    department_head: 'رئيس القسم العلمي',
-    training_supervisor: 'مشرف التدريب السريري',
+    cluster_manager: 'مدير تدريب التجمع',
+    hospital_training_admin: 'مدير تدريب المستشفى',
     university_administrator: 'مسؤول الجامعة',
     academic_supervisor: 'المشرف الأكاديمي',
     trainer: 'مدرب سريري',
@@ -199,7 +197,7 @@ export const UsersPage: React.FC = () => {
       if (payload.roleCode) cleanPayload.roleCode = payload.roleCode;
       if (payload.organizationId) cleanPayload.organizationId = payload.organizationId;
       if (payload.hospitalId) cleanPayload.hospitalId = payload.hospitalId;
-      if (payload.password && payload.password.trim().length > 0 && payload.password !== 'Miran@Admin2024!') {
+      if (payload.password && payload.password.trim().length > 0) {
         cleanPayload.password = payload.password;
       }
       const res = await apiClient.patch(`/user-accounts/${id}`, cleanPayload);
@@ -232,7 +230,7 @@ export const UsersPage: React.FC = () => {
       nameEn: '',
       email: '',
       phone: '',
-      password: 'Miran@Admin2024!',
+      password: '',
       roleCode: 'trainer',
       organizationId: defaultOrg,
       hospitalId: defaultHosp,
@@ -558,10 +556,8 @@ export const UsersPage: React.FC = () => {
                 onChange={(e) => setFormData({ ...formData, roleCode: e.target.value })}
               >
                 <MenuItem value="platform_owner">مالك المنصة الإلكترونية (Platform Owner)</MenuItem>
-                <MenuItem value="cluster_manager">مشرف التدريب بالتجمع (Cluster Manager)</MenuItem>
-                <MenuItem value="hospital_training_admin">إدارة التدريب بالمستشفى (Hospital Training Admin)</MenuItem>
-                <MenuItem value="department_head">رئيس القسم السريري (Department Head)</MenuItem>
-                <MenuItem value="training_supervisor">المشرف التدريبي بالمستشفى (Training Supervisor)</MenuItem>
+                <MenuItem value="cluster_manager">مدير تدريب التجمع (Cluster Training Manager)</MenuItem>
+                <MenuItem value="hospital_training_admin">مدير تدريب المستشفى (Hospital Training Manager)</MenuItem>
                 <MenuItem value="university_administrator">مسؤول الجامعة الموفدة (University Administrator)</MenuItem>
                 <MenuItem value="academic_supervisor">المشرف الأكاديمي (Academic Supervisor)</MenuItem>
                 <MenuItem value="trainer">المدرب السريري (Clinical Trainer)</MenuItem>

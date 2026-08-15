@@ -1150,7 +1150,16 @@ export class TrainingRequestTraineesService {
           studentCount: true,
           status: true,
           notes: true,
-          sourceOrg: { select: { id: true, nameAr: true, nameEn: true } },
+          // organizationType is needed to tell Path B (cluster-originated) apart
+          // from Path A when classifying a `submitted` row below.
+          sourceOrg: {
+            select: {
+              id: true,
+              nameAr: true,
+              nameEn: true,
+              organizationType: { select: { code: true } },
+            },
+          },
           targetOrg: { select: { id: true, nameAr: true, nameEn: true } },
         },
       },
@@ -1170,10 +1179,27 @@ export class TrainingRequestTraineesService {
     });
 
     const actionableSet = new Set<string>(TrainingRequestTraineesService.HOSPITAL_ACTIONABLE_STATUSES);
-    const upstreamSet = new Set<string>(TrainingRequestTraineesService.UPSTREAM_PENDING_STATUSES);
 
-    const data = allRows.filter((r) => actionableSet.has(r.status));
-    const pendingUpstreamRows = allRows.filter((r) => upstreamSet.has(r.status));
+    // Path-conditional classification.
+    //
+    // On Path A (university → cluster → hospital) a `submitted` row is still
+    // awaiting the cluster's approveTrainee(), so it is read-only context.
+    //
+    // On Path B the cluster IS the originator: it raised the request and attached
+    // the university's no-objection letter, so submitting the roster is itself the
+    // cluster's action. Requiring a second cluster approval would insert a step the
+    // approved workflow does not have, so a `submitted` row on this path reaches
+    // the hospital as immediately actionable.
+    const isDirectClusterRow = (row: { trainingRequest?: { sourceOrg?: { organizationType?: { code?: string } | null } | null } | null }) =>
+      row.trainingRequest?.sourceOrg?.organizationType?.code === 'cluster';
+
+    const isActionable = (row: (typeof allRows)[number]) =>
+      actionableSet.has(row.status) || (row.status === 'submitted' && isDirectClusterRow(row));
+
+    // The two groups are mutually exclusive by construction: every row is tested
+    // once and lands in exactly one of them, so no row can appear twice.
+    const data = allRows.filter((r) => isActionable(r));
+    const pendingUpstreamRows = allRows.filter((r) => !isActionable(r));
 
     return { data, pendingUpstreamRows };
   }

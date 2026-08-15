@@ -243,7 +243,17 @@ export class NotificationService {
 
   private scopeWhere(scope: ScopeContext): Record<string, unknown> {
     if (!scope || !scope.visibleOrgIds || scope.visibleOrgIds === null) return {};
-    const validOrgIds = scope.visibleOrgIds.filter((id): id is string => typeof id === 'string' && id.length > 0);
+    // Notification.organizationId is non-nullable, so an `organizationId: null`
+    // branch is not a valid filter — Prisma rejects it with "Argument
+    // organizationId is missing" rather than matching org-less rows.
+    //
+    // The ids are also filtered defensively: an empty or malformed entry inside
+    // visibleOrgIds would otherwise reach Prisma as part of the `in` list, and an
+    // empty resulting list must fall back to the unscoped `{}` rather than
+    // `{ in: [] }`, which would silently match nothing.
+    const validOrgIds = scope.visibleOrgIds.filter(
+      (id): id is string => typeof id === 'string' && id.length > 0,
+    );
     if (validOrgIds.length === 0) return {};
     return { organizationId: { in: validOrgIds } };
   }

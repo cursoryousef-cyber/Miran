@@ -56,7 +56,7 @@ export function hasPermission(user: any, action: RBACAction, scope: RBACScope): 
   }
 
   // 4. Hospital Supervisor -> CRUD on Rotations, Schedules, Student Distribution, Trainers Assignment
-  if (roles.includes('hospital_administrator') || roles.includes('department_head')) {
+  if (roles.includes('hospital_training_admin')) {
     if (['rotations', 'schedules', 'assignments', 'trainers', 'departments'].includes(scope)) {
       return ['create', 'read', 'update', 'delete', 'details'].includes(action);
     }

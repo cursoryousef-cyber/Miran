@@ -225,6 +225,214 @@ describe('Clinical logbook — approval, rejection and competency scope', () => 
   });
 });
 
+describe('Evaluation criterion scoring', () => {
+  // A form with explicit maxima summing to 100, so every expected total below is
+  // arithmetic the test states rather than something it reads back from the API.
+  let formId: string;
+  const fullMarks = {
+    knowledge: 20, clinical_skills: 30, communication: 20, documentation: 15, professionalism: 15,
+  };
+
+  const submit = (scores: Record<string, number>, extra: Record<string, unknown> = {}) =>
+    http.post('/operations/evaluations').set(auth(trainerAToken)).send({
+      evaluateeId: traineeA.account.id,
+      formId,
+      evaluationType: 'periodic',
+      scores,
+      ...extra,
+    });
+
+  beforeAll(async () => {
+    const form = await prisma.evaluationForm.create({
+      data: {
+        organizationId: s.hospital1.id,
+        nameAr: 'استمارة معايير الاختبار',
+        formType: 'mid_rotation',
+        items: [
+          { code: 'knowledge', nameAr: 'المعرفة الطبية', max: 20 },
+          { code: 'clinical_skills', nameAr: 'المهارات السريرية', max: 30 },
+          { code: 'communication', nameAr: 'التواصل', max: 20 },
+          { code: 'documentation', nameAr: 'التوثيق', max: 15 },
+          { code: 'professionalism', nameAr: 'الالتزام المهني', max: 15 },
+        ],
+      },
+    });
+    formId = form.id;
+  });
+
+  it('1. refuses a score above the criterion maximum', async () => {
+    const res = await submit({ ...fullMarks, knowledge: 21 });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('الحد الأقصى');
+  });
+
+  it('2. refuses a negative score', async () => {
+    const res = await submit({ ...fullMarks, communication: -1 });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('سالبة');
+  });
+
+  it('3. refuses a payload missing one of the form criteria', async () => {
+    const { documentation, ...withoutOne } = fullMarks;
+    const res = await submit(withoutOne as Record<string, number>);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('مطلوبة');
+  });
+
+  it('4. derives total and percentage from the individual criterion scores', async () => {
+    const res = await submit({
+      knowledge: 18, clinical_skills: 26, communication: 19, documentation: 13, professionalism: 14,
+    });
+    expect([200, 201]).toContain(res.status);
+
+    const saved = await prisma.evaluation.findUniqueOrThrow({ where: { id: res.body.data.id } });
+    const scores = saved.scores as Record<string, number>;
+    expect(Number(saved.totalScore)).toBe(90);
+    expect(scores._total).toBe(90);
+    expect(scores._maxTotal).toBe(100);
+    expect(scores._percentage).toBe(90);
+    // The parts are stored as given, so the total can always be re-derived.
+    expect(scores.knowledge).toBe(18);
+    expect(scores.clinical_skills).toBe(26);
+  });
+
+  it('5. ignores a client-supplied total that disagrees with the criterion scores', async () => {
+    // 50/100 lands under the low-score threshold, so the mandatory comment is
+    // supplied here — this case is about the total, not that gate.
+    const res = await submit(
+      { knowledge: 10, clinical_skills: 10, communication: 10, documentation: 10, professionalism: 10 },
+      { totalScore: 99, comments: 'ملاحظة توضح الدرجة المنخفضة' },
+    );
+    expect([200, 201]).toContain(res.status);
+
+    const saved = await prisma.evaluation.findUniqueOrThrow({ where: { id: res.body.data.id } });
+    expect(Number(saved.totalScore)).toBe(50);
+    expect((saved.scores as Record<string, number>)._percentage).toBe(50);
+  });
+
+  it('6. applies the low-score comment gate to the derived percentage', async () => {
+    // 50/100 = 50% — below the 60% threshold, so a comment is mandatory.
+    const lowScores = {
+      knowledge: 10, clinical_skills: 10, communication: 10, documentation: 10, professionalism: 10,
+    };
+
+    const refused = await submit(lowScores);
+    expect(refused.status).toBe(400);
+    expect(refused.body.message).toContain('تعليقاً إلزامياً');
+
+    const accepted = await submit(lowScores, { comments: 'أداء دون المستوى المطلوب في التوثيق' });
+    expect([200, 201]).toContain(accepted.status);
+  });
+});
+
+describe('Graduation eligibility gate', () => {
+  // traineeB has an active rotation but no completed requirements, so it is the
+  // realistic "approvals collected, requirements outstanding" case.
+  const approve = (token: string, profileId: string) =>
+    http
+      .post(`/training-requests/trainees/${profileId}/graduation/approve`)
+      .set(auth(token))
+      .send({ notes: 'اختبار' });
+
+  it('reports the trainee as not eligible while requirements are outstanding', async () => {
+    const res = await http
+      .get(`/training-requests/trainees/${traineeB.profile.id}/graduation/eligibility`)
+      .set(auth(trainerAToken));
+    expect(res.status).toBe(200);
+    expect(res.body.eligible).toBe(false);
+    expect(res.body.remaining ?? res.body.issues).toBeDefined();
+  });
+
+  it('refuses to graduate once every approval is in but the requirements are not met', async () => {
+    const hospitalToken = await login(SCENARIO.accounts.hospital1TrainingAdmin);
+    const universityToken = await login(SCENARIO.accounts.universityAdmin);
+
+    // The first two approvals are recorded; neither completes the chain.
+    expect([200, 201]).toContain((await approve(trainerAToken, traineeB.profile.id)).status);
+    expect([200, 201]).toContain((await approve(hospitalToken, traineeB.profile.id)).status);
+
+    // The third completes the chain and must be refused by the eligibility gate.
+    const last = await approve(universityToken, traineeB.profile.id);
+    expect(last.status).toBe(400);
+    expect(last.body.message).toContain('لا يمكن اعتماد التخرج قبل استيفاء المتطلبات');
+
+    const profile = await prisma.traineeProfile.findUniqueOrThrow({ where: { id: traineeB.profile.id } });
+    expect(profile.applicationStatus).not.toBe('graduated');
+    expect(profile.isLocked).toBe(false);
+    expect(profile.graduatedAt).toBeNull();
+  });
+});
+
+describe('Post-graduation lock on clinical records', () => {
+  // The lock is what graduation itself sets; this proves it is honoured by the
+  // clinical write paths rather than only by the graduation service.
+  let lockedLogId: string;
+
+  beforeAll(async () => {
+    const log = await prisma.clinicalCaseLog.create({
+      data: {
+        organizationId: s.hospital1.id,
+        traineeProfileId: traineeA.profile.id,
+        diagnosis: 'سجل ما قبل التخرج',
+        status: 'submitted',
+        performedAt: new Date(),
+      },
+    });
+    lockedLogId = log.id;
+    await prisma.traineeProfile.update({
+      where: { id: traineeA.profile.id },
+      data: { applicationStatus: 'graduated', graduatedAt: new Date(), isLocked: true },
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.traineeProfile.update({
+      where: { id: traineeA.profile.id },
+      data: { applicationStatus: 'active', graduatedAt: null, isLocked: false },
+    });
+    await prisma.clinicalCaseLog.deleteMany({ where: { id: lockedLogId } });
+  });
+
+  it('refuses a new logbook entry on a graduated file', async () => {
+    const res = await http
+      .post('/logbook/entries')
+      .set(auth(trainerAToken))
+      .send({ traineeProfileId: traineeA.profile.id, diagnosis: 'محاولة بعد التخرج' });
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain('مغلق');
+  });
+
+  it('refuses approving or rejecting an existing entry on a graduated file', async () => {
+    const approveRes = await http
+      .post(`/logbook/entries/${lockedLogId}/approve`)
+      .set(auth(trainerAToken))
+      .send({});
+    expect(approveRes.status).toBe(403);
+
+    const rejectRes = await http
+      .patch(`/logbook/entries/${lockedLogId}/reject`)
+      .set(auth(trainerAToken))
+      .send({ feedback: 'سبب' });
+    expect(rejectRes.status).toBe(403);
+  });
+
+  it('refuses assigning a new task to a graduated trainee', async () => {
+    const res = await http
+      .post('/operations/tasks')
+      .set(auth(trainerAToken))
+      .send({ assignedToId: traineeA.account.id, titleAr: 'مهمة بعد التخرج' });
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain('مغلق');
+  });
+
+  it('preserves the records written before graduation', async () => {
+    const kept = await prisma.clinicalCaseLog.findUnique({ where: { id: lockedLogId } });
+    expect(kept).not.toBeNull();
+    expect(kept!.status).toBe('submitted');
+    expect(kept!.diagnosis).toBe('سجل ما قبل التخرج');
+  });
+});
+
 describe('Unauthorized access', () => {
   it('all trainer-scoped endpoints reject a request with no token', async () => {
     const endpoints = ['/operations/trainer/dashboard', '/operations/trainer/assigned-interns', `/operations/trainer/trainee/${traineeA.profile.id}`];

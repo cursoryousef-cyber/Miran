@@ -43,8 +43,6 @@ export const ROLE_SCOPES: Record<string, RoleScopeRule> = {
 
   hospital_administrator: HOSPITAL,
   hospital_training_admin: HOSPITAL,
-  training_supervisor: HOSPITAL,
-  department_head: HOSPITAL,
   trainer: HOSPITAL,
   trainee: HOSPITAL,
 };

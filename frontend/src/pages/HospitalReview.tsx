@@ -115,12 +115,16 @@ export const HospitalReview: React.FC = () => {
   });
 
   const assignMut = useMutation({
-    mutationFn: () => apiClient.patch(`/training-requests/trainees/${selectedRow?.id}/hospital-review/assignment`, {
+    // The canonical hospital-level placement. `hospital-review/assignment` only
+    // edits the row's fields; this endpoint writes the allocation record and, once
+    // hospital + department + trainer are all set on an approved row, activates it
+    // — which is what creates the rotation the trainer and trainee dashboards read.
+    mutationFn: () => apiClient.post(`/training-requests/trainees/${selectedRow?.id}/allocations/department`, {
       departmentId: newDeptId || undefined,
       trainerProfileId: newTrainerId || undefined,
       startDate: newStartDate || undefined,
       endDate: newEndDate || undefined,
-      reason: notes,
+      reason: notes || 'إسناد المتدرب لقسم ومدرب داخل المستشفى',
     }),
     onSuccess: (res: any) => {
       qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] });
@@ -130,6 +134,7 @@ export const HospitalReview: React.FC = () => {
       qc.invalidateQueries({ queryKey: ['trainer-cards'] });
       qc.invalidateQueries({ queryKey: ['hospitals-cards'] });
       qc.invalidateQueries({ queryKey: ['rotations-departments'] });
+      qc.invalidateQueries({ queryKey: ['tr-assignment-requests'] });
       setDialog(null);
       setSuccessMsg(res.data?.message || 'تم إسناد المتدرب وتحديث سعة القسم والمدرب بنجاح');
     },

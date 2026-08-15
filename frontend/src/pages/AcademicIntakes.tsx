@@ -32,7 +32,12 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 export const AcademicIntakes: React.FC = () => {
-  const { user, hasCapability } = useAuth();
+  const { user, hasCapability, hasAnyRole } = useAuth();
+  // Training requests originate at the university and are processed by the
+  // cluster. Hospital training management receives and processes them; it never
+  // creates one, so the creation action is not offered to that role.
+  const canCreateRequest = hasCapability?.('training_request.create')
+    && !hasAnyRole(['hospital_training_admin', 'hospital_administrator']);
   const navigate = useNavigate();
   // Batch creation is a cluster-scope capability. hospital_training_admin holds
   // no academic-batch capability, so listing it here would show a button whose
@@ -199,14 +204,16 @@ export const AcademicIntakes: React.FC = () => {
       title="الدفعات الأكاديمية ونطاق التدريب (Academic Batches)"
       actions={
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-          <Button
-            variant="outlined"
-            startIcon={<Plus size={18} />}
-            onClick={() => { setOpenNewRequestModal(true); setErrorMsg(null); }}
-            sx={{ borderColor: '#0F766E', color: '#0F766E', fontWeight: 700, borderRadius: 2 }}
-          >
-            + طلب تدريب جديد (داخلي / جهة)
-          </Button>
+          {canCreateRequest && (
+            <Button
+              variant="outlined"
+              startIcon={<Plus size={18} />}
+              onClick={() => { setOpenNewRequestModal(true); setErrorMsg(null); }}
+              sx={{ borderColor: '#0F766E', color: '#0F766E', fontWeight: 700, borderRadius: 2 }}
+            >
+              + طلب تدريب جديد (داخلي / جهة)
+            </Button>
+          )}
           {canCreateBatch && (
             <Button
               variant="contained"

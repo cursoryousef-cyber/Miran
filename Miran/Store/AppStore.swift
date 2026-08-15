@@ -52,6 +52,7 @@ final class AppStore: ObservableObject {
     @Published var caseLogsList: [ClinicalCaseLogItemModel] = []
     @Published var procedureCatalogList: [ProcedureCatalogItemModel] = []
     @Published var evaluationsList: [EvaluationItemModel] = []
+    @Published var hospitalReviewTrainees: [TrainingRequestTraineeRow] = []
 
     // MARK: - طلبات التدريب الواردة للتجمع (Cluster)
 
@@ -195,6 +196,42 @@ final class AppStore: ObservableObject {
         } catch {
             print("⚠️ [AppStore] fetchHospitalData shifts: \(error.localizedDescription)")
         }
+
+        // Hospital Review Trainees
+        do {
+            let list = try await APIClient.shared.fetchHospitalReviewTrainees()
+            self.hospitalReviewTrainees = list
+        } catch {
+            print("⚠️ [AppStore] fetchHospitalData hospitalReviewTrainees: \(error.localizedDescription)")
+        }
+
+        // Active Hospital Trainees
+        do {
+            let res: APIListResponse<TraineeProfileModel> = try await APIClient.shared.request(endpoint: "/operations/trainer/assigned-interns")
+            self.trainerAssignedTraineesList = res.data
+        } catch {
+            print("⚠️ [AppStore] fetchHospitalData assigned-interns: \(error.localizedDescription)")
+        }
+    }
+
+    func approveCandidateRow(rowId: String) async throws {
+        try await APIClient.shared.approveCandidateRow(rowId: rowId)
+        await fetchHospitalData()
+    }
+
+    func rejectCandidateRow(rowId: String, reason: String) async throws {
+        try await APIClient.shared.rejectCandidateRow(rowId: rowId, reason: reason)
+        await fetchHospitalData()
+    }
+
+    func returnCandidateRowToUniversity(rowId: String, notes: String) async throws {
+        try await APIClient.shared.returnCandidateRowToUniversity(rowId: rowId, notes: notes)
+        await fetchHospitalData()
+    }
+
+    func reviewCandidateDocument(docId: String, action: String, notes: String? = nil) async throws {
+        try await APIClient.shared.reviewCandidateDocument(docId: docId, action: action, notes: notes)
+        await fetchHospitalData()
     }
 
     /// 2. Trainer Operational Data Fetch

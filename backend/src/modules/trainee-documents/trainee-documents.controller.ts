@@ -37,9 +37,9 @@ export class TraineeDocumentsController {
   @RequireRoles(
     'university_administrator',
     'academic_affairs',
-    'cluster_administrator',
+    'cluster_administrator', 'cluster_manager',
     'training_director',
-    'hospital_administrator',
+    'hospital_training_admin',
     'trainee',
     'platform_owner',
   )
@@ -71,9 +71,9 @@ export class TraineeDocumentsController {
 
   @Post(':id/review')
   @RequireRoles(
-    'cluster_administrator',
+    'cluster_administrator', 'cluster_manager',
     'training_director',
-    'hospital_administrator',
+    'hospital_training_admin',
     'academic_affairs',
     'platform_owner',
   )

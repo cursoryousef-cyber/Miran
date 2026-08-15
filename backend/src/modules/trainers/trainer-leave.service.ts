@@ -120,9 +120,9 @@ export class TrainerLeaveService {
       }
     }
 
-    // Notify training supervisor about the leave
+    // Notify the hospital training management about the leave
     try {
-      await this.notificationService.notifyOrgUsers(organizationId, 'training_supervisor', {
+      await this.notificationService.notifyOrgUsers(organizationId, 'hospital_training_admin', {
         titleAr: 'طلب إجازة مدرب جديد',
         bodyAr: `المدرب ${trainer.person.nameAr} يطلب إجازة (${dto.leaveType}) من ${dto.startDate} إلى ${dto.endDate}`,
         type: 'trainer_leave_request',

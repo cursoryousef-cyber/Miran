@@ -40,6 +40,11 @@ import {
   ScopeContextService,
 } from '../../common/authz';
 import { CapacityService } from '../organizations/capacity.service';
+import { TRAINEE_ROW_STATUS } from '../../common/status-constants';
+import {
+  assertValidTransition,
+  TRAINING_REQUEST_TRAINEE_TRANSITIONS,
+} from '../../common/state-machine/transition-guard';
 import { ActivationService } from './activation.service';
 
 export type AllocationAction =
@@ -271,6 +276,7 @@ export class TraineeAllocationService {
       academicIntakeId: string | null;
       trainingRequestId: string;
       traineeProfileId: string | null;
+      rowStatus?: string;
     },
   ) {
     let txResult: {
@@ -352,6 +358,27 @@ export class TraineeAllocationService {
         });
 
         // Denormalised projection, so existing readers stay correct.
+        //
+        // The row's own status moves cluster_approved → allocated here, the
+        // transition the state machine already declares for this step. Writing
+        // the allocation without it left the row reading `cluster_approved`
+        // forever, and every hospital-side action (start review, then the
+        // allocated → hospital_review transition) is gated on `allocated`, so a
+        // correctly placed trainee could never be accepted by the hospital.
+        const currentRowStatus = context.rowStatus;
+        const rowStatusAfterAllocation =
+          currentRowStatus === TRAINEE_ROW_STATUS.CLUSTER_APPROVED
+            ? TRAINEE_ROW_STATUS.ALLOCATED
+            : undefined;
+        if (rowStatusAfterAllocation) {
+          assertValidTransition(
+            'صف المتدرب',
+            currentRowStatus!,
+            rowStatusAfterAllocation,
+            TRAINING_REQUEST_TRAINEE_TRANSITIONS,
+          );
+        }
+
         await tx.trainingRequestTrainee.update({
           where: { id: traineeRowId },
           data: {
@@ -359,6 +386,7 @@ export class TraineeAllocationService {
             assignedDepartmentId: target.departmentId ?? null,
             assignedTrainerProfileId: target.trainerProfileId ?? null,
             assignedSupervisorAccountId: target.supervisorAccountId ?? null,
+            ...(rowStatusAfterAllocation ? { status: rowStatusAfterAllocation } : {}),
             updatedById: user.accountId,
           },
         });
@@ -662,19 +690,37 @@ export class TraineeAllocationService {
         trainingRequestId: true,
         assignedHospitalId: true,
         status: true,
-        trainingRequest: { select: { targetOrgId: true, status: true } },
+        trainingRequest: {
+          select: {
+            targetOrgId: true,
+            sourceOrgId: true,
+            status: true,
+            targetOrg: { select: { organizationType: { select: { code: true } } } },
+          },
+        },
       },
     });
     if (!row) throw new NotFoundException('صف المتدرب غير موجود');
     if (!row.trainingRequest)
       throw new BadRequestException('صف المتدرب غير مرتبط بطلب تدريب');
 
+    // Which organisation is the owning cluster depends on the path. Path A
+    // (university → cluster) addresses the cluster, so the target is it. Path B
+    // (cluster → hospital) addresses a hospital directly, and the cluster is the
+    // source. Reading the target unconditionally made every Path B allocation
+    // compare a hospital against itself and fail.
+    const requestClusterOrgId =
+      row.trainingRequest.targetOrg?.organizationType?.code === 'cluster'
+        ? row.trainingRequest.targetOrgId
+        : row.trainingRequest.sourceOrgId;
+
     return {
-      clusterOrgId: row.trainingRequest.targetOrgId,
+      clusterOrgId: requestClusterOrgId,
       academicIntakeId: row.academicIntakeId,
       trainingRequestId: row.trainingRequestId,
       traineeProfileId: row.traineeProfileId,
       assignedHospitalId: row.assignedHospitalId,
+      rowStatus: row.status,
     };
   }
 

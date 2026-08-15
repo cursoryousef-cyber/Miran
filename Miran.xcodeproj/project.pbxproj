@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		02BD4142BECF667491E3FE8A /* MiranStateViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD3BD56FAB0634DF306EEDD4 /* MiranStateViews.swift */; };
+		56E48E1B002D5B27C47AA1A0 /* IncidentsFullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D1B0286906836374B0D720A /* IncidentsFullView.swift */; };
 		A1B2C3D410000001 /* MiranApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000001 /* MiranApp.swift */; };
 		A1B2C3D410000002 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000002 /* Models.swift */; };
 		A1B2C3D410000003 /* TrainerCall.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000003 /* TrainerCall.swift */; };
@@ -23,7 +25,6 @@
 		A1B2C3D410000014 /* DocumentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000014 /* DocumentsView.swift */; };
 		A1B2C3D410000015 /* IncomingCallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000015 /* IncomingCallView.swift */; };
 		A1B2C3D410000016 /* TraineeProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000016 /* TraineeProfileView.swift */; };
-		A1B2C3D410000099 /* ClinicalLogbookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000099 /* ClinicalLogbookView.swift */; };
 		A1B2C3D410000017 /* TrainerTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000017 /* TrainerTabView.swift */; };
 		A1B2C3D410000018 /* TrainerHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000018 /* TrainerHomeView.swift */; };
 		A1B2C3D410000019 /* CallLauncherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000019 /* CallLauncherView.swift */; };
@@ -48,6 +49,7 @@
 		A1B2C3D410000038 /* DigitalIDCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000038 /* DigitalIDCardView.swift */; };
 		A1B2C3D410000039 /* JoiningDeclarationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000039 /* JoiningDeclarationSheet.swift */; };
 		A1B2C3D410000040 /* OrgMembersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000040 /* OrgMembersView.swift */; };
+		A1B2C3D410000099 /* ClinicalLogbookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000099 /* ClinicalLogbookView.swift */; };
 		A1B2C3D410000101 /* SystemAdminTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000101 /* SystemAdminTabView.swift */; };
 		A1B2C3D410000102 /* OrgManagerTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000102 /* OrgManagerTabView.swift */; };
 		A1B2C3D410000103 /* AcademicSupervisorTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000103 /* AcademicSupervisorTabView.swift */; };
@@ -67,9 +69,21 @@
 		A1B2C3D410000117 /* WorkflowTimelineComponent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000117 /* WorkflowTimelineComponent.swift */; };
 		A1B2C3D410000118 /* ScheduleBuilderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000118 /* ScheduleBuilderView.swift */; };
 		A1B2C3D410000119 /* TrainerAttendanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000119 /* TrainerAttendanceView.swift */; };
+		A1B2C3D410000120 /* ServiceCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000120 /* ServiceCatalog.swift */; };
+		A1B2C3D410000121 /* DynamicServicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000121 /* DynamicServicesView.swift */; };
+		A1B2C3D410000122 /* DynamicMainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000122 /* DynamicMainTabView.swift */; };
+		A1B2C3D410000123 /* MiranEmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000123 /* MiranEmptyStateView.swift */; };
+		A1B2C3D410000124 /* TraineeJourneyHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000124 /* TraineeJourneyHomeView.swift */; };
+		A1B2C3D410000125 /* HospitalWorkQueueHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000125 /* HospitalWorkQueueHomeView.swift */; };
+		A1B2C3D410000126 /* SharedDashboardDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000126 /* SharedDashboardDesignSystem.swift */; };
+		A1B2C3D410000127 /* UniversityAdminDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D420000127 /* UniversityAdminDashboardView.swift */; };
+		BE1E9E23BF783CB430D577E5 /* UniversalProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA280812C5340B85DC53239 /* UniversalProfileView.swift */; };
+		E18BACAE81C20A13368B068F /* RoleReportsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C90EA3A734D1FEC08C1D3854 /* RoleReportsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0FA280812C5340B85DC53239 /* UniversalProfileView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UniversalProfileView.swift; sourceTree = "<group>"; };
+		9D1B0286906836374B0D720A /* IncidentsFullView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IncidentsFullView.swift; sourceTree = "<group>"; };
 		A1B2C3D400000001 /* Miran.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Miran.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D420000001 /* MiranApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiranApp.swift; sourceTree = "<group>"; };
 		A1B2C3D420000002 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -87,7 +101,6 @@
 		A1B2C3D420000014 /* DocumentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentsView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000015 /* IncomingCallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingCallView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000016 /* TraineeProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraineeProfileView.swift; sourceTree = "<group>"; };
-		A1B2C3D420000099 /* ClinicalLogbookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicalLogbookView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000017 /* TrainerTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainerTabView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000018 /* TrainerHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainerHomeView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000019 /* CallLauncherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallLauncherView.swift; sourceTree = "<group>"; };
@@ -112,6 +125,7 @@
 		A1B2C3D420000038 /* DigitalIDCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalIDCardView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000039 /* JoiningDeclarationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoiningDeclarationSheet.swift; sourceTree = "<group>"; };
 		A1B2C3D420000040 /* OrgMembersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgMembersView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000099 /* ClinicalLogbookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicalLogbookView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000101 /* SystemAdminTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAdminTabView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000102 /* OrgManagerTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgManagerTabView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000103 /* AcademicSupervisorTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademicSupervisorTabView.swift; sourceTree = "<group>"; };
@@ -131,6 +145,16 @@
 		A1B2C3D420000117 /* WorkflowTimelineComponent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowTimelineComponent.swift; sourceTree = "<group>"; };
 		A1B2C3D420000118 /* ScheduleBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleBuilderView.swift; sourceTree = "<group>"; };
 		A1B2C3D420000119 /* TrainerAttendanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainerAttendanceView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000120 /* ServiceCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceCatalog.swift; sourceTree = "<group>"; };
+		A1B2C3D420000121 /* DynamicServicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicServicesView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000122 /* DynamicMainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicMainTabView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000123 /* MiranEmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiranEmptyStateView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000124 /* TraineeJourneyHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraineeJourneyHomeView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000125 /* HospitalWorkQueueHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HospitalWorkQueueHomeView.swift; sourceTree = "<group>"; };
+		A1B2C3D420000126 /* SharedDashboardDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDashboardDesignSystem.swift; sourceTree = "<group>"; };
+		A1B2C3D420000127 /* UniversityAdminDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UniversityAdminDashboardView.swift; sourceTree = "<group>"; };
+		C90EA3A734D1FEC08C1D3854 /* RoleReportsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RoleReportsView.swift; sourceTree = "<group>"; };
+		DD3BD56FAB0634DF306EEDD4 /* MiranStateViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MiranStateViews.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -144,6 +168,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		529C89BE2FD227AC1DE0AF58 /* Reports */ = {
+			isa = PBXGroup;
+			children = (
+				C90EA3A734D1FEC08C1D3854 /* RoleReportsView.swift */,
+			);
+			name = Reports;
+			path = Reports;
+			sourceTree = "<group>";
+		};
 		A1B2C3D400000004 = {
 			isa = PBXGroup;
 			children = (
@@ -209,6 +242,9 @@
 				A1B2C3D420000007 /* SharedComponents.swift */,
 				A1B2C3D420000117 /* WorkflowTimelineComponent.swift */,
 				A1B2C3D420000118 /* ScheduleBuilderView.swift */,
+				A1B2C3D420000123 /* MiranEmptyStateView.swift */,
+				A1B2C3D420000126 /* SharedDashboardDesignSystem.swift */,
+				DD3BD56FAB0634DF306EEDD4 /* MiranStateViews.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -219,6 +255,8 @@
 				A1B2C3D420000008 /* RoleSelectionView.swift */,
 				A1B2C3D420000009 /* RegistrationView.swift */,
 				A1B2C3D420000040 /* OrgMembersView.swift */,
+				A1B2C3D420000121 /* DynamicServicesView.swift */,
+				A1B2C3D420000122 /* DynamicMainTabView.swift */,
 				A1B2C3D430000011 /* Auth */,
 				A1B2C3D430000006 /* Trainee */,
 				A1B2C3D430000007 /* Trainer */,
@@ -227,18 +265,11 @@
 				A1B2C3D430000013 /* OrgManager */,
 				A1B2C3D430000014 /* TrainingSupervisor */,
 				A1B2C3D430000015 /* Logbook */,
+				ADFDFA85350E8498AA4AA603 /* Profile */,
+				AFA24E7976CCCF52FCDD727D /* Incidents */,
+				529C89BE2FD227AC1DE0AF58 /* Reports */,
 			);
 			path = Views;
-			sourceTree = "<group>";
-		};
-		A1B2C3D430000011 /* Auth */ = {
-			isa = PBXGroup;
-			children = (
-				A1B2C3D420000036 /* LoginView.swift */,
-				A1B2C3D420000037 /* OrgSwitcherSheet.swift */,
-				A1B2C3D420000039 /* JoiningDeclarationSheet.swift */,
-			);
-			path = Auth;
 			sourceTree = "<group>";
 		};
 		A1B2C3D430000006 /* Trainee */ = {
@@ -254,6 +285,7 @@
 				A1B2C3D420000099 /* ClinicalLogbookView.swift */,
 				A1B2C3D420000038 /* DigitalIDCardView.swift */,
 				A1B2C3D420000113 /* TraineeDashboardFullView.swift */,
+				A1B2C3D420000124 /* TraineeJourneyHomeView.swift */,
 			);
 			path = Trainee;
 			sourceTree = "<group>";
@@ -284,8 +316,42 @@
 				A1B2C3D420000028 /* RiskView.swift */,
 				A1B2C3D420000103 /* AcademicSupervisorTabView.swift */,
 				A1B2C3D420000110 /* AcademicSupervisorDashboardFullView.swift */,
+				A1B2C3D420000127 /* UniversityAdminDashboardView.swift */,
 			);
 			path = Academic;
+			sourceTree = "<group>";
+		};
+		A1B2C3D430000009 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D420000030 /* KeychainService.swift */,
+				A1B2C3D420000031 /* APIClient.swift */,
+				A1B2C3D420000114 /* WorkflowEngine.swift */,
+				A1B2C3D420000115 /* RotationSchedulerEngine.swift */,
+				A1B2C3D420000116 /* FineGrainedRBACEngine.swift */,
+				A1B2C3D420000120 /* ServiceCatalog.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		A1B2C3D430000010 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D420000033 /* AuthViewModel.swift */,
+				A1B2C3D420000034 /* TraineeViewModel.swift */,
+				A1B2C3D420000035 /* TrainerViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		A1B2C3D430000011 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D420000036 /* LoginView.swift */,
+				A1B2C3D420000037 /* OrgSwitcherSheet.swift */,
+				A1B2C3D420000039 /* JoiningDeclarationSheet.swift */,
+			);
+			path = Auth;
 			sourceTree = "<group>";
 		};
 		A1B2C3D430000012 /* SystemAdmin */ = {
@@ -313,6 +379,7 @@
 			children = (
 				A1B2C3D420000104 /* TrainingSupervisorTabView.swift */,
 				A1B2C3D420000111 /* TrainingSupervisorDashboardFullView.swift */,
+				A1B2C3D420000125 /* HospitalWorkQueueHomeView.swift */,
 			);
 			path = TrainingSupervisor;
 			sourceTree = "<group>";
@@ -325,26 +392,22 @@
 			path = Logbook;
 			sourceTree = "<group>";
 		};
-		A1B2C3D430000009 /* Services */ = {
+		ADFDFA85350E8498AA4AA603 /* Profile */ = {
 			isa = PBXGroup;
 			children = (
-				A1B2C3D420000030 /* KeychainService.swift */,
-				A1B2C3D420000031 /* APIClient.swift */,
-				A1B2C3D420000114 /* WorkflowEngine.swift */,
-				A1B2C3D420000115 /* RotationSchedulerEngine.swift */,
-				A1B2C3D420000116 /* FineGrainedRBACEngine.swift */,
+				0FA280812C5340B85DC53239 /* UniversalProfileView.swift */,
 			);
-			path = Services;
+			name = Profile;
+			path = Profile;
 			sourceTree = "<group>";
 		};
-		A1B2C3D430000010 /* ViewModels */ = {
+		AFA24E7976CCCF52FCDD727D /* Incidents */ = {
 			isa = PBXGroup;
 			children = (
-				A1B2C3D420000033 /* AuthViewModel.swift */,
-				A1B2C3D420000034 /* TraineeViewModel.swift */,
-				A1B2C3D420000035 /* TrainerViewModel.swift */,
+				9D1B0286906836374B0D720A /* IncidentsFullView.swift */,
 			);
-			path = ViewModels;
+			name = Incidents;
+			path = Incidents;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -363,8 +426,6 @@
 			dependencies = (
 			);
 			name = Miran;
-			packageProductDependencies = (
-			);
 			productName = Miran;
 			productReference = A1B2C3D400000001 /* Miran.app */;
 			productType = "com.apple.product-type.application";
@@ -470,6 +531,12 @@
 				A1B2C3D410000109 /* OrgManagerDashboardFullView.swift in Sources */,
 				A1B2C3D410000110 /* AcademicSupervisorDashboardFullView.swift in Sources */,
 				A1B2C3D410000111 /* TrainingSupervisorDashboardFullView.swift in Sources */,
+				A1B2C3D410000120 /* ServiceCatalog.swift in Sources */,
+				A1B2C3D410000121 /* DynamicServicesView.swift in Sources */,
+				A1B2C3D410000122 /* DynamicMainTabView.swift in Sources */,
+				A1B2C3D410000123 /* MiranEmptyStateView.swift in Sources */,
+				A1B2C3D410000124 /* TraineeJourneyHomeView.swift in Sources */,
+				A1B2C3D410000125 /* HospitalWorkQueueHomeView.swift in Sources */,
 				A1B2C3D410000112 /* TrainerDashboardFullView.swift in Sources */,
 				A1B2C3D410000113 /* TraineeDashboardFullView.swift in Sources */,
 				A1B2C3D410000114 /* WorkflowEngine.swift in Sources */,
@@ -478,6 +545,12 @@
 				A1B2C3D410000117 /* WorkflowTimelineComponent.swift in Sources */,
 				A1B2C3D410000118 /* ScheduleBuilderView.swift in Sources */,
 				A1B2C3D410000119 /* TrainerAttendanceView.swift in Sources */,
+				A1B2C3D410000126 /* SharedDashboardDesignSystem.swift in Sources */,
+				A1B2C3D410000127 /* UniversityAdminDashboardView.swift in Sources */,
+				02BD4142BECF667491E3FE8A /* MiranStateViews.swift in Sources */,
+				BE1E9E23BF783CB430D577E5 /* UniversalProfileView.swift in Sources */,
+				56E48E1B002D5B27C47AA1A0 /* IncidentsFullView.swift in Sources */,
+				E18BACAE81C20A13368B068F /* RoleReportsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -545,8 +618,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 103;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = B4S7M6N5U5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "مِران";
@@ -561,10 +635,17 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.13;
-				OTHER_LDFLAGS = "$(inherited) -framework SwiftUI -framework UIKit -framework Foundation";
+				MARKETING_VERSION = 1.1.6;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					SwiftUI,
+					"-framework",
+					UIKit,
+					"-framework",
+					Foundation,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = sa.miran.app;
-				DEVELOPMENT_TEAM = B4S7M6N5U5;
 				PRODUCT_MODULE_NAME = Miran;
 				PRODUCT_NAME = Miran;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -581,10 +662,9 @@
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 103;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = B4S7M6N5U5;
-				PROVISIONING_PROFILE_SPECIFIER = "Miran App Store 2026";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "مِران";
@@ -599,11 +679,20 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.13;
-				OTHER_LDFLAGS = "$(inherited) -framework SwiftUI -framework UIKit -framework Foundation";
+				MARKETING_VERSION = 1.1.6;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					SwiftUI,
+					"-framework",
+					UIKit,
+					"-framework",
+					Foundation,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = sa.miran.app;
 				PRODUCT_MODULE_NAME = Miran;
 				PRODUCT_NAME = Miran;
+				PROVISIONING_PROFILE_SPECIFIER = "Miran App Store 2026";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -613,20 +702,20 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A1B2C3D40000000B /* Build configuration list for PBXProject "Miran" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				A1B2C3D40000000C /* Debug */,
-				A1B2C3D40000000D /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		A1B2C3D400000007 /* Build configuration list for PBXNativeTarget "Miran" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A1B2C3D40000000E /* Debug */,
 				A1B2C3D40000000F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1B2C3D40000000B /* Build configuration list for PBXProject "Miran" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D40000000C /* Debug */,
+				A1B2C3D40000000D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

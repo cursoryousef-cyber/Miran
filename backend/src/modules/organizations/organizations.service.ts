@@ -15,6 +15,29 @@ export class OrganizationsService {
     private orgAssignments: OrganizationAssignmentService,
   ) {}
 
+  /**
+   * Health clusters a sponsor may address a training request to.
+   *
+   * A university is scoped to its own organisation, so the general listing can
+   * never show it the cluster it submits to — which left the target dropdown in
+   * the new-request dialog empty and blocked submission from the UI entirely.
+   * This returns nothing but the identity of active clusters (no capacity, no
+   * members, no hospitals), which is exactly what addressing a request needs and
+   * no more.
+   */
+  async findRequestTargetClusters() {
+    const data = await this.prisma.organization.findMany({
+      where: {
+        deletedAt: null,
+        status: 'active',
+        organizationType: { code: 'cluster' },
+      },
+      select: { id: true, code: true, nameAr: true, nameEn: true },
+      orderBy: { nameAr: 'asc' },
+    });
+    return { data };
+  }
+
   async findAll(page = 1, limit = 20, search?: string, typeId?: string, parentId?: string, visibleOrgIds?: string[] | null) {
     const skip = (page - 1) * limit;
     const where: Record<string, unknown> = { deletedAt: null };

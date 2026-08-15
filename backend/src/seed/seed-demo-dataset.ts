@@ -27,7 +27,7 @@ const DEMO_ACCOUNTS = [
   // hospitals that have at least one active department.
   { email: 'hospadmin@miran.health',  nameAr: 'هيفاء الدوسري',    role: 'hospital_administrator',  nationalId: '2000000004', site: 0 },
   { email: 'trainingadmin@miran.health', nameAr: 'ماجد الحربي',   role: 'hospital_training_admin', nationalId: '2000000005', site: 1 },
-  { email: 'supervisor@miran.health', nameAr: 'لطيفة الزهراني',   role: 'training_supervisor',     nationalId: '2000000006', site: 0 },
+  { email: 'supervisor@miran.health', nameAr: 'لطيفة الزهراني',   role: 'hospital_training_admin', nationalId: '2000000006', site: 0 },
   { email: 'trainer1@miran.health',   nameAr: 'د. عمر الغامدي',   role: 'trainer',                 nationalId: '2000000007', site: 0 },
   { email: 'trainer2@miran.health',   nameAr: 'د. نوف المالكي',   role: 'trainer',                 nationalId: '2000000008', site: 1 },
   { email: 'trainee1@miran.health',   nameAr: 'أحمد السبيعي',     role: 'trainee',                 nationalId: '2000000009', site: 0 },

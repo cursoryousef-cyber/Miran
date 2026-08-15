@@ -224,6 +224,16 @@ export class TrainingRequestsService {
 
     await this.assertRequestDirection(sourceOrgId, targetOrgId, dto.requestType);
 
+    // A direct cluster → hospital request carries no university request behind
+    // it, so the university's no-objection letter is the document that proves
+    // the sponsoring university agreed to the training. It is mandatory for this
+    // path only; a university-originated request is itself the authorisation.
+    if (isClusterReq && !dto.clusterLetterUrl?.trim()) {
+      throw new BadRequestException(
+        'خطاب الجامعة بعدم الممانعة من التدريب مطلوب لطلب التدريب المباشر من التجمع الصحي',
+      );
+    }
+
     // Dates and the program/plan/version combination are validated together
     // before anything is written, so an incoherent request is never persisted.
     const dates = this.composition.validateDates(dto);
@@ -398,10 +408,13 @@ export class TrainingRequestsService {
     if (dto.status && dto.status !== existing.status) {
       try {
         const statusLabels: Record<string, string> = {
-          approved: 'تمت الموافقة',
-          allocated: 'تم التوزيع',
-          rejected: 'تم الرفض',
-          under_review: 'قيد المراجعة',
+          approved: 'معتمد ومرسل للمستشفى',
+          allocated: 'موزع — بانتظار الاعتماد',
+          auto_allocated: 'موزع — بانتظار الاعتماد',
+          manually_reallocated: 'أعيد توزيعه — بانتظار الاعتماد',
+          rejected: 'مرفوض',
+          under_cluster_review: 'قيد مراجعة التجمع',
+          returned_to_university: 'معاد للجامعة',
         };
 
         // Notify source org (university)
@@ -418,25 +431,9 @@ export class TrainingRequestsService {
           },
         );
 
-        // If allocated, notify hospital admins
-        if ((dto.status === 'allocated' || dto.status === 'auto_allocated') && dto.allocations) {
-          for (const alloc of dto.allocations as any[]) {
-            if (alloc.hospitalId) {
-              await this.notificationService.notifyOrgUsers(
-                alloc.hospitalId,
-                'hospital_training_admin',
-                {
-                  titleAr: 'تم تخصيص متدربين جدد لمستشفاكم',
-                  titleEn: 'New trainees allocated to your hospital',
-                  bodyAr: `تم تخصيص ${alloc.seats || 0} مقعد تدريبي لمستشفاكم ضمن طلب التدريب ${existing.requestNumber}`,
-                  type: 'allocation',
-                  referenceType: 'TrainingRequest',
-                  referenceId: id,
-                },
-              );
-            }
-          }
-        }
+        // Hospitals are deliberately not notified here. Allocation is a proposal
+        // the cluster still reviews and approves; approve() is what sends the
+        // request on and notifies the receiving hospitals.
       } catch (e) {
         console.warn('Failed to send status notification:', e);
       }
@@ -667,6 +664,22 @@ export class TrainingRequestsService {
       );
     }
 
+    // Approval is the step that sends the request to the hospitals, so it may
+    // not run before an assignment actually exists. validateCapacity iterates
+    // `allocations` and therefore passes trivially when the array is empty — a
+    // request whose auto-allocation placed nobody would otherwise be approved,
+    // reach the "sent to hospitals" list, and leave the hospital with a request
+    // naming no trainees.
+    const assignedRows = await this.prisma.trainingRequestTrainee.findMany({
+      where: { trainingRequestId: id, assignedHospitalId: { not: null } },
+      select: { id: true, assignedHospitalId: true },
+    });
+    if (assignedRows.length === 0) {
+      throw new BadRequestException(
+        'لا يمكن اعتماد الطلب قبل توزيع المتدربين على المستشفيات. نفّذ التوزيع أولاً ثم اعتمد.',
+      );
+    }
+
     assertValidTransition(
       'طلب التدريب',
       existing.status,
@@ -694,7 +707,11 @@ export class TrainingRequestsService {
       },
     });
 
-    // Notify receiving hospitals & university
+    // Notify the university that its request cleared, and each receiving
+    // hospital that trainees are now on their way. The hospital notice belongs
+    // here rather than at allocation time: allocation is a proposal the cluster
+    // still has to approve, and telling a hospital about it beforehand announces
+    // an arrival that may never be approved.
     try {
       await this.notificationService.notifyOrgUsers(
         updated.sourceOrgId,
@@ -702,12 +719,34 @@ export class TrainingRequestsService {
         {
           titleAr: `تمت الموافقة النهائية على طلب التدريب ${updated.requestNumber}`,
           titleEn: `Training Request ${updated.requestNumber} Approved`,
-          bodyAr: `قام التجمع الصحي باعتام توزيع طلب التدريب ${updated.requestNumber} بنجاح.`,
+          bodyAr: `قام التجمع الصحي باعتماد توزيع طلب التدريب ${updated.requestNumber} بنجاح.`,
           type: 'request_approved',
           referenceType: 'TrainingRequest',
           referenceId: id,
         },
       );
+
+      // One notice per hospital, counted from the rows actually assigned to it,
+      // so a hospital is never told about seats it did not receive.
+      const seatsByHospital = new Map<string, number>();
+      for (const row of assignedRows) {
+        const hospitalId = row.assignedHospitalId as string;
+        seatsByHospital.set(hospitalId, (seatsByHospital.get(hospitalId) ?? 0) + 1);
+      }
+      for (const [hospitalId, seats] of seatsByHospital) {
+        await this.notificationService.notifyOrgUsers(
+          hospitalId,
+          'hospital_training_admin',
+          {
+            titleAr: `طلب تدريب معتمد وصل لمستشفاكم — ${updated.requestNumber}`,
+            titleEn: `Approved training request ${updated.requestNumber}`,
+            bodyAr: `اعتمد التجمع الصحي توزيع ${seats} متدرب على مستشفاكم ضمن طلب التدريب ${updated.requestNumber}. يرجى المراجعة والقبول.`,
+            type: 'sent_to_hospital',
+            referenceType: 'TrainingRequest',
+            referenceId: id,
+          },
+        );
+      }
     } catch (e) {
       console.warn('Notification error:', e);
     }
@@ -976,12 +1015,15 @@ export class TrainingRequestsService {
   // ─── Generic acceptance chain (Phase 5) ─────────────────────────────────
   // Maps current status → { next on approve, next on reject, next on return, notifyRole }
   private static readonly CHAIN_MAP: Record<string, { approve: string; notifyRole: string; label: string }> = {
-    approved:                         { approve: 'hospital_administrator_accepted', notifyRole: 'hospital_training_admin', label: 'مدير المستشفى' },
-    hospital_accepted:                { approve: 'supervisor_accepted',            notifyRole: 'training_supervisor',    label: 'المشرف التدريبي' },
-    hospital_administrator_accepted:  { approve: 'training_supervisor_accepted',   notifyRole: 'training_supervisor',    label: 'المشرف التدريبي' },
-    supervisor_accepted:              { approve: 'trainer_accepted',               notifyRole: 'trainer',                label: 'المدرب السريري' },
-    training_supervisor_accepted:     { approve: 'trainer_accepted',               notifyRole: 'trainer',                label: 'المدرب السريري' },
-    trainer_accepted:                 { approve: 'active',                         notifyRole: 'trainee',                label: 'طبيب الامتياز' },
+    // The status literals below are preserved because existing rows carry them.
+    // Only the notified role is canonicalised: the hospital step belongs to the
+    // Hospital Training Manager, the next step to the clinical trainer.
+    approved:                         { approve: 'hospital_administrator_accepted', notifyRole: 'hospital_training_admin', label: 'مدير تدريب المستشفى' },
+    hospital_accepted:                { approve: 'supervisor_accepted',             notifyRole: 'hospital_training_admin', label: 'مدير تدريب المستشفى' },
+    hospital_administrator_accepted:  { approve: 'training_supervisor_accepted',    notifyRole: 'hospital_training_admin', label: 'مدير تدريب المستشفى' },
+    supervisor_accepted:              { approve: 'trainer_accepted',                notifyRole: 'trainer',                 label: 'المدرب السريري' },
+    training_supervisor_accepted:     { approve: 'trainer_accepted',                notifyRole: 'trainer',                 label: 'المدرب السريري' },
+    trainer_accepted:                 { approve: 'active',                          notifyRole: 'trainee',                 label: 'طبيب الامتياز' },
   };
 
   async advanceAcceptanceChain(

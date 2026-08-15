@@ -8,7 +8,7 @@ import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
 
-const TRAINER_ROLES = ['trainer', 'org_manager', 'platform_owner', 'hospital_administrator', 'training_supervisor', 'cluster_administrator'];
+const TRAINER_ROLES = ['trainer', 'org_manager', 'platform_owner', 'hospital_training_admin', 'cluster_administrator', 'cluster_manager'];
 
 /** ms → Arabic human-readable (ثانية / دقيقة) */
 function humanMs(ms: number | null): string {
@@ -314,7 +314,7 @@ export class CallsController {
   }
 
   @Get('diligence')
-  @RequireRoles(...TRAINER_ROLES, 'academic_supervisor', 'training_supervisor')
+  @RequireRoles(...TRAINER_ROLES, 'academic_supervisor')
   @ApiOperation({ summary: 'درجات الحرص — ترتيب المتدربين حسب نسبة الاستجابة للنداءات' })
   async getDiligenceScores(@CurrentUser() user: IAuthenticatedUser) {
     // Fetch all call participants for this org's ended calls
