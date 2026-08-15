@@ -408,10 +408,13 @@ export class TrainingRequestsService {
     if (dto.status && dto.status !== existing.status) {
       try {
         const statusLabels: Record<string, string> = {
-          approved: 'تمت الموافقة',
-          allocated: 'تم التوزيع',
-          rejected: 'تم الرفض',
-          under_review: 'قيد المراجعة',
+          approved: 'معتمد ومرسل للمستشفى',
+          allocated: 'موزع — بانتظار الاعتماد',
+          auto_allocated: 'موزع — بانتظار الاعتماد',
+          manually_reallocated: 'أعيد توزيعه — بانتظار الاعتماد',
+          rejected: 'مرفوض',
+          under_cluster_review: 'قيد مراجعة التجمع',
+          returned_to_university: 'معاد للجامعة',
         };
 
         // Notify source org (university)
@@ -428,25 +431,9 @@ export class TrainingRequestsService {
           },
         );
 
-        // If allocated, notify hospital admins
-        if ((dto.status === 'allocated' || dto.status === 'auto_allocated') && dto.allocations) {
-          for (const alloc of dto.allocations as any[]) {
-            if (alloc.hospitalId) {
-              await this.notificationService.notifyOrgUsers(
-                alloc.hospitalId,
-                'hospital_training_admin',
-                {
-                  titleAr: 'تم تخصيص متدربين جدد لمستشفاكم',
-                  titleEn: 'New trainees allocated to your hospital',
-                  bodyAr: `تم تخصيص ${alloc.seats || 0} مقعد تدريبي لمستشفاكم ضمن طلب التدريب ${existing.requestNumber}`,
-                  type: 'allocation',
-                  referenceType: 'TrainingRequest',
-                  referenceId: id,
-                },
-              );
-            }
-          }
-        }
+        // Hospitals are deliberately not notified here. Allocation is a proposal
+        // the cluster still reviews and approves; approve() is what sends the
+        // request on and notifies the receiving hospitals.
       } catch (e) {
         console.warn('Failed to send status notification:', e);
       }
@@ -677,6 +664,22 @@ export class TrainingRequestsService {
       );
     }
 
+    // Approval is the step that sends the request to the hospitals, so it may
+    // not run before an assignment actually exists. validateCapacity iterates
+    // `allocations` and therefore passes trivially when the array is empty — a
+    // request whose auto-allocation placed nobody would otherwise be approved,
+    // reach the "sent to hospitals" list, and leave the hospital with a request
+    // naming no trainees.
+    const assignedRows = await this.prisma.trainingRequestTrainee.findMany({
+      where: { trainingRequestId: id, assignedHospitalId: { not: null } },
+      select: { id: true, assignedHospitalId: true },
+    });
+    if (assignedRows.length === 0) {
+      throw new BadRequestException(
+        'لا يمكن اعتماد الطلب قبل توزيع المتدربين على المستشفيات. نفّذ التوزيع أولاً ثم اعتمد.',
+      );
+    }
+
     assertValidTransition(
       'طلب التدريب',
       existing.status,
@@ -704,7 +707,11 @@ export class TrainingRequestsService {
       },
     });
 
-    // Notify receiving hospitals & university
+    // Notify the university that its request cleared, and each receiving
+    // hospital that trainees are now on their way. The hospital notice belongs
+    // here rather than at allocation time: allocation is a proposal the cluster
+    // still has to approve, and telling a hospital about it beforehand announces
+    // an arrival that may never be approved.
     try {
       await this.notificationService.notifyOrgUsers(
         updated.sourceOrgId,
@@ -712,12 +719,34 @@ export class TrainingRequestsService {
         {
           titleAr: `تمت الموافقة النهائية على طلب التدريب ${updated.requestNumber}`,
           titleEn: `Training Request ${updated.requestNumber} Approved`,
-          bodyAr: `قام التجمع الصحي باعتام توزيع طلب التدريب ${updated.requestNumber} بنجاح.`,
+          bodyAr: `قام التجمع الصحي باعتماد توزيع طلب التدريب ${updated.requestNumber} بنجاح.`,
           type: 'request_approved',
           referenceType: 'TrainingRequest',
           referenceId: id,
         },
       );
+
+      // One notice per hospital, counted from the rows actually assigned to it,
+      // so a hospital is never told about seats it did not receive.
+      const seatsByHospital = new Map<string, number>();
+      for (const row of assignedRows) {
+        const hospitalId = row.assignedHospitalId as string;
+        seatsByHospital.set(hospitalId, (seatsByHospital.get(hospitalId) ?? 0) + 1);
+      }
+      for (const [hospitalId, seats] of seatsByHospital) {
+        await this.notificationService.notifyOrgUsers(
+          hospitalId,
+          'hospital_training_admin',
+          {
+            titleAr: `طلب تدريب معتمد وصل لمستشفاكم — ${updated.requestNumber}`,
+            titleEn: `Approved training request ${updated.requestNumber}`,
+            bodyAr: `اعتمد التجمع الصحي توزيع ${seats} متدرب على مستشفاكم ضمن طلب التدريب ${updated.requestNumber}. يرجى المراجعة والقبول.`,
+            type: 'sent_to_hospital',
+            referenceType: 'TrainingRequest',
+            referenceId: id,
+          },
+        );
+      }
     } catch (e) {
       console.warn('Notification error:', e);
     }

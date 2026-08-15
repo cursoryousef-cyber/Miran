@@ -12,6 +12,12 @@ export const TRAINING_REQUEST_STATUS = {
   RESUBMITTED: 'resubmitted',
   REJECTED: 'rejected',
   AUTO_ALLOCATED: 'auto_allocated',
+  // Legacy statuses carried by existing rows and accepted by
+  // TRAINING_REQUEST_TRANSITIONS. Declared here so services stop reaching for
+  // bare string literals the constants object did not cover.
+  ALLOCATED: 'allocated',
+  HOSPITAL_ACCEPTED: 'hospital_accepted',
+  SUPERVISOR_ACCEPTED: 'supervisor_accepted',
   MANUALLY_REALLOCATED: 'manually_reallocated',
   APPROVED: 'approved',
   HOSPITAL_ADMINISTRATOR_ACCEPTED: 'hospital_administrator_accepted',

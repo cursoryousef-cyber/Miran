@@ -585,8 +585,11 @@ export const Affiliations: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['training-requests'] });
       queryClient.invalidateQueries({ queryKey: ['approved-training-requests'] });
       queryClient.invalidateQueries({ queryKey: ['cluster-orgs'] });
+      queryClient.invalidateQueries({ queryKey: ['hospitals-for-allocation'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-list'] });
       setConfirmApproveReq(null);
-      setSuccessMsg('تم اعتماد طلب التدريب نهائياً — سيظهر الآن في شاشة الدفعات الأكاديمية لإنشاء دفعة تدريبية.');
+      setSuccessMsg('تم اعتماد الطلب وإرساله للمستشفى — انتقل الآن إلى تبويب «الطلبات المرسلة للمستشفيات».');
       setErrorMsg(null);
     },
     onError: (err: any) => {
@@ -651,21 +654,23 @@ export const Affiliations: React.FC = () => {
   const getStatusChip = (status: string) => {
     const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 'error' | 'info' | 'default' }> = {
       draft: { label: 'مسودة', color: 'default' },
-      submitted: { label: 'مرسل', color: 'info' },
-      under_cluster_review: { label: 'قيد المراجعة', color: 'warning' },
-      returned_to_university: { label: 'مُعاد للجامعة', color: 'warning' },
-      resubmitted: { label: 'مُعاد الإرسال', color: 'info' },
-      auto_allocated: { label: 'موزع (آلي)', color: 'success' },
-      manually_reallocated: { label: 'موزع (يدوي)', color: 'success' },
-      approved: { label: 'مُعتمد — بانتظار المستشفى', color: 'success' },
-      allocated: { label: 'موزع', color: 'success' },
-      rejected: { label: 'مرفوض', color: 'error' },
-      active: { label: 'نشط', color: 'success' },
-      hospital_administrator_accepted: { label: 'قبِل المستشفى — بانتظار المشرف', color: 'info' },
-      hospital_accepted: { label: 'قبِل المستشفى', color: 'info' },
-      training_supervisor_accepted: { label: 'قبِل المشرف — بانتظار المدرب', color: 'info' },
-      trainer_accepted: { label: 'قبِل المدرب', color: 'info' },
-      hospital_returned_to_cluster: { label: 'أُعيد للتجمع من المستشفى', color: 'warning' },
+      // "مرسل" on its own read as "sent to the hospital"; it is the university
+      // → cluster direction, and the label now says so.
+      submitted: { label: 'وارد من الجامعة', color: 'info' },
+      under_cluster_review: { label: 'بانتظار التوزيع', color: 'warning' },
+      returned_to_university: { label: 'معاد للجامعة', color: 'warning' },
+      resubmitted: { label: 'وارد من الجامعة (معاد الإرسال)', color: 'info' },
+      auto_allocated: { label: 'موزع — بانتظار الاعتماد', color: 'warning' },
+      manually_reallocated: { label: 'موزع — بانتظار الاعتماد', color: 'warning' },
+      allocated: { label: 'موزع — بانتظار الاعتماد', color: 'warning' },
+      approved: { label: 'مرسل للمستشفى', color: 'success' },
+      rejected: { label: 'مرفوض من المستشفى', color: 'error' },
+      active: { label: 'مكتمل', color: 'success' },
+      hospital_administrator_accepted: { label: 'مقبول من المستشفى — بانتظار المشرف', color: 'info' },
+      hospital_accepted: { label: 'مقبول من المستشفى', color: 'info' },
+      training_supervisor_accepted: { label: 'مقبول من المشرف — بانتظار المدرب', color: 'info' },
+      trainer_accepted: { label: 'مقبول من المدرب', color: 'info' },
+      hospital_returned_to_cluster: { label: 'معاد للتجمع من المستشفى', color: 'warning' },
     };
     const s = statusMap[status] || { label: status, color: 'default' as const };
     return <Chip label={s.label} color={s.color} size="small" />;
@@ -683,14 +688,19 @@ export const Affiliations: React.FC = () => {
 
   const reqRows: any[] = data?.data ?? [];
 
+  // A request reaches the hospital only once the cluster approves it. Allocation
+  // is a proposal that still sits with the cluster, so the allocated statuses —
+  // and the old "has any allocations" fallback — belong to the incoming tab under
+  // "بانتظار الاعتماد", not to the sent-to-hospitals list.
+  const PENDING_APPROVAL_STATUSES = ['auto_allocated', 'manually_reallocated', 'allocated'];
   const SENT_STATUSES = [
-    'auto_allocated', 'manually_reallocated', 'approved', 'allocated',
+    'approved',
     'hospital_administrator_accepted', 'hospital_accepted', 'training_supervisor_accepted',
-    'trainer_accepted', 'hospital_review', 'hospital_returned_to_cluster',
+    'trainer_accepted', 'hospital_review', 'hospital_returned_to_cluster', 'active',
   ];
 
   const filteredRows = reqRows.filter((r: any) => {
-    const isSent = SENT_STATUSES.includes(r.status) || (Array.isArray(r.allocations) && r.allocations.length > 0);
+    const isSent = SENT_STATUSES.includes(r.status);
     if (activeTab === 'sent' && !isSent) return false;
     if (activeTab === 'incoming' && isSent) return false;
 
@@ -708,8 +718,9 @@ export const Affiliations: React.FC = () => {
     return true;
   });
 
-  const submittedCount = reqRows.filter((r: any) => ['submitted', 'under_cluster_review', 'resubmitted'].includes(r.status)).length;
-  const sentHospitalsCount = reqRows.filter((r: any) => SENT_STATUSES.includes(r.status) || (Array.isArray(r.allocations) && r.allocations.length > 0)).length;
+  const sentHospitalsCount = reqRows.filter((r: any) => SENT_STATUSES.includes(r.status)).length;
+  const pendingApprovalCount = reqRows.filter((r: any) => PENDING_APPROVAL_STATUSES.includes(r.status)).length;
+  const pendingDistributionCount = reqRows.filter((r: any) => ['submitted', 'under_cluster_review', 'resubmitted'].includes(r.status)).length;
   const activeReqCount = reqRows.filter((r: any) => r.status === 'active').length;
   const totalStudents = reqRows.reduce((s: number, r: any) => s + (r.studentCount ?? 0), 0);
   const rejectedReqCount = reqRows.filter((r: any) => ['rejected', 'returned_to_university'].includes(r.status)).length;
@@ -753,7 +764,8 @@ export const Affiliations: React.FC = () => {
       loading={isLoading}
       stats={[
         { label: 'إجمالي الطلبات', value: reqRows.length, icon: FolderGit2, tone: 'primary' },
-        { label: 'بانتظار المراجعة', value: submittedCount, icon: Clock3, tone: submittedCount ? 'warning' : 'success' },
+        { label: 'بانتظار التوزيع', value: pendingDistributionCount, icon: Clock3, tone: pendingDistributionCount ? 'warning' : 'success' },
+        { label: 'موزعة — بانتظار الاعتماد', value: pendingApprovalCount, icon: Clock3, tone: pendingApprovalCount ? 'warning' : 'success' },
         { label: 'مرسلة للمستشفيات', value: sentHospitalsCount, icon: Send, tone: 'violet' },
         { label: 'نشطة', value: activeReqCount, icon: CheckCircle2, tone: 'success' },
         { label: 'إجمالي المتدربين', value: totalStudents, icon: Users, tone: 'info' },
@@ -796,7 +808,7 @@ export const Affiliations: React.FC = () => {
             '& .MuiTab-root': { fontWeight: 700, fontSize: '14px', minHeight: '48px' },
           }}
         >
-          <Tab value="incoming" label={`📥 الطلبات الواردة من الجامعات (${submittedCount})`} />
+          <Tab value="incoming" label={`📥 الطلبات الواردة من الجامعات (${pendingDistributionCount + pendingApprovalCount})`} />
           <Tab value="sent" label={`📤 الطلبات المرسلة للمستشفيات (${sentHospitalsCount})`} />
         </Tabs>
 
@@ -818,15 +830,15 @@ export const Affiliations: React.FC = () => {
               displayEmpty
             >
               <MenuItem value="all">كافة الحالات</MenuItem>
-              <MenuItem value="submitted">مرسل للتجمع</MenuItem>
-              <MenuItem value="under_cluster_review">قيد المراجعة</MenuItem>
-              <MenuItem value="auto_allocated">موزع (آلي)</MenuItem>
-              <MenuItem value="manually_reallocated">موزع (يدوي)</MenuItem>
-              <MenuItem value="approved">معتمد نهائياً</MenuItem>
-              <MenuItem value="hospital_review">مراجعة المستشفى</MenuItem>
-              <MenuItem value="hospital_accepted">قبِل المستشفى</MenuItem>
-              <MenuItem value="returned_to_university">مُعاد للجامعة</MenuItem>
-              <MenuItem value="rejected">مرفوض</MenuItem>
+              <MenuItem value="submitted">وارد من الجامعة</MenuItem>
+              <MenuItem value="under_cluster_review">بانتظار التوزيع</MenuItem>
+              <MenuItem value="auto_allocated">موزع — بانتظار الاعتماد (آلي)</MenuItem>
+              <MenuItem value="manually_reallocated">موزع — بانتظار الاعتماد (يدوي)</MenuItem>
+              <MenuItem value="approved">مرسل للمستشفى</MenuItem>
+              <MenuItem value="hospital_accepted">مقبول من المستشفى</MenuItem>
+              <MenuItem value="returned_to_university">معاد للجامعة</MenuItem>
+              <MenuItem value="rejected">مرفوض من المستشفى</MenuItem>
+              <MenuItem value="active">مكتمل</MenuItem>
             </Select>
           </FormControl>
         </div>
