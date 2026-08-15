@@ -242,11 +242,20 @@ export class NotificationService {
   }
 
   private scopeWhere(scope: ScopeContext): Record<string, unknown> {
-    if (!scope || scope.visibleOrgIds === null) return {};
+    if (!scope || !scope.visibleOrgIds || scope.visibleOrgIds === null) return {};
     // Notification.organizationId is non-nullable, so an `organizationId: null`
     // branch is not a valid filter — Prisma rejects it with "Argument
     // organizationId is missing" rather than matching org-less rows.
-    return { organizationId: { in: scope.visibleOrgIds } };
+    //
+    // The ids are also filtered defensively: an empty or malformed entry inside
+    // visibleOrgIds would otherwise reach Prisma as part of the `in` list, and an
+    // empty resulting list must fall back to the unscoped `{}` rather than
+    // `{ in: [] }`, which would silently match nothing.
+    const validOrgIds = scope.visibleOrgIds.filter(
+      (id): id is string => typeof id === 'string' && id.length > 0,
+    );
+    if (validOrgIds.length === 0) return {};
+    return { organizationId: { in: validOrgIds } };
   }
 
   /**
@@ -271,38 +280,43 @@ export class NotificationService {
       const idList = [...ids];
       let found: Array<{ id: string }> | null = null;
 
-      switch (refType) {
-        case 'TrainingRequest':
-          found = await this.prisma.trainingRequest.findMany({
-            where: { id: { in: idList } }, select: { id: true },
-          });
-          break;
-        case 'TrainingRequestTrainee':
-          found = await this.prisma.trainingRequestTrainee.findMany({
-            where: { id: { in: idList } }, select: { id: true },
-          });
-          break;
-        case 'AcademicIntake':
-          found = await this.prisma.academicIntake.findMany({
-            where: { id: { in: idList } }, select: { id: true },
-          });
-          break;
-        case 'TraineeProfile':
-          found = await this.prisma.traineeProfile.findMany({
-            where: { id: { in: idList } }, select: { id: true },
-          });
-          break;
-        case 'TraineeAllocation':
-          found = await this.prisma.traineeAllocation.findMany({
-            where: { id: { in: idList } }, select: { id: true },
-          });
-          break;
-        default:
-          // Unchecked reference type — treat every id as live.
-          liveByType.set(refType, ids);
-          continue;
+      try {
+        switch (refType) {
+          case 'TrainingRequest':
+            found = await this.prisma.trainingRequest.findMany({
+              where: { id: { in: idList } }, select: { id: true },
+            });
+            break;
+          case 'TrainingRequestTrainee':
+            found = await this.prisma.trainingRequestTrainee.findMany({
+              where: { id: { in: idList } }, select: { id: true },
+            });
+            break;
+          case 'AcademicIntake':
+            found = await this.prisma.academicIntake.findMany({
+              where: { id: { in: idList } }, select: { id: true },
+            });
+            break;
+          case 'TraineeProfile':
+            found = await this.prisma.traineeProfile.findMany({
+              where: { id: { in: idList } }, select: { id: true },
+            });
+            break;
+          case 'TraineeAllocation':
+            found = await this.prisma.traineeAllocation.findMany({
+              where: { id: { in: idList } }, select: { id: true },
+            });
+            break;
+          default:
+            // Unchecked reference type — treat every id as live.
+            liveByType.set(refType, ids);
+            continue;
+        }
+        liveByType.set(refType, new Set((found || []).map((r) => r.id)));
+      } catch (e) {
+        this.logger.warn(`Error verifying reference type ${refType}: ${(e as Error).message}`);
+        liveByType.set(refType, ids);
       }
-      liveByType.set(refType, new Set(found.map((r) => r.id)));
     }
 
     return notifications.filter((n) => {

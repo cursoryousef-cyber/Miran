@@ -194,6 +194,9 @@ export const AcademicIntakes: React.FC = () => {
   const activeIntakes = intakesList.filter((i: any) => ['active', 'ongoing', 'approved'].includes(i.status)).length;
   const plannedIntakes = intakesList.filter((i: any) => i.status === 'planned' || i.status === 'draft').length;
   const intakeCapacity = intakesList.reduce((s: number, i: any) => s + (i.capacity ?? 0), 0);
+  const batchTrainees = intakesList.reduce((s: number, i: any) => s + (i.requestedCount ?? i._count?.traineeProfiles ?? i.capacity ?? 0), 0);
+  const batchAllocated = intakesList.reduce((s: number, i: any) => s + (i.allocatedCount ?? 0), 0);
+  const batchUnallocated = Math.max(0, batchTrainees - batchAllocated);
   const selectedReq = approvedRequests.find((r: any) => r.id === selectedRequestId);
 
   return (
@@ -229,6 +232,9 @@ export const AcademicIntakes: React.FC = () => {
         { label: 'دفعات نشطة', value: activeIntakes, icon: CheckCircle2, tone: 'success' },
         { label: 'دفعات مخططة', value: plannedIntakes, icon: CalendarClock, tone: 'info' },
         { label: 'السعة المخططة', value: intakeCapacity, icon: Users, tone: 'neutral' },
+        { label: 'المتدربون', value: batchTrainees, icon: Users, tone: 'info' },
+        { label: 'الموزعون', value: batchAllocated, icon: CheckCircle2, tone: 'success' },
+        { label: 'غير الموزعين', value: batchUnallocated, icon: AlertCircle, tone: batchUnallocated ? 'warning' : 'neutral' },
       ]}
     >
       {successMsg && (
