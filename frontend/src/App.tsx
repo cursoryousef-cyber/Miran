@@ -12,6 +12,7 @@ import { AppLayout } from './components/layout/AppLayout';
 
 import { Login } from './pages/Login';
 import { Organizations } from './pages/Organizations';
+import { Programs } from './pages/Programs';
 import { OrganizationWizard } from './pages/OrganizationWizard';
 import { Affiliations } from './pages/Affiliations';
 import { ClusterTrainees } from './pages/ClusterTrainees';
@@ -132,6 +133,11 @@ export const App: React.FC = () => {
                   {/* University + Cluster + Hospital + Academic */}
                   <Route path="affiliations" element={<RoleRoute allowedRoles={[...UNIVERSITY, ...CLUSTER]}><Affiliations /></RoleRoute>} />
                   <Route path="cluster-trainees" element={<RoleRoute allowedRoles={[...CLUSTER, ...PLATFORM]}><ClusterTrainees /></RoleRoute>} />
+                  {/* Training program catalog. The cluster authors it; the
+                      university sponsor and hospital read it to pick/allocate,
+                      so the route is open to readers and the page itself
+                      renders read-only without authoring rights. */}
+                  <Route path="programs" element={<RoleRoute allowedRoles={[...CLUSTER, ...PLATFORM, ...UNIVERSITY, ...HOSPITAL, ...ACADEMIC]}><Programs /></RoleRoute>} />
                   <Route path="intakes" element={<RoleRoute allowedRoles={[...UNIVERSITY, ...CLUSTER, ...HOSPITAL, ...ACADEMIC]}><AcademicIntakes /></RoleRoute>} />
                   <Route path="corrections" element={<RoleRoute allowedRoles={UNIVERSITY}><UniversityCorrections /></RoleRoute>} />
                   {/* Hospital operational workspace — the single hospital surface. */}

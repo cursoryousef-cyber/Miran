@@ -45,16 +45,20 @@ export class ProgramsController {
     return this.programsService.findOne(id);
   }
 
-  // Writes are central by design — the catalog is managed nationally.
+  // Catalog authoring belongs to the cluster: the cluster manager owns the
+  // training programs their network runs, while platform_owner keeps it as part
+  // of platform administration. Entries stay national (organizationId = null),
+  // so every sponsoring university reads the same catalog it must pick from.
   @Post()
-  @RequireRoles('platform_owner', 'system_admin')
+  @RequireRoles('platform_owner', 'system_admin', 'cluster_manager')
   @ApiOperation({ summary: 'إضافة برنامج للكتالوج الوطني' })
   async create(@Body() dto: CreateProgramDto, @CurrentUser() user: IAuthenticatedUser) {
     return this.programsService.create(dto, user);
   }
 
+  // Also the activate/deactivate path — `isActive` is an UpdateProgramDto field.
   @Patch(':id')
-  @RequireRoles('platform_owner', 'system_admin')
+  @RequireRoles('platform_owner', 'system_admin', 'cluster_manager')
   @ApiOperation({ summary: 'تعديل برنامج في الكتالوج' })
   async update(
     @Param('id') id: string,

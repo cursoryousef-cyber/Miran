@@ -31,6 +31,7 @@ import {
   Tooltip,
   FormControl,
   InputLabel,
+  FormHelperText,
   Select,
   MenuItem,
   Tabs,
@@ -288,14 +289,18 @@ export const Affiliations: React.FC = () => {
   // becomes a request-scoped TrainingPlan tied to this program, and the
   // program's catalog duration is what the backend checks the training window
   // against — without it there is nothing to validate the plan/window against.
-  const { data: programsData } = useQuery({
+  // The catalog fetch must not be swallowed: the Select below is required, so a
+  // failed or empty catalog leaves the sponsor with a mandatory field that has
+  // nothing to pick. Surface the reason instead of rendering a dead dropdown.
+  const { data: programsData, isLoading: programsLoading, error: programsError } = useQuery({
     queryKey: ['programs-list'],
     queryFn: async () => {
-      const res = await apiClient.get('/programs').catch(() => ({ data: { data: [] } }));
+      const res = await apiClient.get('/programs');
       return res.data?.data ?? res.data ?? [];
     },
   });
   const programs = programsData || [];
+  const programsUnavailable = !programsLoading && programs.length === 0;
 
   // ── University: mandatory trainee documents ─────────────────────────────
   // The cluster's validation engine refuses to approve a row until all four
@@ -1143,11 +1148,19 @@ export const Affiliations: React.FC = () => {
                 </div>
               </div>
             )}
-            <FormControl fullWidth required>
+            <FormControl fullWidth required error={programsUnavailable}>
               <InputLabel>البرنامج التدريبي</InputLabel>
-              <Select value={reqProgramId} label="البرنامج التدريبي" onChange={(e) => { const p = programs.find((x: any) => x.id === e.target.value); setReqProgramId(e.target.value); if (p?.durationMonths) setReqDurationMonths(p.durationMonths); }}>
+              <Select value={reqProgramId} label="البرنامج التدريبي" disabled={programsLoading || programsUnavailable} onChange={(e) => { const p = programs.find((x: any) => x.id === e.target.value); setReqProgramId(e.target.value); if (p?.durationMonths) setReqDurationMonths(p.durationMonths); }}>
                 {programs.map((p: any) => <MenuItem key={p.id} value={p.id}>{p.nameAr} ({p.durationMonths} شهر)</MenuItem>)}
               </Select>
+              {programsLoading && <FormHelperText>جارٍ تحميل كتالوج البرامج التدريبية…</FormHelperText>}
+              {programsUnavailable && (
+                <FormHelperText>
+                  {programsError
+                    ? 'تعذّر تحميل كتالوج البرامج التدريبية الوطني — حدّث الصفحة أو تواصل مع مدير المنصة.'
+                    : 'لا توجد برامج تدريبية في الكتالوج الوطني. البرنامج مطلوب لأن روتيشنات الطلب تُبنى عليه — يضيف مشرف التجمع الصحي البرامج من كتالوج البرامج التدريبية.'}
+                </FormHelperText>
+              )}
             </FormControl>
           </div>
           <TextField label="رمز التخصص (Specialty Code)" value={reqSpecialty} onChange={(e) => setReqSpecialty(e.target.value)} helperText="رمز التخصص — مثال: internal_medicine" fullWidth />

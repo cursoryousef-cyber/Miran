@@ -115,6 +115,7 @@ const CLUSTER_NAV: NavSection[] = [
     title: 'الشبكة والسعة',
     items: [
       { name: 'المستشفيات والسعة', path: '/organizations', icon: Building2, requires: ['capacity.view'] },
+      { name: 'كتالوج البرامج التدريبية', path: '/programs', icon: BookOpen },
     ],
   },
   {
