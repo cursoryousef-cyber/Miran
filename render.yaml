@@ -12,14 +12,15 @@ services:
     # dist/src/main.js, not dist/main.js — nest build preserves the src/ layout
     # under dist/ since tsconfig has no explicit rootDir.
     startCommand: npx prisma migrate deploy && node dist/src/main.js
-    # `health` is excluded from the global prefix in main.ts (setGlobalPrefix's
-    # `exclude`), but exclusion does NOT opt a route out of URI versioning —
-    # enableVersioning({ type: URI, defaultVersion: '1' }) still prepends the
-    # version segment. The served route is therefore /v1/health, not /health.
-    # Verified against both a local production build and the live service:
-    # /v1/health -> 200, /health -> 404. A health check pointed at /health fails
-    # every time, which is why new deploys were not being promoted.
-    healthCheckPath: /v1/health
+    # main.ts's setGlobalPrefix only excludes '/' and 'api/docs' — health is NOT
+    # excluded, so it carries both the API_PREFIX ('api') and the URI version
+    # ('v1') like every other route. The served path is therefore /api/v1/health.
+    # Verified against the live service: /api/v1/health -> 200, /v1/health -> 404.
+    # The previous value here (/v1/health) 404s, which means Render's health
+    # check has been failing and new deploys were likely never being promoted —
+    # this is the probable reason the training-events migrations, committed and
+    # present in this repo, were never applied to production.
+    healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV
         value: production
