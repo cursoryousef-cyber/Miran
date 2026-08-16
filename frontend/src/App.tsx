@@ -187,8 +187,13 @@ export const App: React.FC = () => {
                   {/* Profile page — available to all authenticated users */}
                   <Route path="profile" element={<ProfilePage />} />
 
-                  {/* Academic Supervisor */}
-                  <Route path="reports" element={<RoleRoute allowedRoles={[...ACADEMIC, ...PLATFORM]}><Reports /></RoleRoute>} />
+                  {/* Reports. Hospital training management is already an
+                      authorised reader on the backend (REPORT_VIEW is granted to
+                      hospital_training_admin and /reports lists the role), and its
+                      sidebar links here — the route was the only thing bouncing it
+                      back to /. The page renders read-only without authoring
+                      rights, so this grants reading and nothing more. */}
+                  <Route path="reports" element={<RoleRoute allowedRoles={[...ACADEMIC, ...HOSPITAL, ...PLATFORM]}><Reports /></RoleRoute>} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />

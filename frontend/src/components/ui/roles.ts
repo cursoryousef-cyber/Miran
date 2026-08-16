@@ -136,7 +136,9 @@ const HOSPITAL_TRAINING_NAV: NavSection[] = [
       { name: 'لوحة التدريب بالمستشفى', path: '/', icon: Stethoscope },
       { name: 'النداءات والفعاليات', path: '/training-events', icon: Megaphone, requires: ['training.operate'] },
       { name: 'مساحة عمل المستشفى', path: '/hospital', icon: Stethoscope, requires: ['training.operate'] },
-      { name: 'منشئ الجداول', path: '/hospital?tab=schedules', icon: LayoutDashboard, requires: ['schedule.view'] },
+      // Shifts are sessions inside a schedule (ScheduleBuilder authors shiftType),
+      // so the schedules section is also the shifts surface — the label says so.
+      { name: 'الجداول التدريبية والشفتات', path: '/hospital?tab=schedules', icon: LayoutDashboard, requires: ['schedule.view'] },
       { name: 'أعضاء الجهة', path: '/org-members', icon: UsersRound, requires: ['org_member.view'] },
     ],
   },
@@ -147,8 +149,12 @@ const HOSPITAL_TRAINING_NAV: NavSection[] = [
         name: 'طلبات التدريب الواردة', path: '/hospital?tab=requests', icon: Inbox,
         requires: ['trainee.view.hospital'],
       },
+      // Points at the reassignment section, which is the workspace surface that
+      // actually lists the hospital's trainees and moves them between
+      // departments/trainers. There is no `trainees` tab — that key fell through
+      // to the overview, so the link silently went nowhere.
       {
-        name: 'المتدربون النشطون', path: '/hospital?tab=trainees', icon: UsersRound,
+        name: 'المتدربون والتوزيع', path: '/hospital?tab=reassignment', icon: UsersRound,
         requires: ['trainee.view.hospital'],
       },
     ],
@@ -170,6 +176,9 @@ const HOSPITAL_TRAINING_NAV: NavSection[] = [
     title: 'المتابعة والتقييم',
     items: [
       { name: 'السجل السريري', path: '/logbook', icon: BookOpen, requires: ['logbook.view'] },
+      // The evaluation-forms section already exists in the workspace; only the
+      // sidebar entry was missing.
+      { name: 'التقييمات', path: '/hospital?tab=eval-forms', icon: CheckSquare, requires: ['training.operate'] },
       { name: 'التخرج والاعتماد', path: '/hospital?tab=graduation', icon: GraduationCap },
       { name: 'البلاغات', path: '/incidents', icon: AlertTriangle, requires: ['incident.view'] },
       { name: 'التقارير', path: '/reports', icon: FileSpreadsheet, requires: ['report.view'] },
