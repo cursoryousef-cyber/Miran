@@ -23,7 +23,8 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 const REPORT_READ_ROLES = [
   'platform_owner', 'system_admin', 'org_manager',
   'cluster_administrator', 'cluster_manager', 'training_director',
-  'hospital_training_admin', 'university_administrator', 'academic_supervisor',
+  'hospital_training_admin', 'hospital_administrator',
+  'university_administrator', 'academic_supervisor',
 ] as const;
 
 // Authoring templates is narrower than reading them: the cluster owns its own
