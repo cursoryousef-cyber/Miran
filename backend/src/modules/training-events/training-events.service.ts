@@ -191,7 +191,13 @@ export class TrainingEventsService {
       // recipient rows were built from, so no one outside the event is told.
       await tx.notification.createMany({
         data: recipients.map((r) => ({
-          organizationId: scope.organizationId,
+          // The recipient's own organisation, not the sender's. NotificationService
+          // filters a reader's notifications by *their* visibleOrgIds, so a
+          // cluster-stamped row is invisible to the hospital trainee it was
+          // written for — the notification existed but never reached a badge or
+          // a list. Falls back to the sender's organisation only when a
+          // recipient carries none.
+          organizationId: r.organizationId ?? scope.organizationId,
           userId: r.accountId,
           titleAr: `فعالية تدريبية جديدة: ${dto.title.trim()}`,
           bodyAr: dto.description ?? 'لديك فعالية تدريبية جديدة تتطلب اطلاعك',
@@ -239,7 +245,14 @@ export class TrainingEventsService {
     user: IAuthenticatedUser,
     scope: ScopeContext,
     dto: CreateEventInput,
-  ): Promise<Array<{ accountId: string; trainerProfileId?: string; traineeProfileId?: string }>> {
+  ): Promise<
+    Array<{
+      accountId: string;
+      trainerProfileId?: string;
+      traineeProfileId?: string;
+      organizationId?: string;
+    }>
+  > {
     const isTrainer = user.roles?.includes('trainer') ?? false;
 
     // A trainer addresses their own trainees and nothing else — regardless of
@@ -341,6 +354,7 @@ export class TrainingEventsService {
       where: { ...where, isLocked: false },
       select: {
         id: true,
+        organizationId: true,
         person: { select: { userAccounts: { select: { id: true }, take: 1 } } },
       },
     });
@@ -349,6 +363,7 @@ export class TrainingEventsService {
       .map((r) => ({
         accountId: r.person!.userAccounts[0].id,
         traineeProfileId: r.id,
+        organizationId: r.organizationId,
       }));
   }
 
@@ -357,6 +372,7 @@ export class TrainingEventsService {
       where,
       select: {
         id: true,
+        organizationId: true,
         person: { select: { userAccounts: { select: { id: true }, take: 1 } } },
       },
     });
@@ -365,6 +381,7 @@ export class TrainingEventsService {
       .map((r) => ({
         accountId: r.person!.userAccounts[0].id,
         trainerProfileId: r.id,
+        organizationId: r.organizationId,
       }));
   }
 

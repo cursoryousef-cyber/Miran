@@ -720,3 +720,76 @@ describe('TrainingEventsService context links', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+/**
+ * Notifications must be readable by the person they were written for.
+ *
+ * NotificationService filters a reader's notifications by that reader's own
+ * visibleOrgIds. Stamping the row with the *sender's* organisation therefore
+ * made every cross-organisation event silently invisible: a cluster manager
+ * addressing hospital trainees produced notifications that never reached a
+ * badge or a list. Found in browser E2E, where the trainee's unread badge read
+ * 0 while the row existed in the database.
+ */
+describe('TrainingEventsService notification scoping', () => {
+  const CLUSTER_A = 'cluster-A';
+  const HOSPITAL_A = 'hospital-A';
+
+  function makeService(traineeOrg: string | undefined) {
+    const notifications: any[] = [];
+    const tx = {
+      trainingEvent: { create: jest.fn().mockResolvedValue({ id: 'event-1' }) },
+      trainingEventRecipient: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      notification: {
+        createMany: jest.fn().mockImplementation((a) => {
+          notifications.push(...a.data);
+          return { count: a.data.length };
+        }),
+      },
+      auditLog: { create: jest.fn() },
+    };
+    const prisma = {
+      $transaction: jest.fn().mockImplementation((fn) => fn(tx)),
+      traineeProfile: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'trainee-1',
+            organizationId: traineeOrg,
+            person: { userAccounts: [{ id: 'acct-trainee' }] },
+          },
+        ]),
+      },
+      trainerProfile: { findMany: jest.fn(), findFirst: jest.fn() },
+      rotation: { findMany: jest.fn() },
+      traineeAllocation: { findMany: jest.fn() },
+    } as any;
+    return { service: new TrainingEventsService(prisma, {} as any), notifications };
+  }
+
+  const sender = { accountId: 'acct-cm', roles: ['cluster_manager'] } as any;
+  const senderScope = {
+    organizationId: CLUSTER_A,
+    visibleOrgIds: [CLUSTER_A, HOSPITAL_A],
+    roles: ['cluster_manager'],
+  } as any;
+  const dto = {
+    eventType: 'announcement',
+    title: 'إعلان',
+    responseMode: 'information_only',
+    audienceType: 'all_trainees',
+  } as any;
+
+  it("stamps the notification with the recipient's organisation, not the sender's", async () => {
+    const { service, notifications } = makeService(HOSPITAL_A);
+    await service.create(sender, senderScope, dto);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].organizationId).toBe(HOSPITAL_A);
+    expect(notifications[0].organizationId).not.toBe(CLUSTER_A);
+  });
+
+  it("falls back to the sender's organisation when a recipient carries none", async () => {
+    const { service, notifications } = makeService(undefined);
+    await service.create(sender, senderScope, dto);
+    expect(notifications[0].organizationId).toBe(CLUSTER_A);
+  });
+});
