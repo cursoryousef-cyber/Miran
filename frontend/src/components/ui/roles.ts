@@ -2,7 +2,7 @@ import {
   Award, GraduationCap, LayoutDashboard, Network, Stethoscope, UserCog, Users,
   Building2, ClipboardList, FolderGit2, FileSpreadsheet, BookOpen, AlertTriangle,
   Shield, Key, Activity, GitMerge, Settings, FileSignature, BellRing, UsersRound,
-  Route, PhoneCall, Send, Inbox, CheckSquare, RotateCcw,
+  Route, PhoneCall, Send, Inbox, CheckSquare, RotateCcw, Megaphone,
 } from 'lucide-react';
 
 /**
@@ -93,6 +93,7 @@ const CLUSTER_NAV: NavSection[] = [
     title: 'دورة التدريب',
     items: [
       { name: 'لوحة التجمع', path: '/', icon: Network },
+      { name: 'النداءات والفعاليات', path: '/training-events', icon: Megaphone, requires: ['training.operate'] },
       {
         name: 'الطلبات الواردة', path: '/affiliations?tab=incoming', icon: FolderGit2,
         requires: ['training_request.review'],
@@ -133,6 +134,7 @@ const HOSPITAL_TRAINING_NAV: NavSection[] = [
     title: 'العمليات التدريبية',
     items: [
       { name: 'لوحة التدريب بالمستشفى', path: '/', icon: Stethoscope },
+      { name: 'النداءات والفعاليات', path: '/training-events', icon: Megaphone, requires: ['training.operate'] },
       { name: 'مساحة عمل المستشفى', path: '/hospital', icon: Stethoscope, requires: ['training.operate'] },
       { name: 'منشئ الجداول', path: '/hospital?tab=schedules', icon: LayoutDashboard, requires: ['schedule.view'] },
       { name: 'أعضاء الجهة', path: '/org-members', icon: UsersRound, requires: ['org_member.view'] },
@@ -181,6 +183,8 @@ const TRAINER_NAV: NavSection[] = [
     title: 'يومي',
     items: [
       { name: 'لوحة المدرب', path: '/', icon: UserCog },
+      { name: 'فعاليات متدربيّ', path: '/training-events', icon: Megaphone, requires: ['training.operate'] },
+      { name: 'الفعاليات الواردة', path: '/my-training-events', icon: Inbox },
       { name: 'متدربيّ', path: '/org-members', icon: UsersRound },
       { name: 'سلسلة القبول', path: '/acceptance-chain', icon: CheckSquare },
       { name: 'النداءات والإشعارات', path: '/notifications', icon: BellRing },
@@ -201,6 +205,7 @@ const TRAINEE_NAV: NavSection[] = [
     title: 'رحلتي التدريبية',
     items: [
       { name: 'لوحتي', path: '/', icon: Route },
+      { name: 'النداءات والفعاليات', path: '/my-training-events', icon: Megaphone },
       { name: 'السجل السريري', path: '/logbook', icon: BookOpen },
       { name: 'النداءات والإشعارات', path: '/notifications', icon: BellRing },
     ],

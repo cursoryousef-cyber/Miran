@@ -694,6 +694,47 @@ export class TrainingRequestTraineesService {
         update: { isActive: true },
       });
 
+      // OrganizationAssignment is the primary source of truth for
+      // AuthService.login → resolveOrgContext. The UserOrganization row above
+      // is a legacy fallback that only fires when the user has *zero*
+      // OrganizationAssignment rows with a MEMBERSHIP_SOURCE type. If any
+      // other row exists (e.g. from backfill), the fallback is skipped and
+      // the trainee gets 403. Writing the assignment row ensures the trainee
+      // can log in regardless of the backfill state.
+      const existingAssignment = await tx.organizationAssignment.findFirst({
+        where: {
+          userAccountId: account.id,
+          organizationId: request.targetOrgId,
+          sourceType: { in: ['user_organization', 'user_role', 'manual'] },
+        },
+      });
+      if (!existingAssignment) {
+        // Demote any existing primary assignments for this user first
+        await tx.organizationAssignment.updateMany({
+          where: { userAccountId: account.id, isPrimary: true, isActive: true },
+          data: { isPrimary: false },
+        });
+        await tx.organizationAssignment.create({
+          data: {
+            userAccountId: account.id,
+            organizationId: request.targetOrgId,
+            roleId: traineeRole?.id ?? null,
+            assignmentType: 'permanent',
+            isPrimary: true,
+            isActive: true,
+            sourceType: 'user_organization',
+            createdById: user?.accountId,
+          },
+        });
+      } else if (!existingAssignment.roleId && traineeRole) {
+        // Assignment exists but has no role — add the trainee role so
+        // roledOrgIds() doesn't filter out this org from available contexts.
+        await tx.organizationAssignment.update({
+          where: { id: existingAssignment.id },
+          data: { roleId: traineeRole.id, isActive: true },
+        });
+      }
+
       const profile = await tx.traineeProfile.upsert({
         where: { personId: person.id },
         create: {
@@ -868,6 +909,53 @@ export class TrainingRequestTraineesService {
       { status: 'hospital_review' },
     );
     return { success: true, message: 'بدأت مراجعة المستشفى للمتدرب' };
+  }
+
+  /**
+   * المستشفى يقبل المتدرب: hospital_review → hospital_accepted
+   *
+   * قرار مستقل بذاته: القبول لا يبدأ التدريب ولا يُسند مدرباً، وإنما يفتح
+   * مرحلة الإسناد. يبقى القرار على مستوى صف المتدرب فلا يؤثر قبول مستشفى
+   * على متدرب موزَّع على مستشفى آخر ضمن الطلب نفسه.
+   */
+  async hospitalAcceptIntern(rowId: string, user: IAuthenticatedUser, notes?: string) {
+    const row = await this.loadRow(rowId);
+    assertValidTransition(
+      'صف المتدرب',
+      row.status,
+      TRAINEE_ROW_STATUS.HOSPITAL_ACCEPTED,
+      TRAINING_REQUEST_TRAINEE_TRANSITIONS,
+    );
+    const old = this.snapshot(row as any);
+    await this.prisma.trainingRequestTrainee.update({
+      where: { id: rowId },
+      data: {
+        status: TRAINEE_ROW_STATUS.HOSPITAL_ACCEPTED,
+        officialComments: notes ?? undefined,
+        updatedById: user.accountId,
+      },
+    });
+    await this.audit(
+      user,
+      row.trainingRequest.targetOrgId,
+      'hospital_accept_intern',
+      rowId,
+      old,
+      {
+        status: TRAINEE_ROW_STATUS.HOSPITAL_ACCEPTED,
+        hospitalId: row.assignedHospitalId,
+        notes,
+      },
+    );
+    await this.notifyUniversity(
+      { universityOrgId: row.universityOrgId, trainingRequestId: row.trainingRequestId, id: rowId },
+      'قبول متدرب من قِبَل المستشفى',
+      `قبلت ${row.assignedHospital?.nameAr || 'المستشفى'} المتدرب ${row.nameAr} — بانتظار إسناد القسم والمدرب`,
+    );
+    return {
+      success: true,
+      message: `تم قبول المتدرب ${row.nameAr} — يمكن الآن إسناد القسم والمدرب`,
+    };
   }
 
   /** المستشفى يرفض المتدرب نهائياً: hospital_review → rejected */

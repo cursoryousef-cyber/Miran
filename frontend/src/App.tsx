@@ -26,6 +26,8 @@ import { Policies } from './pages/Policies';
 import { Integrations } from './pages/Integrations';
 import { SettingsPage } from './pages/Settings';
 import { OrgMembersPage } from './pages/OrgMembers';
+import { TrainingEvents } from './pages/TrainingEvents';
+import { MyTrainingEvents } from './pages/MyTrainingEvents';
 import { HealthMonitor } from './pages/HealthMonitor';
 import { AuditLogs } from './pages/AuditLogs';
 import { RolesManagement } from './pages/RolesManagement';
@@ -166,6 +168,10 @@ export const App: React.FC = () => {
                   <Route path="graduation" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, 'university_administrator', ...PLATFORM]}><Graduation /></RoleRoute>} />
 
                   {/* Hospital + Trainer */}
+                  {/* Training events: senders (cluster/hospital/trainer) and recipients. The
+                      backend decides reach; these routes only decide who sees which screen. */}
+                  <Route path="training-events" element={<RoleRoute allowedRoles={[...PLATFORM, ...CLUSTER, ...HOSPITAL, ...TRAINER]}><TrainingEvents /></RoleRoute>} />
+                  <Route path="my-training-events" element={<RoleRoute allowedRoles={[...TRAINEE, ...TRAINER]}><MyTrainingEvents /></RoleRoute>} />
                   <Route path="org-members" element={<RoleRoute allowedRoles={[...HOSPITAL, ...HOSPITAL_ADMIN, ...TRAINER, ...UNIVERSITY]}><OrgMembersPage /></RoleRoute>} />
                   <Route path="trainer-reassignment" element={<Navigate to="/hospital?tab=reassignment" replace />} />
                   <Route path="trainer-leaves" element={<Navigate to="/hospital?tab=leaves" replace />} />

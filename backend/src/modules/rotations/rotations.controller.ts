@@ -5,8 +5,9 @@ import { CurrentUser } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
-  CAPABILITIES, CapabilityGuard, RequireCapability, ScopeGuard, ScopedResource,
+  CAPABILITIES, CapabilityGuard, RequireCapability, Scope, ScopeContext, ScopeGuard, ScopedResource,
 } from '../../common/authz';
+import { TRAINEE_ROW_STATUS } from '../../common/status-constants';
 
 @ApiTags('Rotations & Departments (الروتيشنات والأقسام السريرية)')
 @Controller('rotations')
@@ -14,6 +15,142 @@ import {
 @ApiBearerAuth('JWT-auth')
 export class RotationsController {
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * The invariants a rotation must satisfy before it may exist, mirroring the
+   * ones TraineeAllocationService.assignWithinHospital enforces on the
+   * allocation path. Every relation is re-read from the database and compared
+   * against the trainee's own hospital — never against an id the caller sent —
+   * so a Hospital A session cannot name a Hospital B department or trainer.
+   */
+  /**
+   * Replacement department/trainer on an existing rotation must belong to that
+   * rotation's own hospital. The hospital is read from the stored row, never
+   * from the request, so the check cannot be steered by the caller.
+   */
+  private async assertRotationEditTargetsUsable(
+    rotationId: string,
+    dto: {
+      departmentId?: string;
+      trainerProfileId?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+  ): Promise<void> {
+    const existing = await this.prisma.rotation.findUnique({
+      where: { id: rotationId },
+      select: { organizationId: true, startDate: true, endDate: true },
+    });
+    if (!existing) throw new NotFoundException('الروتيشن غير موجود');
+    const hospitalId = existing.organizationId;
+
+    if (dto.departmentId) {
+      const department = await this.prisma.department.findUnique({
+        where: { id: dto.departmentId },
+        select: { organizationId: true },
+      });
+      if (!department) throw new NotFoundException('القسم غير موجود');
+      if (department.organizationId !== hospitalId) {
+        throw new ForbiddenException('لا يمكن نقل الروتيشن إلى قسم في مستشفى آخر');
+      }
+    }
+
+    if (dto.trainerProfileId) {
+      const trainer = await this.prisma.trainerProfile.findUnique({
+        where: { id: dto.trainerProfileId },
+        select: { organizationId: true },
+      });
+      if (!trainer) throw new NotFoundException('ملف المدرب غير موجود');
+      if (trainer.organizationId !== hospitalId) {
+        throw new ForbiddenException('لا يمكن إسناد الروتيشن إلى مدرب من مستشفى آخر');
+      }
+    }
+
+    // Dates stay coherent whether one end or both are being moved.
+    const start = dto.startDate ? new Date(dto.startDate) : existing.startDate;
+    const end = dto.endDate ? new Date(dto.endDate) : existing.endDate;
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      throw new BadRequestException('تواريخ الروتيشن غير صالحة');
+    }
+    if (start >= end) {
+      throw new BadRequestException('تاريخ البداية يجب أن يسبق تاريخ النهاية');
+    }
+  }
+
+  private async assertRotationTargetsUsable(
+    dto: {
+      traineeProfileId: string;
+      departmentId: string;
+      trainerProfileId: string;
+      startDate: string;
+      endDate: string;
+    },
+    user: IAuthenticatedUser,
+    scope?: ScopeContext,
+  ): Promise<void> {
+    const start = new Date(dto.startDate);
+    const end = new Date(dto.endDate);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      throw new BadRequestException('تواريخ الروتيشن غير صالحة');
+    }
+    if (start >= end) {
+      throw new BadRequestException('تاريخ البداية يجب أن يسبق تاريخ النهاية');
+    }
+
+    const trainee = await this.prisma.traineeProfile.findUnique({
+      where: { id: dto.traineeProfileId },
+      select: { id: true, organizationId: true, isLocked: true },
+    });
+    if (!trainee) throw new NotFoundException('ملف المتدرب غير موجود');
+    if (trainee.isLocked) {
+      throw new ForbiddenException('ملف المتدرب مغلق بعد التخرج — لا يمكن إنشاء روتيشن جديد');
+    }
+
+    // The hospital is the trainee's own, not the caller's claim. A restricted
+    // session must be able to see it; platform sessions (null) are unrestricted.
+    const hospitalId = trainee.organizationId;
+    if (scope && scope.visibleOrgIds !== null && !scope.visibleOrgIds.includes(hospitalId)) {
+      throw new ForbiddenException('هذا المتدرب خارج نطاق صلاحياتك التنظيمية');
+    }
+
+    // Acceptance gate. The candidate row is where the hospital's decision lives;
+    // a trainee still under review has not been accepted and may not be placed.
+    // Rows already active are legitimately re-placed (a later rotation in the
+    // same programme), which is why both statuses pass.
+    const candidateRow = await this.prisma.trainingRequestTrainee.findFirst({
+      where: { traineeProfileId: dto.traineeProfileId },
+      select: { status: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (
+      candidateRow &&
+      ![TRAINEE_ROW_STATUS.HOSPITAL_ACCEPTED, TRAINEE_ROW_STATUS.ACTIVE].includes(
+        candidateRow.status as never,
+      )
+    ) {
+      throw new ConflictException(
+        `لا يمكن إنشاء روتيشن قبل قبول المستشفى للمتدرب — الحالة الحالية «${candidateRow.status}»`,
+      );
+    }
+
+    const department = await this.prisma.department.findUnique({
+      where: { id: dto.departmentId },
+      select: { organizationId: true },
+    });
+    if (!department) throw new NotFoundException('القسم غير موجود');
+    if (department.organizationId !== hospitalId) {
+      throw new ForbiddenException('القسم المحدد لا يتبع مستشفى المتدرب');
+    }
+
+    const trainer = await this.prisma.trainerProfile.findUnique({
+      where: { id: dto.trainerProfileId },
+      select: { organizationId: true },
+    });
+    if (!trainer) throw new NotFoundException('ملف المدرب غير موجود');
+    if (trainer.organizationId !== hospitalId) {
+      throw new ForbiddenException('المدرب المحدد لا يتبع مستشفى المتدرب');
+    }
+  }
 
   @Get('my')
   async getMyRotations(@CurrentUser() user: IAuthenticatedUser) {
@@ -115,7 +252,18 @@ export class RotationsController {
       endDate: string;
       status?: string;
     },
+    @Scope() scope?: ScopeContext,
   ) {
+    // Direct rotation creation reaches the same end state as the allocation
+    // path — a trainee placed with a department and a trainer — but it went
+    // through none of that path's checks. The capability above only established
+    // that the caller may place trainees *somewhere*; every id below arrives
+    // from the client, so without this the endpoint would place any trainee
+    // with any trainer in any department, before the hospital had accepted
+    // them, bypassing the acceptance gate enforced in TraineeAllocationService.
+    // The invariants are the same ones that path enforces.
+    await this.assertRotationTargetsUsable(dto, user, scope);
+
     const rotation = await this.prisma.rotation.create({
       data: {
         organizationId: user.organizationId,
@@ -152,6 +300,15 @@ export class RotationsController {
       status?: string;
     },
   ) {
+    // ScopeGuard proved the caller may touch *this* rotation. It says nothing
+    // about the ids in the body: a Hospital A supervisor could take their own
+    // rotation and patch in a Hospital B trainer or department, moving another
+    // hospital's staff onto their rotation. The replacements are therefore
+    // checked against the rotation's own hospital, read from the database.
+    // `traineeProfileId` and `organizationId` are absent from the DTO by
+    // design — the trainee and the hospital of a rotation are immutable here.
+    await this.assertRotationEditTargetsUsable(id, dto);
+
     const rotation = await this.prisma.rotation.update({
       where: { id },
       data: {

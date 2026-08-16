@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { IAuthenticatedUser } from '../../common/interfaces';
@@ -266,13 +266,54 @@ export class EvaluationService {
     },
     user: IAuthenticatedUser,
   ) {
-    // Gate 1: final evaluation requires midpoint meeting done
-    if (dto.evaluationType === 'final_rotation' && dto.rotationId) {
+    // Gate 0: ownership. Every other gate below asked "is this evaluation ready
+    // to be written" and none asked "may this caller write it". `rotationId` and
+    // `evaluateeId` arrive from the client, so without this a trainer could
+    // score any trainee in the system by naming someone else's rotation — the
+    // role check on the route only established that the caller is *a* trainer.
+    // The rotation is the authority on who owns the pairing: the caller must be
+    // its trainer, and the evaluatee must be its trainee.
+    if (dto.rotationId) {
       const rotation = await this.prisma.rotation.findUnique({
         where: { id: dto.rotationId },
-        select: { midpointMeetingDone: true },
+        select: {
+          midpointMeetingDone: true,
+          trainerProfileId: true,
+          traineeProfileId: true,
+        },
       });
-      if (!rotation?.midpointMeetingDone) {
+      if (!rotation) throw new NotFoundException('الدورة التدريبية غير موجودة');
+
+      // Trainers are bound to their own rotations. Roles that supervise rather
+      // than train (academic_supervisor, org_manager, platform_owner) are not
+      // rotation-owners and keep the access the route already granted them.
+      const isTrainer = user.roles?.includes('trainer');
+      if (isTrainer) {
+        const callerTrainer = await this.prisma.trainerProfile.findFirst({
+          where: { person: { userAccounts: { some: { id: user.accountId } } } },
+          select: { id: true },
+        });
+        if (!callerTrainer || rotation.trainerProfileId !== callerTrainer.id) {
+          throw new ForbiddenException(
+            'لا يمكنك تقييم متدرب في دورة تدريبية غير مسندة إليك',
+          );
+        }
+      }
+
+      // The evaluatee must be the trainee on this rotation, whoever is calling.
+      const evaluateeIsRotationTrainee = await this.prisma.traineeProfile.findFirst({
+        where: {
+          id: rotation.traineeProfileId,
+          person: { userAccounts: { some: { id: dto.evaluateeId } } },
+        },
+        select: { id: true },
+      });
+      if (!evaluateeIsRotationTrainee) {
+        throw new ForbiddenException('المتدرب المحدد ليس متدرب هذه الدورة التدريبية');
+      }
+
+      // Gate 1: final evaluation requires midpoint meeting done
+      if (dto.evaluationType === 'final_rotation' && !rotation.midpointMeetingDone) {
         throw new ForbiddenException(
           'لا يمكن إرسال التقييم النهائي قبل إتمام اجتماع منتصف الدورة. يرجى تسجيل الاجتماع أولاً.',
         );

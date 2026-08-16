@@ -154,6 +154,29 @@ export class TraineeAllocationService {
     );
 
     const context = await this.loadRowContext(traineeRowId);
+
+    // The declared transition is submitted → cluster_approved → allocated, but
+    // nothing enforced the middle step here: allocating a still-`submitted` row
+    // succeeded and opened an allocation without moving the row's status. That
+    // left the row wedged — approved later, carrying an open allocation, and
+    // unable to reach `allocated` because re-allocating the same hospital is
+    // correctly refused as "no change to record". A trainee the cluster has not
+    // yet approved is not ready to be placed, so the placement is refused here.
+    //
+    // Moves are exempt: `allocated` and the states a placed trainee legitimately
+    // passes through are re-allocatable, which is what cluster_reassign is for.
+    // The status is read from the row itself, never from the request.
+    const PLACEABLE_STATUSES: string[] = [
+      TRAINEE_ROW_STATUS.CLUSTER_APPROVED,
+      TRAINEE_ROW_STATUS.ALLOCATED,
+      TRAINEE_ROW_STATUS.HOSPITAL_RETURNED_TO_CLUSTER,
+    ];
+    if (!PLACEABLE_STATUSES.includes(context.rowStatus)) {
+      throw new ConflictException(
+        `لا يمكن توزيع المتدرب على مستشفى قبل اعتماد التجمع — الحالة الحالية «${context.rowStatus}»`,
+      );
+    }
+
     const hospital = await this.assertHospitalUnderCluster(
       target.hospitalId,
       context.clusterOrgId,
@@ -206,6 +229,21 @@ export class TraineeAllocationService {
     if (!hospitalId) {
       throw new ConflictException(
         'لا يوجد تخصيص مفتوح لهذا المتدرب — التوزيع على المستشفى يتم من إدارة التدريب بالتجمع أولاً',
+      );
+    }
+
+    // Business rule: a hospital assigns a department and a trainer only after it
+    // has accepted the trainee. Hiding the button in the UI is not the control —
+    // this endpoint is reachable directly, so the rule is enforced here. Rows
+    // already in training keep working (reassignment inside the hospital is a
+    // legitimate ongoing operation); everything before acceptance is refused.
+    const ASSIGNABLE_STATUSES: string[] = [
+      TRAINEE_ROW_STATUS.HOSPITAL_ACCEPTED,
+      TRAINEE_ROW_STATUS.ACTIVE,
+    ];
+    if (!ASSIGNABLE_STATUSES.includes(context.rowStatus)) {
+      throw new ConflictException(
+        `لا يمكن إسناد القسم أو المدرب قبل قبول المستشفى للمتدرب — الحالة الحالية «${context.rowStatus}»`,
       );
     }
 

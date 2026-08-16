@@ -125,7 +125,13 @@ export const CAPABILITY_CONTEXTS: Record<Capability, ContextType[]> = {
   [C.CAPACITY_VIEW]: ['cluster', 'hospital', 'platform'],
   [C.CAPACITY_MANAGE]: ['hospital', 'platform'],
   [C.TRAINER_MANAGE]: ['hospital', 'platform'],
-  [C.TRAINING_OPERATE]: ['hospital', 'platform'],
+  // 'cluster' added because training operations legitimately run from a cluster
+  // vantage point too — a cluster manager addressing their own hospitals. Held
+  // apart from the grant above: this says the capability is *usable* from a
+  // cluster context, the role table says who holds it, and visibleOrgIds says
+  // how far it reaches. Without this a cluster_manager holding the capability
+  // would still be refused by capabilityAllowedInContext.
+  [C.TRAINING_OPERATE]: ['hospital', 'cluster', 'platform'],
 
   [C.TRAINEE_VIEW_SCOPE]: ['cluster', 'university', 'platform'],
   [C.TRAINEE_VIEW_HOSPITAL]: ['hospital', 'platform'],
@@ -185,6 +191,13 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
 
   // ── Cluster training management (Canonical: cluster_manager) ────────────
   cluster_manager: [
+    // Running training operations across the cluster — the events/calls layer.
+    // The capability guarded nothing until TrainingEvents existed, so granting
+    // it here widens access to that feature and to nothing else. Scope is a
+    // separate question and stays with ScopeContextService: this says the
+    // cluster manager may run training operations, `visibleOrgIds` says the
+    // operations reach their own cluster only.
+    C.TRAINING_OPERATE,
     C.TRAINING_REQUEST_CREATE,
     C.TRAINING_REQUEST_VIEW,
     C.TRAINING_REQUEST_REVIEW,
@@ -253,6 +266,16 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
 
   // ── Hospital training management (Canonical: hospital_training_admin) ────
   hospital_training_admin: [
+    // The hospital training administration is a first-class actor in the
+    // request workflow: it opens the requests routed to its own hospital,
+    // reviews them, and accepts or rejects them. Without this the role could
+    // list rows through the legacy role check on /hospital-review but got a
+    // 403 from CapabilityGuard the moment it opened a request, which is what
+    // stalled the workflow at the hospital step. TRAINING_REQUEST_VIEW is
+    // already declared valid from a 'hospital' context in CAPABILITY_CONTEXTS;
+    // only the grant was missing. Review/approve/return stay cluster-only —
+    // this is view access, scoped to the hospital's own rows by ScopeGuard.
+    C.TRAINING_REQUEST_VIEW,
     C.DEPARTMENT_MANAGE,
     C.CAPACITY_VIEW,
     C.CAPACITY_MANAGE,
@@ -293,6 +316,12 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
   // capabilities and is rejected by ScopeContextService.
 
   trainer: [
+    // A trainer runs training for the trainees assigned to them, which includes
+    // calling them to an event. The reach is not granted here and cannot be:
+    // TrainingEventsService resolves a trainer's audience from their own
+    // rotations/allocations, and refuses them the trainer-facing audiences
+    // outright.
+    C.TRAINING_OPERATE,
     C.TRAINEE_VIEW_ASSIGNED,
     C.LOGBOOK_VIEW,
     C.LOGBOOK_APPROVE,

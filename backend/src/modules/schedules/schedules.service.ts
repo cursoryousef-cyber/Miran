@@ -145,12 +145,74 @@ export class SchedulesService {
   /**
    * Wizard & Quick Create Schedule
    */
+  /**
+   * Every trainee, trainer and department a schedule names must belong to the
+   * organisation the schedule belongs to.
+   *
+   * The schedule row itself was always safe — `organizationId` comes from the
+   * authenticated session, never from the body, so no caller can write a row
+   * into another hospital. Its *contents* were not: participant and session ids
+   * were persisted exactly as sent, so a hospital could fill its own schedule
+   * with another hospital's trainees, trainers and departments, and the
+   * conflict engine would then reason about staff that hospital does not have.
+   * Each id is resolved against the database and counted, so an id that does
+   * not exist fails the same way one belonging elsewhere does.
+   */
+  private async assertScheduleResourcesInOrg(
+    orgId: string,
+    resources: {
+      traineeProfileIds?: string[];
+      trainerProfileIds?: (string | undefined)[];
+      departmentIds?: (string | undefined)[];
+    },
+  ): Promise<void> {
+    const traineeIds = [...new Set((resources.traineeProfileIds ?? []).filter(Boolean))] as string[];
+    const trainerIds = [...new Set((resources.trainerProfileIds ?? []).filter(Boolean))] as string[];
+    const departmentIds = [...new Set((resources.departmentIds ?? []).filter(Boolean))] as string[];
+
+    if (traineeIds.length > 0) {
+      const count = await this.prisma.traineeProfile.count({
+        where: { id: { in: traineeIds }, organizationId: orgId },
+      });
+      if (count !== traineeIds.length) {
+        throw new ForbiddenException('أحد المتدربين المحددين لا يتبع مستشفى الجدول');
+      }
+    }
+
+    if (trainerIds.length > 0) {
+      const count = await this.prisma.trainerProfile.count({
+        where: { id: { in: trainerIds }, organizationId: orgId },
+      });
+      if (count !== trainerIds.length) {
+        throw new ForbiddenException('أحد المدربين المحددين لا يتبع مستشفى الجدول');
+      }
+    }
+
+    if (departmentIds.length > 0) {
+      const count = await this.prisma.department.count({
+        where: { id: { in: departmentIds }, organizationId: orgId },
+      });
+      if (count !== departmentIds.length) {
+        throw new ForbiddenException('أحد الأقسام المحددة لا يتبع مستشفى الجدول');
+      }
+    }
+  }
+
   async create(user: IAuthenticatedUser, dto: CreateScheduleDto) {
     const orgId = user.organizationId;
 
     if (!dto.traineeProfileIds || dto.traineeProfileIds.length === 0) {
       throw new BadRequestException('يجب تحديد متدرب واحد على الأقل للجدول');
     }
+
+    await this.assertScheduleResourcesInOrg(orgId, {
+      traineeProfileIds: [
+        ...dto.traineeProfileIds,
+        ...(dto.sessions ?? []).map((s) => s.traineeProfileId),
+      ].filter(Boolean) as string[],
+      trainerProfileIds: (dto.sessions ?? []).map((s) => s.trainerProfileId),
+      departmentIds: [dto.departmentId, ...(dto.sessions ?? []).map((s) => s.departmentId)],
+    });
 
     // Convert proposed sessions to ConflictEngine format
     const proposed: ProposedSession[] = (dto.sessions || []).map((s) => ({
@@ -242,6 +304,17 @@ export class SchedulesService {
       include: { participants: true },
     });
     if (!existing) throw new NotFoundException('الجدول التدريبي غير موجود');
+
+    // Replacement session ids get the same treatment as on create: the schedule
+    // is already known to be this hospital's, so its sessions must stay inside
+    // that hospital too. Checked against the schedule's own organisation.
+    await this.assertScheduleResourcesInOrg(existing.organizationId, {
+      traineeProfileIds: (dto.sessions ?? [])
+        .map((s) => s.traineeProfileId)
+        .filter(Boolean) as string[],
+      trainerProfileIds: (dto.sessions ?? []).map((s) => s.trainerProfileId),
+      departmentIds: (dto.sessions ?? []).map((s) => s.departmentId),
+    });
 
     // If updating sessions, check conflicts
     if (dto.sessions && dto.sessions.length > 0) {

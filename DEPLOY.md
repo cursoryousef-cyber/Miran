@@ -25,7 +25,7 @@ Configure these in Render Dashboard (**Environment Settings**):
 |---|---|---|
 | `NODE_ENV` | `production` | `production` |
 | `PORT` | `10000` (Render default port) | `10000` |
-| `API_PREFIX` | `api/v1` | `api/v1` |
+| `API_PREFIX` | `api` — **not** `api/v1`. URI versioning appends the `v1` segment itself, so `api/v1` shifts every route to `/api/v1/v1/*` and breaks every client. | `api` |
 | `DATABASE_URL` | Neon PostgreSQL Connection String | `postgresql://<user>:<password>@<host>/<database>?sslmode=require` |
 | `JWT_ACCESS_SECRET` | Secret key for access tokens (min 32 chars) | `miran-prod-jwt-access-secret-2024` |
 | `JWT_REFRESH_SECRET` | Secret key for refresh tokens (min 32 chars) | `miran-prod-jwt-refresh-secret-2024` |

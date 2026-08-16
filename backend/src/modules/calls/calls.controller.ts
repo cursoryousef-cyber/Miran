@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Body, Param, Query,
-  UseGuards, BadRequestException, NotFoundException,
+  UseGuards, BadRequestException, ForbiddenException, NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
@@ -90,6 +90,72 @@ export class CallsController {
 
     if (!trainerProfileId) {
       throw new BadRequestException('لم يتم العثور على مدرب مرخص بالمستشفى لإطلاق النداء باسمه');
+    }
+
+    // ── Explicitly named recipients must be the caller's own trainees ────────
+    // Hospital scope is enforced on every recipient query below, so a trainee
+    // from another hospital was already unreachable. Within one hospital it was
+    // not: naming `targetTraineeIds` with any targetType other than 'department'
+    // skipped the rotation filter entirely, so a trainer could summon another
+    // trainer's trainees. Department broadcast is deliberately left alone — a
+    // trainer calling everyone on active rotation in their department is the
+    // designed behaviour, and narrowing it would be a policy change.
+    //
+    // This also runs *before* the call row is created: validating afterwards
+    // left a failed launch holding the trainer's one active-call slot. Unknown
+    // or out-of-scope ids are refused rather than silently dropped, so a caller
+    // is told the recipient list was wrong instead of quietly getting fewer
+    // notifications than they asked for.
+    if (dto.targetTraineeIds?.length) {
+      const namedIds = [...new Set(dto.targetTraineeIds)];
+      const reachable = await this.prisma.traineeProfile.findMany({
+        where: { id: { in: namedIds }, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (reachable.length !== namedIds.length) {
+        throw new BadRequestException(
+          'أحد المتدربين المحددين غير موجود أو لا يتبع مستشفاك',
+        );
+      }
+
+      // Only a caller who is themself a trainer is bound to their own trainees.
+      // Hospital training administration launching on the hospital's behalf is
+      // not a rotation owner and keeps the reach the route already granted it.
+      const isOwnTrainerProfile = await this.prisma.trainerProfile.findFirst({
+        where: { id: trainerProfileId, person: { userAccounts: { some: { id: user.accountId } } } },
+        select: { id: true },
+      });
+      if (isOwnTrainerProfile) {
+        // The same two links the logbook scope check treats as "this trainee is
+        // mine": an active/scheduled rotation, or an open allocation. Counted
+        // as a set of distinct trainees so every named id must be covered.
+        const [byRotation, byAllocation] = await Promise.all([
+          this.prisma.rotation.findMany({
+            where: {
+              traineeProfileId: { in: namedIds },
+              trainerProfileId,
+              status: { in: ['scheduled', 'active'] },
+            },
+            select: { traineeProfileId: true },
+          }),
+          this.prisma.traineeAllocation.findMany({
+            where: { traineeProfileId: { in: namedIds }, trainerProfileId, status: 'open' },
+            select: { traineeProfileId: true },
+          }),
+        ]);
+        const owned = new Set<string>([
+          ...byRotation.map((r) => r.traineeProfileId),
+          ...byAllocation.map((a) => a.traineeProfileId).filter((id): id is string => !!id),
+        ]);
+        // Checked per id rather than by comparing counts: a count match only
+        // means "as many rows as ids", which is the right answer for the wrong
+        // reason if the two sets ever differ.
+        if (!namedIds.every((id) => owned.has(id))) {
+          throw new ForbiddenException(
+            'لا يمكنك إطلاق نداء لمتدرب غير مسند إليك',
+          );
+        }
+      }
     }
 
     // ── Concurrent-call cap: one active call per trainer profile ─────────────
@@ -205,6 +271,7 @@ export class CallsController {
     });
     if (!call) throw new NotFoundException('النداء غير موجود');
     if (call.status !== 'active') throw new BadRequestException('النداء منتهٍ بالفعل');
+    await this._assertCallOperator(call, user);
 
     const participant = await this.prisma.callParticipant.findFirst({
       where: { callId, traineeProfileId: dto.traineeProfileId },
@@ -232,6 +299,7 @@ export class CallsController {
     });
     if (!call) throw new NotFoundException('النداء غير موجود');
     if (call.status === 'ended') throw new BadRequestException('النداء منتهٍ بالفعل');
+    await this._assertCallOperator(call, user);
 
     const endedAt = new Date();
     await this.prisma.trainerCall.update({
@@ -386,12 +454,18 @@ export class CallsController {
 
   @Post(':id/arrived')
   @RequireRoles('trainee')
-  @ApiOperation({ summary: 'وصلت — للمتدرب' })
+  @ApiOperation({ summary: 'وصلت (إقرار ذاتي من المتدرب) — يبقى تأكيد المدرب منفصلاً' })
   async arrived(@Param('id') callId: string, @CurrentUser() user: IAuthenticatedUser) {
     const participant = await this._getParticipant(callId, user.accountId);
+    // A trainee reports their own arrival; only the trainer attests to it.
+    // This wrote `confirmed_arrived`/`confirmedAt` — the trainer's attestation —
+    // so a trainee could record the confirmation themselves, and the
+    // `confirmed` figure in the call statistics counted self-reports as
+    // trainer-verified arrivals. The schema already separates the two with
+    // `selfArrivedAt` and `confirmedAt`; this now writes the trainee's half.
     return this.prisma.callParticipant.update({
       where: { id: participant.id },
-      data: { state: 'confirmed_arrived', confirmedAt: new Date() },
+      data: { state: 'self_arrived', selfArrivedAt: new Date() },
     });
   }
 
@@ -430,6 +504,30 @@ export class CallsController {
   // ═══════════════════════════════════════════════════════════════════════════
   // PRIVATE HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * A call belongs to the trainer who launched it. Hospital scope alone let any
+   * trainer in the same hospital confirm arrivals on, or end, a colleague's
+   * call — the caller was never compared against `call.trainerProfileId`.
+   *
+   * Hospital training administration is deliberately still allowed: it does not
+   * own a call but does supervise the floor, and the route already admitted it.
+   * What is closed is one trainer acting on another trainer's call.
+   */
+  private async _assertCallOperator(
+    call: { trainerProfileId: string },
+    user: IAuthenticatedUser,
+  ): Promise<void> {
+    if (!user.roles?.includes('trainer')) return;
+
+    const ownProfile = await this.prisma.trainerProfile.findFirst({
+      where: { person: { userAccounts: { some: { id: user.accountId } } } },
+      select: { id: true },
+    });
+    if (!ownProfile || ownProfile.id !== call.trainerProfileId) {
+      throw new ForbiddenException('لا يمكنك التحكم في نداء أطلقه مدرب آخر');
+    }
+  }
 
   private async _getParticipant(callId: string, accountId: string) {
     const traineeProfile = await this.prisma.traineeProfile.findFirst({

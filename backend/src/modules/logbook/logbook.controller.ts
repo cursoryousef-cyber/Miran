@@ -5,6 +5,7 @@ import { CurrentUser, RequireRoles } from '../../common/decorators';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeContextService } from '../../common/authz';
+import { CreateLogEntryDto } from './dto/create-log-entry.dto';
 
 @ApiTags('Clinical Logbook & Competencies (السجل السريري وحقيبة الكفاءات)')
 @Controller('logbook')
@@ -48,6 +49,22 @@ export class LogbookController {
     if (profile?.isLocked) {
       throw new ForbiddenException('ملف المتدرب مغلق بعد التخرج — لا يمكن إضافة أو تعديل السجلات السريرية');
     }
+  }
+
+  /**
+   * The role a sign-off is recorded under. The approve path already derived
+   * this from the roles the caller actually holds; the reject and
+   * request-modification paths used `roles[0]`, so the same account signed as
+   * different roles depending on the order the JWT happened to list them —
+   * an account holding [academic_supervisor, trainer] recorded its rejections
+   * as academic even when it was acting as the trainer, and any account whose
+   * first role was unrelated signed as the literal 'reviewer'. The signature
+   * ledger is audit evidence, so it must not depend on array order.
+   */
+  private signerRoleFor(user: IAuthenticatedUser): string {
+    if (user.roles?.includes('academic_supervisor')) return 'academic_supervisor';
+    if (user.roles?.includes('trainer')) return 'trainer';
+    return user.roles?.[0] || 'reviewer';
   }
 
   private async assertTrainerScope(user: IAuthenticatedUser, traineeProfileId: string): Promise<void> {
@@ -252,18 +269,10 @@ export class LogbookController {
   @Post('entries')
   @RequireRoles('trainee', 'trainer', 'hospital_training_admin', 'cluster_administrator', 'cluster_manager', 'training_director', 'platform_owner', 'org_manager')
   @ApiOperation({ summary: 'تسجيل حالة سريرية أو إجراء طبي جديد' })
-  async createLogEntry(@CurrentUser() user: IAuthenticatedUser, @Body() dto: {
-    traineeProfileId?: string;
-    diagnosis: string;
-    procedureId?: string;
-    patientAge?: number | string;
-    patientGender?: string;
-    specialtyAr?: string;
-    complexity?: string;
-    participationLevel?: string;
-    notes?: string;
-    evidenceUrls?: string[];
-  }) {
+  async createLogEntry(
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body() dto: CreateLogEntryDto,
+  ) {
     if (user.roles.includes('hospital_administrator')) {
       throw new ForbiddenException('غير مصرح لمدير المستشفى الإداري بالوصول إلى العمليات التدريبية');
     }
@@ -567,7 +576,7 @@ export class LogbookController {
     const result = await this.transitionLog(id, user, 'rejected', 'logbook.reject');
     if (result.success) {
       await this.prisma.logbookSignoff.create({
-        data: { caseLogId: id, signerId: user.accountId, signerRole: user.roles[0] || 'reviewer', feedback: dto.feedback },
+        data: { caseLogId: id, signerId: user.accountId, signerRole: this.signerRoleFor(user), feedback: dto.feedback },
       });
       const trainee = await this.prisma.traineeProfile.findUnique({
         where: { id: target.traineeProfileId },
@@ -599,7 +608,7 @@ export class LogbookController {
     const result = await this.transitionLog(id, user, 'modification_requested', 'logbook.request_modification');
     if (result.success && dto.feedback) {
       await this.prisma.logbookSignoff.create({
-        data: { caseLogId: id, signerId: user.accountId, signerRole: user.roles[0] || 'reviewer', feedback: dto.feedback },
+        data: { caseLogId: id, signerId: user.accountId, signerRole: this.signerRoleFor(user), feedback: dto.feedback },
       });
     }
     return result;

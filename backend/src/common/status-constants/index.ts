@@ -40,6 +40,10 @@ export const TRAINEE_ROW_STATUS = {
   ALLOCATED: 'allocated',
   ON_HOLD: 'on_hold',
   HOSPITAL_REVIEW: 'hospital_review',
+  /// قرار قبول المستشفى — مرحلة مستقلة تسبق إسناد المدرب وبدء التدريب.
+  /// القرار على مستوى صف المتدرب وليس الطلب، فالطلب الموزَّع على أكثر من
+  /// مستشفى لا يكسر قرارُ أحدها حالةَ الآخر.
+  HOSPITAL_ACCEPTED: 'hospital_accepted',
   HOSPITAL_RETURNED_TO_CLUSTER: 'hospital_returned_to_cluster',
   ACTIVE: 'active',
   GRADUATED: 'graduated',

@@ -35,7 +35,13 @@ export const TRAINING_REQUEST_TRAINEE_TRANSITIONS: TransitionTable = {
   cluster_approved: ['allocated'],
   allocated: ['on_hold', 'hospital_review'],
   on_hold: ['hospital_review', 'hospital_returned_to_cluster'],
-  hospital_review: ['on_hold', 'hospital_returned_to_cluster', 'active', 'rejected'],
+  // Hospital acceptance is its own stage. This used to run straight to
+  // 'active', which collapsed "the hospital agreed to take this trainee" and
+  // "training has started" into one hop and left no state in which trainer
+  // assignment could be required-but-not-yet-done. Trainer assignment is gated
+  // on hospital_accepted, so the direct hop to active is deliberately gone.
+  hospital_review: ['on_hold', 'hospital_returned_to_cluster', 'hospital_accepted', 'rejected'],
+  hospital_accepted: ['active', 'hospital_returned_to_cluster', 'rejected'],
   hospital_returned_to_cluster: ['allocated'],
   active: ['graduated'],
   graduated: [],

@@ -50,10 +50,19 @@ export class GraduationService {
     if (!profile) throw new NotFoundException('المتدرب غير موجود');
     if (profile.isLocked) throw new BadRequestException('ملف المتدرب مغلق');
 
-    // Determine approver role from user's primary role
-    const approverRole = user.roles?.[0];
-    if (!REQUIRED_APPROVER_ROLES.includes(approverRole)) {
-      throw new BadRequestException(`دورك "${approverRole}" غير مخول للموافقة على التخرج`);
+    // The approval is recorded against whichever of the caller's roles is part
+    // of the approval chain — not against `roles[0]`. Reading the first element
+    // made the outcome depend on the order the roles happened to arrive in the
+    // JWT: an account holding [trainer, hospital_training_admin] approved as a
+    // trainer, and one holding [academic_supervisor, trainer] was rejected
+    // outright even though it holds a chain role. The set of roles that may
+    // approve is unchanged — only how one is selected from it.
+    const callerRoles = user.roles ?? [];
+    const approverRole = REQUIRED_APPROVER_ROLES.find((r) => callerRoles.includes(r));
+    if (!approverRole) {
+      throw new BadRequestException(
+        `دورك (${callerRoles.join('، ') || 'غير محدد'}) غير مخول للموافقة على التخرج`,
+      );
     }
 
     const approval = await this.prisma.graduationApproval.upsert({

@@ -90,6 +90,19 @@ export const HospitalReview: React.FC = () => {
     onError: (err: any) => setErrorMsg(err.response?.data?.message || err.message),
   });
 
+  // The hospital's acceptance decision. Deliberately separate from starting the
+  // review and from assignment: accepting takes the trainee, it does not place
+  // them in a department or hand them to a trainer.
+  const acceptMut = useMutation({
+    mutationFn: (rowId: string) =>
+      apiClient.post(`/training-requests/trainees/${rowId}/hospital-review/accept`, {}),
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] });
+      setSuccessMsg(res.data?.message || 'تم قبول المتدرب');
+    },
+    onError: (err: any) => setErrorMsg(err.response?.data?.message || err.message),
+  });
+
   const rejectMut = useMutation({
     mutationFn: () => apiClient.post(`/training-requests/trainees/${selectedRow?.id}/hospital-review/reject`, { reason, notes }),
     onSuccess: (res: any) => { qc.invalidateQueries({ queryKey: ['hospital-review-trainees'] }); setDialog(null); setSuccessMsg(res.data?.message); },
@@ -177,7 +190,11 @@ export const HospitalReview: React.FC = () => {
 
   const filteredRows = rows.filter((r: any) => {
     if (filterTab === 'pending') return ['allocated', 'hospital_review', 'on_hold'].includes(r.status);
-    if (filterTab === 'accepted') return ['accepted', 'active', 'hospital_administrator_accepted', 'supervisor_accepted', 'training_supervisor_accepted', 'trainer_accepted'].includes(r.status);
+    // `hospital_accepted` is the state this screen's own accept action produces:
+    // the hospital has taken the trainee but department/trainer assignment has
+    // not happened yet. Without it here an accepted trainee fell out of every
+    // tab and the supervisor lost the row they had just accepted.
+    if (filterTab === 'accepted') return ['hospital_accepted', 'accepted', 'active', 'hospital_administrator_accepted', 'supervisor_accepted', 'training_supervisor_accepted', 'trainer_accepted'].includes(r.status);
     if (filterTab === 'rejected') return ['rejected', 'returned', 'hospital_returned_to_cluster'].includes(r.status);
     return true;
   });
@@ -276,12 +293,20 @@ export const HospitalReview: React.FC = () => {
                   actions={[
                     // start-review: only valid from allocated or on_hold (backend: allocated→hospital_review, on_hold→hospital_review)
                     ...(['allocated', 'on_hold'].includes(row.status) ? [{
-                      label: 'بدء المراجعة والقبول', icon: PlayCircle, tone: 'info' as const,
+                      label: 'بدء المراجعة', icon: PlayCircle, tone: 'info' as const,
                       onClick: () => startReviewMut.mutate(row.id),
                     }] : []),
-                    // assign/docs/correction: available once hospital has control (allocated, hospital_review, on_hold)
-                    ...(['allocated', 'hospital_review', 'on_hold'].includes(row.status) ? [{
-                      label: 'توزيع قسم/مدرب', icon: Edit3, tone: 'success' as const,
+                    // accept: the hospital's decision, valid only from hospital_review
+                    ...(row.status === 'hospital_review' ? [{
+                      label: 'قبول المتدرب', icon: CheckCircle2, tone: 'success' as const,
+                      onClick: () => acceptMut.mutate(row.id),
+                    }] : []),
+                    // assign: only after acceptance. This used to be offered from
+                    // allocated/hospital_review too, which let the hospital place a
+                    // trainee it had not yet accepted — the backend now refuses
+                    // that, so offering it here only produced a failed request.
+                    ...(['hospital_accepted', 'active'].includes(row.status) ? [{
+                      label: 'إسناد القسم والمدرب', icon: Edit3, tone: 'success' as const,
                       onClick: () => openDialog(row, 'assign'),
                     }] : []),
                     ...(['allocated', 'hospital_review', 'on_hold'].includes(row.status) ? [{
@@ -386,9 +411,18 @@ export const HospitalReview: React.FC = () => {
                             </Button>
                           </Tooltip>
                         )}
-                        {/* assign/docs/correction: available when hospital has control */}
-                        {['allocated', 'hospital_review', 'on_hold'].includes(row.status) && (
-                          <Tooltip title="توزيع على القسم والمدرب">
+                        {/* accept: the hospital decision, only from hospital_review */}
+                        {row.status === 'hospital_review' && (
+                          <Tooltip title="قبول المتدرب">
+                            <Button size="small" variant="contained" style={{ background: '#16A34A', minWidth: 0, padding: '4px 8px' }}
+                              onClick={() => acceptMut.mutate(row.id)} disabled={acceptMut.isPending}>
+                              <CheckCircle2 size={14} />
+                            </Button>
+                          </Tooltip>
+                        )}
+                        {/* assign: only after the hospital has accepted — the backend refuses it before that */}
+                        {['hospital_accepted', 'active'].includes(row.status) && (
+                          <Tooltip title="إسناد القسم والمدرب">
                             <Button size="small" variant="contained" style={{ background: '#059669', minWidth: 0, padding: '4px 8px' }}
                               onClick={() => openDialog(row, 'assign')}>
                               <Edit3 size={14} />

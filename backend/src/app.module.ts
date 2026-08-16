@@ -22,6 +22,7 @@ import { DeclarationsModule } from './modules/declarations/declarations.module';
 import { TraineesModule } from './modules/trainees/trainees.module';
 import { TrainersModule } from './modules/trainers/trainers.module';
 import { RotationsModule } from './modules/rotations/rotations.module';
+import { TrainingEventsModule } from './modules/training-events/training-events.module';
 import { CallsModule } from './modules/calls/calls.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrgMembersModule } from './modules/org-members/org-members.module';
@@ -86,6 +87,7 @@ import { SchedulesModule } from './modules/schedules/schedules.module';
     TraineesModule,
     TrainersModule,
     RotationsModule,
+    TrainingEventsModule,
     CallsModule,
     NotificationsModule,
     OrgMembersModule,

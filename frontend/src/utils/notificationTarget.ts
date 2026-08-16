@@ -24,6 +24,11 @@ export function notificationTarget(
       const sent = ['allocation', 'distribution', 'sent_to_hospital'].includes(n.type ?? '');
       return `/affiliations?tab=${sent ? 'sent' : 'incoming'}${id ? `&request=${id}` : ''}`;
     }
+    // A training event notification only ever reaches someone who is a
+    // recipient of it — senders are not notified of their own event — so this
+    // always points at the recipient inbox rather than the sender console.
+    case 'TrainingEvent':
+      return '/my-training-events';
     case 'Incident':
       return `/incidents${id ? `?incident=${id}` : ''}`;
     case 'Rotation':

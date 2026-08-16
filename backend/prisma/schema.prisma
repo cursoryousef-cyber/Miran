@@ -107,6 +107,7 @@ model Organization {
   traineeProfiles                     TraineeProfile[]
   sponsoredTrainees                   TraineeProfile[]          @relation("SponsorOrg")
   trainerCalls                        TrainerCall[]
+  trainingEvents                      TrainingEvent[]
   trainerLeaves                       TrainerLeave[]
   trainerProfiles                     TrainerProfile[]
   trainerReassignments                TrainerReassignment[]
@@ -285,6 +286,9 @@ model UserAccount {
   notifications          Notification[]
   objectivesVerified     ObjectiveProgress[]      @relation("ObjectiveVerifier")
   orgAssignments         OrganizationAssignment[]
+  trainingEventsCreated  TrainingEvent[]          @relation("TrainingEventCreator")
+  trainingEventsReceived TrainingEventRecipient[] @relation("TrainingEventRecipientAccount")
+  trainingEventsConfirmed TrainingEventRecipient[] @relation("TrainingEventConfirmer")
   supervisedRotations    Rotation[]               @relation("RotationSupervisor")
   settingsUpdated        Setting[]
   filesUploaded          StoredFile[]
@@ -1039,6 +1043,7 @@ model Rotation {
   @@index([trainerProfileId])
   @@index([startDate, endDate])
   @@map("rotations")
+  trainingEvents         TrainingEvent[]
 }
 
 model Shift {
@@ -1233,6 +1238,7 @@ model StoredFile {
   uploadedBy      UserAccount  @relation(fields: [uploadedById], references: [id])
 
   @@map("stored_files")
+  trainingEvents  TrainingEvent[]
 }
 
 model IntegrationConfig {
@@ -1946,6 +1952,7 @@ model TrainingSchedule {
 
   @@index([organizationId, status])
   @@map("training_schedules")
+  trainingEvents TrainingEvent[]
 }
 
 /// مشاركو الجدول — ربط الجدول بمتدرب واحد أو مجموعة متدربين
@@ -2029,4 +2036,89 @@ model ScheduleRevision {
   publishedBy   UserAccount?     @relation(fields: [publishedById], references: [id])
 
   @@map("schedule_revisions")
+}
+
+/// فعالية تدريبية تشغيلية — طبقة موحّدة للنداءات والدورات والمحاضرات
+/// والاجتماعات والمهام والإعلانات. تحل محل إنشاء نموذج لكل نوع.
+///
+/// ليست إسناداً ولا توزيعاً: الفعالية نشاط تشغيلي يجري *بعد* أن يحدّد
+/// Assignment/Rotation من يتبع من. لا يجوز لأي فعالية أن تغيّر إسناداً أو
+/// روتيشن أو تبعية مستشفى — العلاقات تُقرأ منها ولا تُكتب فيها.
+///
+/// TrainerCall يبقى كما هو (مدرب ← متدربوه) ولا تستبدله هذه الطبقة.
+model TrainingEvent {
+  id             String                   @id @default(uuid()) @db.Uuid
+  /// الجهة المالكة للفعالية — تُشتق من جلسة المنشئ، لا من الطلب.
+  organizationId String                   @map("organization_id") @db.Uuid
+  createdById    String                   @map("created_by") @db.Uuid
+  /// urgent_call | training_course | lecture | training_session | video |
+  /// meeting | task | announcement — نص وفق اصطلاح بقية المخطط لا enum.
+  eventType      String                   @map("event_type") @db.VarChar(30)
+  title          String                   @db.VarChar(200)
+  description    String?
+  priority       String                   @default("normal") @db.VarChar(20)
+  /// information_only | acknowledge | accept_decline | attendance | arrival |
+  /// completion — يحدّد الإجراءات المتاحة للمستلم.
+  responseMode   String                   @map("response_mode") @db.VarChar(30)
+  /// تعريف الجمهور كما اختاره المنشئ. يُحفظ للتدقيق فقط؛ المستلمون
+  /// المحسوبون في TrainingEventRecipient هم المرجع الفعلي.
+  audienceType   String                   @map("audience_type") @db.VarChar(30)
+  /// روابط اختيارية بالسياق التدريبي. اختيارية بالضرورة: دورة يرسلها مدير
+  /// التجمع لكل المدربين لا روتيشن لها ولا جدول. الفعالية تقرأ هذه العلاقات
+  /// ولا تكتب فيها — لا تغيّر إسناداً ولا روتيشن ولا جدولاً.
+  rotationId     String?                  @map("rotation_id") @db.Uuid
+  scheduleId     String?                  @map("schedule_id") @db.Uuid
+  /// مورد الفعالية (فيديو تدريبي مثلاً) من مخزن الملفات القائم — لا نظام جديد.
+  resourceFileId String?                  @map("resource_file_id") @db.Uuid
+  startAt        DateTime?                @map("start_at") @db.Timestamptz(6)
+  endAt          DateTime?                @map("end_at") @db.Timestamptz(6)
+  /// draft | sent | completed | cancelled
+  status         String                   @default("draft") @db.VarChar(20)
+  sentAt         DateTime?                @map("sent_at") @db.Timestamptz(6)
+  completedAt    DateTime?                @map("completed_at") @db.Timestamptz(6)
+  createdAt      DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  organization   Organization             @relation(fields: [organizationId], references: [id])
+  createdBy      UserAccount              @relation("TrainingEventCreator", fields: [createdById], references: [id])
+  rotation       Rotation?                @relation(fields: [rotationId], references: [id])
+  schedule       TrainingSchedule?        @relation(fields: [scheduleId], references: [id])
+  resourceFile   StoredFile?              @relation(fields: [resourceFileId], references: [id])
+  recipients     TrainingEventRecipient[]
+
+  @@index([organizationId, status])
+  @@index([createdById])
+  @@map("training_events")
+}
+
+/// مستلم واحد لفعالية. الصف هو الإذن: لا يستطيع حساب التفاعل مع فعالية
+/// ليس له صف فيها، فلا حاجة لإعادة فحص الجمهور عند كل استجابة.
+model TrainingEventRecipient {
+  id                 String          @id @default(uuid()) @db.Uuid
+  eventId            String          @map("event_id") @db.Uuid
+  recipientAccountId String          @map("recipient_account_id") @db.Uuid
+  /// أي الملفين كان مصدر الاستحقاق وقت الحل — للتدقيق.
+  trainerProfileId   String?         @map("trainer_profile_id") @db.Uuid
+  traineeProfileId   String?         @map("trainee_profile_id") @db.Uuid
+  /// pending | acknowledged | accepted | declined | attending | arrived |
+  /// confirmed | completed
+  status             String          @default("pending") @db.VarChar(20)
+  acknowledgedAt     DateTime?       @map("acknowledged_at") @db.Timestamptz(6)
+  acceptedAt         DateTime?       @map("accepted_at") @db.Timestamptz(6)
+  declinedAt         DateTime?       @map("declined_at") @db.Timestamptz(6)
+  attendedAt         DateTime?       @map("attended_at") @db.Timestamptz(6)
+  /// إقرار ذاتي من المستلم — يقابله confirmedAt الذي يكتبه المخوَّل وحده.
+  arrivedAt          DateTime?       @map("arrived_at") @db.Timestamptz(6)
+  confirmedAt        DateTime?       @map("confirmed_at") @db.Timestamptz(6)
+  confirmedById      String?         @map("confirmed_by") @db.Uuid
+  completedAt        DateTime?       @map("completed_at") @db.Timestamptz(6)
+  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  event              TrainingEvent   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  recipientAccount   UserAccount     @relation("TrainingEventRecipientAccount", fields: [recipientAccountId], references: [id])
+  confirmedBy        UserAccount?    @relation("TrainingEventConfirmer", fields: [confirmedById], references: [id])
+
+  /// يمنع تكرار المستلم على مستوى قاعدة البيانات، فإعادة إرسال الطلب لا
+  /// تنتج صفوفاً ولا إشعارات مكررة حتى لو أخطأ الكود.
+  @@unique([eventId, recipientAccountId])
+  @@index([recipientAccountId, status])
+  @@map("training_event_recipients")
 }

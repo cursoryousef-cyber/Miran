@@ -114,7 +114,15 @@ export class TrainingRequestsController {
   }
 
   @Get('hospital-review')
-  @RequireRoles(...HOSPITAL_ROLES, ...CLUSTER_ROLES)
+  // Capability, not a role list. The role enumeration here had to be widened by
+  // hand every time a legitimate caller appeared, and it could not express "may
+  // see training requests" — which is exactly what this endpoint returns.
+  // TRAINING_REQUEST_VIEW is held by the cluster roles, the platform roles and
+  // hospital_training_admin, and by no one else: trainer, trainee,
+  // academic_supervisor and hospital_administrator do not hold it, so they stay
+  // out without the endpoint naming them. The hospital boundary below is
+  // enforced independently of whoever passed this check.
+  @RequireCapability(CAPABILITIES.TRAINING_REQUEST_VIEW)
   @ApiOperation({ summary: 'قائمة المتدربين الموزَّعين على المستشفى لمراجعتها' })
   async findForHospitalReview(
     @Scope() scope: ScopeContext,
@@ -329,8 +337,13 @@ export class TrainingRequestsController {
     return this.traineesService.findReturnedForUniversity(orgId);
   }
 
+  // Bound to the row's own request. The hospital-review and allocation routes
+  // below already carry this; the cluster-stage routes did not, so a manager of
+  // any cluster could act on a candidate row belonging to another cluster —
+  // the role check only established that the caller manages *a* cluster.
   @Patch('trainees/:rowId')
   @RequireRoles(...CLUSTER_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'تعديل بيانات صف متدرب مع توثيق سجل الإصدارات' })
   async editTrainee(
     @Param('rowId') rowId: string,
@@ -342,6 +355,7 @@ export class TrainingRequestsController {
 
   @Post('trainees/:rowId/merge')
   @RequireRoles(...CLUSTER_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'دمج صفوف مكررة في الصف الأساسي' })
   async mergeTrainees(
     @Param('rowId') rowId: string,
@@ -353,6 +367,7 @@ export class TrainingRequestsController {
 
   @Post('trainees/:rowId/split')
   @RequireRoles(...CLUSTER_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'تقسيم صف متدرب إلى عدة صفوف' })
   async splitTrainee(
     @Param('rowId') rowId: string,
@@ -364,6 +379,7 @@ export class TrainingRequestsController {
 
   @Post('trainees/:rowId/approve')
   @RequireRoles(...CLUSTER_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'اعتماد المتدرب وترقيته إلى ملف تدريبي حقيقي' })
   async approveTrainee(@Param('rowId') rowId: string, @CurrentUser() user: IAuthenticatedUser) {
     return this.traineesService.approveTrainee(rowId, user);
@@ -371,6 +387,7 @@ export class TrainingRequestsController {
 
   @Post('trainees/:rowId/reject')
   @RequireRoles(...CLUSTER_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'رفض المتدرب نهائياً' })
   async rejectTrainee(
     @Param('rowId') rowId: string,
@@ -382,6 +399,7 @@ export class TrainingRequestsController {
 
   @Post('trainees/:rowId/return')
   @RequireRoles(...CLUSTER_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'إعادة المتدرب للجامعة مع السبب والمستندات المطلوبة وآخر موعد' })
   async returnTrainee(
     @Param('rowId') rowId: string,
@@ -393,6 +411,7 @@ export class TrainingRequestsController {
 
   @Post('trainees/:rowId/resubmit')
   @RequireRoles(...UNIVERSITY_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
   @ApiOperation({ summary: 'إعادة إرسال المتدرب بعد التصحيح من الجامعة' })
   async resubmitTrainee(
     @Param('rowId') rowId: string,
@@ -429,6 +448,21 @@ export class TrainingRequestsController {
   @ApiOperation({ summary: 'بدء مراجعة المستشفى للمتدرب (allocated → hospital_review)' })
   async startHospitalReview(@Param('rowId') rowId: string, @CurrentUser() user: IAuthenticatedUser) {
     return this.traineesService.startHospitalReview(rowId, user);
+  }
+
+  // Acceptance is the gate the whole hospital stage turns on: it is what makes
+  // department/trainer assignment legal, and it is refused before it as a
+  // business rule in TraineeAllocationService, not merely hidden in the UI.
+  @Post('trainees/:rowId/hospital-review/accept')
+  @RequireRoles(...HOSPITAL_ROLES)
+  @ScopedResource('trainingRequestTrainee', 'rowId')
+  @ApiOperation({ summary: 'قبول المتدرب من قِبَل المستشفى (hospital_review → hospital_accepted)' })
+  async hospitalAcceptIntern(
+    @Param('rowId') rowId: string,
+    @Body() body: { notes?: string },
+    @CurrentUser() user: IAuthenticatedUser,
+  ) {
+    return this.traineesService.hospitalAcceptIntern(rowId, user, body?.notes);
   }
 
   @Post('trainees/:rowId/hospital-review/reject')

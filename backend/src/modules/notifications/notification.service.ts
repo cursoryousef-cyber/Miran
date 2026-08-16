@@ -307,6 +307,14 @@ export class NotificationService {
               where: { id: { in: idList } }, select: { id: true },
             });
             break;
+          // Recipient rows cascade when an event is deleted, but the
+          // notifications do not — without this a deleted event would leave its
+          // notifications counted in the unread badge with nothing behind them.
+          case 'TrainingEvent':
+            found = await this.prisma.trainingEvent.findMany({
+              where: { id: { in: idList } }, select: { id: true },
+            });
+            break;
           default:
             // Unchecked reference type — treat every id as live.
             liveByType.set(refType, ids);

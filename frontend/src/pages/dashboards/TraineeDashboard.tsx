@@ -18,8 +18,18 @@ export const TraineeDashboard: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  // `/trainees/me` and `/timeline/me` answer for the caller's own trainee
+  // profile and exist only for a trainee session. Dashboard.tsx resolves an
+  // unrecognised or not-yet-loaded role to this console (the narrowest one), so
+  // without this gate every such session fired both endpoints and collected two
+  // unexplained 403s in the console. The endpoints are right to refuse — the
+  // caller is what was wrong, so the query is stopped at the caller rather than
+  // the guard being widened to admit it.
+  const isTrainee = !!user?.roles?.includes('trainee');
+
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ['tr-profile-me'],
+    enabled: isTrainee,
     queryFn: async () => {
       const res = await apiClient.get('/trainees/me').catch(() => ({ data: null }));
       // This endpoint answers with the profile itself, not a { data } envelope;
@@ -31,6 +41,7 @@ export const TraineeDashboard: React.FC = () => {
 
   const { data: logbook, isLoading: logLoading } = useQuery({
     queryKey: ['tr-logbook-me'],
+    enabled: isTrainee,
     queryFn: async () => {
       const res = await apiClient.get('/logbook/my-logs').catch(() => ({ data: { data: [] } }));
       return res.data?.data ?? [];
@@ -39,6 +50,7 @@ export const TraineeDashboard: React.FC = () => {
 
   const { data: timeline } = useQuery({
     queryKey: ['tr-timeline-me'],
+    enabled: isTrainee,
     queryFn: async () => {
       // The trainee's own timeline, not the org-wide dashboard feed: that feed
       // is scoped by hospital/university/cluster and refuses a trainee (403),

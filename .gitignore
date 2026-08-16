@@ -55,3 +55,4 @@ backend/appr_row.json
 backend/assign_dept.json
 backend/submit_batch.json
 backend/row_id.txt
+.e2e-tmp/
