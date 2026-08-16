@@ -1181,6 +1181,7 @@ export class TrainingRequestTraineesService {
     'hospital_review',
     'on_hold',
     'hospital_returned_to_cluster',
+    'hospital_accepted',
     'accepted',
     'active',
   ] as const;

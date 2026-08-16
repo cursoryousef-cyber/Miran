@@ -106,3 +106,45 @@ describe('hospital rejection requires a reason', () => {
     expect(errors).toHaveLength(0);
   });
 });
+
+describe('hospital review visibility — hospital_accepted status inclusion regression test', () => {
+  it('includes hospital_accepted status in the hospital-review query list', async () => {
+    const { TrainingRequestTraineesService } = await import('./training-request-trainees.service');
+    const mockPrisma = {
+      organization: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      trainingRequestTrainee: {
+        findMany: jest.fn().mockImplementation(({ where }) => {
+          const statuses: string[] = where.status.in;
+          expect(statuses).toContain(TRAINEE_ROW_STATUS.HOSPITAL_ACCEPTED);
+          return Promise.resolve([
+            {
+              id: 'row-1',
+              status: TRAINEE_ROW_STATUS.HOSPITAL_ACCEPTED,
+              assignedDepartmentId: 'dept-1',
+              assignedTrainerProfileId: 'trainer-1',
+              assignedDepartment: { id: 'dept-1', nameAr: 'قسم الباطنة العامة', capacity: 10 },
+              assignedTrainer: { id: 'trainer-1', person: { nameAr: 'د. خالد السريحي' } },
+            },
+          ]);
+        }),
+      },
+    } as any;
+
+    const service = new TrainingRequestTraineesService(
+      mockPrisma,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    const result = await service.findForHospitalReview('hosp-1');
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].status).toBe(TRAINEE_ROW_STATUS.HOSPITAL_ACCEPTED);
+    expect(result.data[0].assignedDepartment?.nameAr).toBe('قسم الباطنة العامة');
+    expect(result.data[0].assignedTrainer?.person?.nameAr).toBe('د. خالد السريحي');
+  });
+});
