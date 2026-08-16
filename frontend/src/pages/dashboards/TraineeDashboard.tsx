@@ -83,6 +83,73 @@ export const TraineeDashboard: React.FC = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tr-my-tasks'] }),
   });
 
+  // ── Attendance ───────────────────────────────────────────────────────────
+  // GET /operations/attendance answers with this trainee's own rows only (the
+  // controller resolves the profile from the session and refuses a foreign
+  // traineeId), so today's record is found here rather than requested by id.
+  const { data: attendance, isLoading: attendanceLoading } = useQuery({
+    queryKey: ['tr-my-attendance'],
+    enabled: isTrainee,
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/attendance').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const isSameDay = (value: any) => {
+    if (!value) return false;
+    const d = new Date(value);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear()
+      && d.getMonth() === now.getMonth()
+      && d.getDate() === now.getDate();
+  };
+  const todayAttendance = (attendance ?? []).find((a: any) => isSameDay(a.date));
+  const [attendanceError, setAttendanceError] = React.useState<string | null>(null);
+
+  const refreshAttendance = () => {
+    queryClient.invalidateQueries({ queryKey: ['tr-my-attendance'] });
+    queryClient.invalidateQueries({ queryKey: ['tr-timeline-me'] });
+  };
+
+  // The check-in endpoint is geofenced against the hospital's coordinates, so
+  // it needs the browser's position — there is no server-side fallback and
+  // inventing one would bypass the geofence.
+  const checkInMutation = useMutation({
+    mutationFn: async () => {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error('المتصفح لا يدعم تحديد الموقع — لا يمكن تسجيل الحضور'));
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(resolve, () =>
+          reject(new Error('تعذّر تحديد موقعك. فعّل إذن الموقع ثم أعد المحاولة')),
+        { enableHighAccuracy: true, timeout: 15000 });
+      });
+      const res = await apiClient.post('/operations/attendance/gps', {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      });
+      return res.data;
+    },
+    onSuccess: () => { setAttendanceError(null); refreshAttendance(); },
+    // Surfaced verbatim: the backend refuses being outside the geofence, having
+    // no active rotation, or a second check-in, each with its own message.
+    onError: (err: any) =>
+      setAttendanceError(err?.response?.data?.message || err?.message || 'تعذّر تسجيل الحضور'),
+  });
+
+  const checkOutMutation = useMutation({
+    mutationFn: async () => {
+      if (!todayAttendance?.id) throw new Error('لا يوجد تسجيل حضور اليوم');
+      const res = await apiClient.patch(`/operations/attendance/${todayAttendance.id}/check-out`);
+      return res.data;
+    },
+    onSuccess: () => { setAttendanceError(null); refreshAttendance(); },
+    onError: (err: any) =>
+      setAttendanceError(err?.response?.data?.message || err?.message || 'تعذّر تسجيل الانصراف'),
+  });
+
   // Read-only clinical record for the trainee: their competency progress and the
   // evaluations their trainer has finalised. No editing controls are rendered.
   const { data: competencies } = useQuery({
@@ -176,11 +243,15 @@ export const TraineeDashboard: React.FC = () => {
 
       {/* 4. PRIMARY DATA (Current Active Rotation & Today's Schedule) */}
       <SplitGrid>
+        {/* No "full schedule" link: there is no schedule route for a trainee.
+            /schedules is an API path with no page behind it — App.tsx defines no
+            such route, so navigating there fell through the catch-all back to
+            this dashboard. The rotation summary below is the schedule view a
+            trainee actually has; a link is only worth adding once a page exists. */}
         <Panel
           title="الروتيشن السريري الحالي (Current Rotation)"
           icon={Stethoscope}
           tone="success"
-          action={<PanelLink label="الجدول الكامل" onClick={() => navigate('/profile')} />}
         >
           {profileLoading ? (
             <PanelSkeleton rows={4} />
@@ -296,11 +367,69 @@ export const TraineeDashboard: React.FC = () => {
         </Panel>
       </SplitGrid>
 
-      {/* 5. QUICK ACTIONS */}
+      <Panel title="الحضور والانصراف اليومي" icon={Clock} tone="success">
+        {attendanceLoading ? (
+          <PanelSkeleton rows={2} />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space.md, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: colour.text }}>
+                  {todayAttendance?.checkOut
+                    ? 'اكتمل تسجيل اليوم'
+                    : todayAttendance?.checkIn
+                      ? 'أنت مسجَّل حضوراً الآن'
+                      : 'لم تسجّل حضورك اليوم بعد'}
+                </div>
+                <div style={{ fontSize: 12, color: colour.muted }}>
+                  {todayAttendance?.checkIn
+                    ? `الحضور: ${new Date(todayAttendance.checkIn).toLocaleTimeString('ar-SA')}`
+                    : 'يتم التحقق من موقعك عند التسجيل'}
+                  {todayAttendance?.checkOut
+                    ? ` · الانصراف: ${new Date(todayAttendance.checkOut).toLocaleTimeString('ar-SA')}`
+                    : ''}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+                {todayAttendance?.status && (
+                  <Badge
+                    tone={todayAttendance.checkOut ? 'neutral' : 'success'}
+                    label={todayAttendance.checkOut ? 'منتهٍ' : 'حاضر'}
+                  />
+                )}
+                <Button
+                  variant="contained"
+                  size="small"
+                  disabled={!!todayAttendance?.checkIn || checkInMutation.isPending}
+                  onClick={() => checkInMutation.mutate()}
+                  startIcon={checkInMutation.isPending ? <CircularProgress size={14} color="inherit" /> : <CalendarCheck size={16} />}
+                >
+                  تسجيل الحضور
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  disabled={!todayAttendance?.checkIn || !!todayAttendance?.checkOut || checkOutMutation.isPending}
+                  onClick={() => checkOutMutation.mutate()}
+                  startIcon={checkOutMutation.isPending ? <CircularProgress size={14} color="inherit" /> : <Clock size={16} />}
+                >
+                  تسجيل الانصراف
+                </Button>
+              </div>
+            </div>
+            {attendanceError && (
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px' }}>
+                {attendanceError}
+              </div>
+            )}
+          </div>
+        )}
+      </Panel>
+
       <Panel title="الإجراءات السريعة والخدمات اليومية" icon={Zap} tone="primary">
         <QuickActions
           items={[
-            { label: 'تسجيل حالة سريرية Logbook', icon: BookOpen, onClick: () => navigate('/logbook'), tone: 'primary', hint: 'إضافة مهارة سريرية جديدة' },
+            { label: 'سجل التدريب والحالات Logbook', icon: BookOpen, onClick: () => navigate('/logbook'), tone: 'primary', hint: 'عرض المهارات والحالات السريرية' },
             { label: 'الملف الشخصي والبطاقة', icon: CreditCard, onClick: () => navigate('/profile'), tone: 'info', hint: 'عرض البطاقة الرقمية' },
             { label: 'نداءات المدرب M-CALL', icon: PhoneCall, onClick: () => navigate('/calls'), tone: 'danger', hint: 'الرد على نداءات مدربك' },
           ]}

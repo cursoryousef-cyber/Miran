@@ -373,14 +373,16 @@ export const LogbookPage: React.FC = () => {
           >
             تصدير تقرير Logbook (PDF / Excel)
           </Button>
-          <Button
-            variant="contained"
-            startIcon={<Plus size={18} />}
-            onClick={() => setOpenModal(true)}
-            style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', fontWeight: 700 }}
-          >
-            تسجيل إجراء / حالة جديدة
-          </Button>
+          {!user?.roles?.includes('trainee') && (
+            <Button
+              variant="contained"
+              startIcon={<Plus size={18} />}
+              onClick={() => setOpenModal(true)}
+              style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', fontWeight: 700 }}
+            >
+              تسجيل إجراء / حالة جديدة
+            </Button>
+          )}
         </>}
         stats={[
           { label: 'إجمالي الحالات السريرية', value: statsData?.totalCases ?? 0, icon: BookOpen, tone: 'primary' },

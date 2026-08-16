@@ -161,6 +161,33 @@ export class OrgMembersController {
       }
     }
 
+    // Password rules live here, once, for every caller of this endpoint —
+    // TrainerCards, OrgMembers and any direct API client alike. Checked in the
+    // handler rather than a DTO because the body is untyped, so the global
+    // ValidationPipe never inspects it. 8 characters matches the rule the rest
+    // of the platform already enforces on every other password-setting path
+    // (activation, change-password, user-account create).
+    const createsTrainer =
+      dto.roleCode === 'trainer' ||
+      (Array.isArray(dto.roleCodes) && dto.roleCodes.includes('trainer'));
+
+    // A trainer must be able to log in. With no password the account falls back
+    // to the unguessable random secret below, and the platform has no
+    // self-service reset — so it would be created active but permanently
+    // unreachable. Required for trainers only; every other role keeps the
+    // existing optional behaviour.
+    if (createsTrainer && !dto.password) {
+      throw new BadRequestException(
+        'كلمة المرور الابتدائية مطلوبة لحساب المدرب — بدونها يتعذّر عليه تسجيل الدخول',
+      );
+    }
+
+    if (dto.password !== undefined && dto.password !== null && dto.password !== '') {
+      if (typeof dto.password !== 'string' || dto.password.trim().length < 8) {
+        throw new BadRequestException('كلمة المرور يجب أن تكون 8 أحرف على الأقل');
+      }
+    }
+
     // No shared fallback password. This previously defaulted to a fixed string
     // that was also published as the Swagger example for POST /auth/login, so
     // every member created without an explicit password shared one publicly
@@ -291,11 +318,70 @@ export class OrgMembersController {
     if (dto.roleCode) {
       const role = await this.prisma.role.findUnique({ where: { code: dto.roleCode } });
       if (role) {
+        // Granting the trainer role here is a second door onto the same end
+        // state POST guards: a member created for a non-trainer role holds the
+        // unguessable random password, so promoting them without setting one
+        // produced a trainer who could never sign in. Only a genuine promotion
+        // is gated — the edit dialog resends the member's current role on every
+        // save, so requiring a password unconditionally would break renaming an
+        // existing trainer.
+        if (role.code === 'trainer') {
+          const alreadyTrainer = await this.prisma.userRole.findFirst({
+            where: { userAccountId: accountId, roleId: role.id, organizationId: user.organizationId },
+          });
+
+          if (!alreadyTrainer) {
+            if (!dto.password) {
+              throw new BadRequestException(
+                'كلمة المرور الابتدائية مطلوبة عند ترقية العضو إلى مدرب — بدونها يتعذّر عليه تسجيل الدخول',
+              );
+            }
+            if (typeof dto.password !== 'string' || dto.password.trim().length < 8) {
+              throw new BadRequestException('كلمة المرور يجب أن تكون 8 أحرف على الأقل');
+            }
+            await this.prisma.userAccount.update({
+              where: { id: accountId },
+              data: { passwordHash: await bcrypt.hash(dto.password, 10) },
+            });
+          }
+        }
+
         await this.prisma.userRole.upsert({
           where: { userAccountId_roleId_organizationId: { userAccountId: accountId, roleId: role.id, organizationId: user.organizationId } },
           create: { userAccountId: accountId, roleId: role.id, organizationId: user.organizationId, assignedById: user.accountId },
           update: {},
         });
+
+        // Same profile guarantee POST makes: a trainer without a TrainerProfile
+        // has no hospital record, so cannot be allocated to, cannot hold
+        // rotations and does not appear in capacity. Promotion reached the role
+        // grant above but stopped short of the profile, producing exactly that.
+        // Keyed on personId like POST, so re-saving an existing trainer finds
+        // the profile and adds nothing.
+        if (role.code === 'trainer') {
+          const existingProfile = await this.prisma.trainerProfile.findFirst({
+            where: { personId: account.personId },
+          });
+          if (!existingProfile) {
+            await this.prisma.trainerProfile.create({
+              data: {
+                personId: account.personId,
+                organizationId: user.organizationId,
+                departmentId: dto.departmentId || null,
+                titleAr: dto.titleAr || null,
+                maxTrainees: dto.maxTrainees ?? 5,
+              },
+            });
+          } else if (existingProfile.organizationId !== user.organizationId) {
+            await this.prisma.trainerProfile.update({
+              where: { id: existingProfile.id },
+              data: {
+                organizationId: user.organizationId,
+                departmentId: dto.departmentId ?? existingProfile.departmentId,
+              },
+            });
+          }
+        }
       }
     }
 

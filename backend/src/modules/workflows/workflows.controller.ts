@@ -18,7 +18,7 @@ import {
 
 @ApiTags('Workflows (محرك سير العمل القابل للتعديل - Workflow Engine)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, CapabilityGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, CapabilityGuard)
 @Controller('workflows')
 export class WorkflowsController {
   constructor(private workflowsService: WorkflowsService) {}

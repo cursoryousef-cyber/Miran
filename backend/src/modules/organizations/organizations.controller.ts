@@ -23,7 +23,7 @@ import {
 
 @ApiTags('Organizations (إدارة الجهات والشجرة التنظيمية)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, CapabilityGuard, ScopeGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, CapabilityGuard, ScopeGuard)
 @Controller('organizations')
 export class OrganizationsController {
   constructor(
@@ -38,7 +38,14 @@ export class OrganizationsController {
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'typeId', required: false, type: String })
   @ApiQuery({ name: 'parentId', required: false, type: String })
-  @RequirePermissions('view_organizations')
+  // Reading the directory is gated on ORG_VIEW, like hospitals-cards,
+  // statistics and hospitals below it. The legacy 'view_organizations'
+  // permission was never granted to org_manager or academic_supervisor in the
+  // RBAC rows even though both hold ORG_VIEW, so once PermissionsGuard was
+  // actually registered this route started refusing roles the capability model
+  // says may read it. Authoring stays on manage_organizations. Neither trainer
+  // nor trainee holds ORG_VIEW, so both remain refused.
+  @RequireCapability(CAPABILITIES.ORG_VIEW)
   async findAll(
     @Query('page') page = 1,
     @Query('limit') limit = 20,
@@ -94,9 +101,12 @@ export class OrganizationsController {
   @Get('statistics')
   @RequireCapability(CAPABILITIES.ORG_VIEW, CAPABILITIES.REPORT_VIEW)
   @ApiOperation({ summary: 'مؤشرات الجهات الموحّدة — مصدر واحد للوحات وصفحة الجهات' })
-  @ApiQuery({ name: 'organizationId', required: false, type: String })
-  async getStatistics(@Query('organizationId') organizationId?: string) {
-    return this.organizationsService.getStatistics(organizationId);
+  // Scope comes from the caller's own session, never from the client — the
+  // organizationId query param this used to accept let any authenticated role
+  // read platform-wide totals just by omitting it. Same visibleOrgIds source
+  // getTree right below uses.
+  async getStatistics(@Scope() scope: ScopeContext) {
+    return this.organizationsService.getStatistics(scope.visibleOrgIds);
   }
 
   @Get('hospitals')
@@ -111,14 +121,14 @@ export class OrganizationsController {
 
   @Get('tree')
   @ApiOperation({ summary: 'الهيكل التنظيمي الكامل كشجرة ديناميكية' })
-  @RequirePermissions('view_organizations')
+  @RequireCapability(CAPABILITIES.ORG_VIEW)
   async getTree(@Scope() scope?: ScopeContext) {
     return this.organizationsService.getTree(scope?.visibleOrgIds ?? null);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'تفاصيل جهة محددة والتراخيص والميزات والجهات التابعة' })
-  @RequirePermissions('view_organizations')
+  @RequireCapability(CAPABILITIES.ORG_VIEW)
   @ScopedResource('organization', 'id')
   async findOne(@Param('id') id: string) {
     return this.organizationsService.findOne(id);

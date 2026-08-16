@@ -69,6 +69,43 @@ describe('ReportsController role gate — REPORT_READ_ROLES', () => {
     expect(canActivate([...REPORT_READ_ROLES], ['cluster_manager'])).toBe(true);
   });
 
+  // ── Regression: App.tsx now includes CLUSTER in /reports allowedRoles ──
+  // The backend was already correct; this test locks both layers to the same
+  // expectation so a future removal in either place fails loudly.
+
+  it('cluster_manager is allowed — backend and App.tsx are consistent', () => {
+    // Backend gate
+    expect(REPORT_READ_ROLES).toContain('cluster_manager');
+    expect(canActivate([...REPORT_READ_ROLES], ['cluster_manager'])).toBe(true);
+    // Frontend CLUSTER constant covers cluster_administrator, cluster_manager,
+    // training_director — all three must be present in the backend role list.
+    const FRONTEND_CLUSTER = ['cluster_administrator', 'cluster_manager', 'training_director'];
+    for (const role of FRONTEND_CLUSTER) {
+      expect(REPORT_READ_ROLES).toContain(role);
+      expect(canActivate([...REPORT_READ_ROLES], [role])).toBe(true);
+    }
+  });
+
+  it('cluster_administrator is allowed', () => {
+    expect(REPORT_READ_ROLES).toContain('cluster_administrator');
+    expect(canActivate([...REPORT_READ_ROLES], ['cluster_administrator'])).toBe(true);
+  });
+
+  it('training_director is allowed', () => {
+    expect(REPORT_READ_ROLES).toContain('training_director');
+    expect(canActivate([...REPORT_READ_ROLES], ['training_director'])).toBe(true);
+  });
+
+  it('academic_supervisor is allowed and unaffected', () => {
+    expect(REPORT_READ_ROLES).toContain('academic_supervisor');
+    expect(canActivate([...REPORT_READ_ROLES], ['academic_supervisor'])).toBe(true);
+  });
+
+  it('platform_owner is allowed and unaffected', () => {
+    expect(REPORT_READ_ROLES).toContain('platform_owner');
+    expect(canActivate([...REPORT_READ_ROLES], ['platform_owner'])).toBe(true);
+  });
+
   it('rejects when no user is attached to the request', () => {
     const reflector = { getAllAndOverride: jest.fn().mockReturnValue(['hospital_administrator']) } as unknown as Reflector;
     const guard = new RolesGuard(reflector);

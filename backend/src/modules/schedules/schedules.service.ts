@@ -80,6 +80,14 @@ export class SchedulesService {
         where: { person: { userAccounts: { some: { id: user.accountId } } } },
       });
       if (!traineeProfile) return { data: [] };
+      // A trainee may only ever ask about themselves. The `traineeId` filter
+      // applied further down replaces `participants` wholesale, so without this
+      // a trainee passing someone else's id had their own scoping overwritten
+      // and read that trainee's published schedules. Same rule the attendance
+      // endpoint already enforces for the same query parameter.
+      if (query?.traineeId && query.traineeId !== traineeProfile.id) {
+        throw new ForbiddenException('لا يمكنك الاطلاع على جدول متدرب آخر');
+      }
       whereClause.participants = { some: { traineeProfileId: traineeProfile.id } };
       whereClause.status = 'published'; // Trainees only see published schedules
     } else if (isTrainer) {

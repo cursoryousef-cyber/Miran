@@ -317,7 +317,20 @@ export const TrainerDashboard: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={() => navigate('/logbook')}
+            // Assignment requests are accepted from the panel further down this
+            // same page — /operations/trainer/assignment-requests/:id/accept is
+            // wired to its buttons. The trainer has no route into /hospital at
+            // all (App.tsx gates it to hospital_training_admin), so sending them
+            // there bounced them back to the dashboard with nothing done.
+            onClick={() => {
+              if (assignmentRequests?.length) {
+                document
+                  .getElementById('trainer-assignment-requests')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              } else {
+                navigate('/logbook');
+              }
+            }}
             style={{
               padding: '8px 16px',
               borderRadius: '8px',
@@ -387,6 +400,7 @@ export const TrainerDashboard: React.FC = () => {
       </Panel>
 
       {/* 6. SECONDARY DATA (Pending Assignment Requests & Logbook Activity) */}
+      <div id="trainer-assignment-requests">
       <Panel title="طلبات إسناد المتدربين الجدد" icon={UserPlus} tone="warning">
         {assignmentRequests?.length ? (
           assignmentRequests.map((r: any) => (
@@ -427,6 +441,7 @@ export const TrainerDashboard: React.FC = () => {
           <EmptyState icon={UserPlus} title="لا توجد طلبات إسناد بانتظار قرارك" hint="تظهر الطلبات الجديدة فور توجيهها من إدارة المستشفى." />
         )}
       </Panel>
+      </div>
 
       <PanelGrid>
         <Panel title="آخر السجلات السريرية المرفوعة" icon={BookOpen} tone="neutral">

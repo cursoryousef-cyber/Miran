@@ -8,7 +8,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 @ApiTags('Feature Flags (إدارة ميزات الوحدات للجهات)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('feature-flags')
 export class FeatureFlagsController {
   constructor(private flagsService: FeatureFlagsService) {}

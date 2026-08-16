@@ -2,7 +2,7 @@ import {
   Award, GraduationCap, LayoutDashboard, Network, Stethoscope, UserCog, Users,
   Building2, ClipboardList, FolderGit2, FileSpreadsheet, BookOpen, AlertTriangle,
   Shield, Key, Activity, GitMerge, Settings, FileSignature, BellRing, UsersRound,
-  Route, PhoneCall, Send, Inbox, CheckSquare, RotateCcw, Megaphone,
+  Route, PhoneCall, Send, Inbox, CheckSquare, RotateCcw, Megaphone, CalendarDays,
 } from 'lucide-react';
 
 /**
@@ -54,6 +54,7 @@ const HOSPITAL_ADMIN_NAV: NavSection[] = [
     items: [
       { name: 'أعضاء الجهة', path: '/org-members', icon: UsersRound },
       { name: 'البلاغات والحوادث', path: '/incidents', icon: AlertTriangle },
+      { name: 'التقارير', path: '/reports', icon: FileSpreadsheet, requires: ['report.view'] },
     ],
   },
 ];
@@ -195,6 +196,7 @@ const TRAINER_NAV: NavSection[] = [
       { name: 'فعاليات متدربيّ', path: '/training-events', icon: Megaphone, requires: ['training.operate'] },
       { name: 'الفعاليات الواردة', path: '/my-training-events', icon: Inbox },
       { name: 'متدربيّ', path: '/org-members', icon: UsersRound },
+      { name: 'جدولي والشفتات', path: '/schedules', icon: CalendarDays, requires: ['schedule.view'] },
       { name: 'سلسلة القبول', path: '/acceptance-chain', icon: CheckSquare },
       { name: 'النداءات والإشعارات', path: '/notifications', icon: BellRing },
     ],
@@ -215,6 +217,7 @@ const TRAINEE_NAV: NavSection[] = [
     items: [
       { name: 'لوحتي', path: '/', icon: Route },
       { name: 'النداءات والفعاليات', path: '/my-training-events', icon: Megaphone },
+      { name: 'جدولي والشفتات', path: '/schedules', icon: CalendarDays, requires: ['schedule.view'] },
       { name: 'السجل السريري', path: '/logbook', icon: BookOpen },
       { name: 'النداءات والإشعارات', path: '/notifications', icon: BellRing },
     ],

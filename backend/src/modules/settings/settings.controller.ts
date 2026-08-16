@@ -11,7 +11,7 @@ import {
 
 @ApiTags('Settings (مركز الإعدادات الديناميكية للمنصة والجهات - Configuration Service)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, CapabilityGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, CapabilityGuard)
 @Controller('settings')
 export class SettingsController {
   constructor(private settingsService: SettingsService) {}

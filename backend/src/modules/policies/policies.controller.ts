@@ -12,7 +12,7 @@ import {
 
 @ApiTags('Policies (محرك سياسات الوصول - Policy Engine ABAC)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, CapabilityGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, CapabilityGuard)
 @Controller('policies')
 export class PoliciesController {
   constructor(

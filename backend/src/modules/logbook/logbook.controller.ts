@@ -266,8 +266,12 @@ export class LogbookController {
     return { data: logs };
   }
 
+  // `trainee` is deliberately absent: a trainee does not author their own
+  // clinical log. `/logbook/cases` is an alias that calls straight into this
+  // method, so gating only that alias left this — the real endpoint — open to
+  // any trainee calling it directly, regardless of the hidden UI button.
   @Post('entries')
-  @RequireRoles('trainee', 'trainer', 'hospital_training_admin', 'cluster_administrator', 'cluster_manager', 'training_director', 'platform_owner', 'org_manager')
+  @RequireRoles('trainer', 'hospital_training_admin', 'cluster_administrator', 'cluster_manager', 'training_director', 'platform_owner', 'org_manager')
   @ApiOperation({ summary: 'تسجيل حالة سريرية أو إجراء طبي جديد' })
   async createLogEntry(
     @CurrentUser() user: IAuthenticatedUser,
@@ -421,7 +425,7 @@ export class LogbookController {
   }
 
   @Post('cases')
-  @RequireRoles('trainee', 'platform_owner', 'org_manager')
+  @RequireRoles('trainer', 'academic_supervisor', 'hospital_training_admin', 'org_manager', 'platform_owner')
   async createCaseAlias(@CurrentUser() user: IAuthenticatedUser, @Body() dto: any) {
     return this.createLogEntry(user, dto);
   }

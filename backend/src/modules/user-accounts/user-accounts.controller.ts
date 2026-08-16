@@ -19,7 +19,12 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 @ApiTags('User Accounts (إدارة حسابات الدخول وتعدد الجهات)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard)
+// PermissionsGuard was imported here but never registered, which made every
+// @RequirePermissions on this controller inert: any authenticated caller — a
+// trainee included — reached the whole account directory (passwords hashes,
+// refresh tokens and activation tokens included) and the role-assignment
+// route. Registering it is what makes those decorators mean anything.
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('user-accounts')
 export class UserAccountsController {
   constructor(private userAccountsService: UserAccountsService) {}

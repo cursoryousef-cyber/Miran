@@ -36,6 +36,7 @@ import { AcceptanceChain } from './pages/AcceptanceChain';
 import { Incidents } from './pages/Incidents';
 import { Graduation } from './pages/Graduation';
 import { Notifications } from './pages/Notifications';
+import { MySchedule } from './pages/MySchedule';
 
 // ─── Code-Split Major Pages via React.lazy ────────────────────────────────
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -165,7 +166,7 @@ export const App: React.FC = () => {
 
                   <Route path="acceptance-chain" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...PLATFORM]}><AcceptanceChain /></RoleRoute>} />
                   <Route path="incidents" element={<RoleRoute allowedRoles={[...HOSPITAL, ...HOSPITAL_ADMIN, ...TRAINER, ...CLUSTER, TRAINEE[0], ...PLATFORM]}><Incidents /></RoleRoute>} />
-                  <Route path="graduation" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, 'university_administrator', ...PLATFORM]}><Graduation /></RoleRoute>} />
+                  <Route path="graduation" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...ACADEMIC, 'university_administrator', ...PLATFORM]}><Graduation /></RoleRoute>} />
 
                   {/* Hospital + Trainer */}
                   {/* Training events: senders (cluster/hospital/trainer) and recipients. The
@@ -178,6 +179,12 @@ export const App: React.FC = () => {
 
 
                   {/* Trainer + Trainee */}
+                  {/* Read-only schedule. GET /schedules already narrows itself
+                      per role — a trainee to published schedules they take part
+                      in, a trainer to schedules holding their sessions — so one
+                      page serves both. Authoring stays in the hospital
+                      workspace's builder; nothing here writes. */}
+                  <Route path="schedules" element={<RoleRoute allowedRoles={[...TRAINER, ...TRAINEE]}><MySchedule /></RoleRoute>} />
                   <Route path="logbook" element={<RoleRoute allowedRoles={[...TRAINER, ...TRAINEE, ...HOSPITAL]}><LogbookPage /></RoleRoute>} />
                   <Route path="notifications" element={<RoleRoute allowedRoles={[...HOSPITAL, ...TRAINER, ...TRAINEE]}><Notifications /></RoleRoute>} />
 
@@ -193,7 +200,7 @@ export const App: React.FC = () => {
                       sidebar links here — the route was the only thing bouncing it
                       back to /. The page renders read-only without authoring
                       rights, so this grants reading and nothing more. */}
-                  <Route path="reports" element={<RoleRoute allowedRoles={[...ACADEMIC, ...HOSPITAL, ...PLATFORM]}><Reports /></RoleRoute>} />
+                  <Route path="reports" element={<RoleRoute allowedRoles={[...ACADEMIC, ...CLUSTER, ...HOSPITAL, ...HOSPITAL_ADMIN, ...PLATFORM]}><Reports /></RoleRoute>} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />

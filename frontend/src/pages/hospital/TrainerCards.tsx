@@ -46,6 +46,7 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
     nameAr: '',
     titleAr: '',
     departmentId: '',
+    password: '',
     maxTrainees: 5,
     isActive: true,
   });
@@ -169,7 +170,7 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
   });
 
   const createTrainerMutation = useMutation({
-    mutationFn: async (payload: { nationalId: string; nameAr: string; titleAr: string; departmentId: string; roleCode: string; email: string }) => {
+    mutationFn: async (payload: { nationalId: string; nameAr: string; titleAr: string; departmentId: string; password: string; roleCode: string; email: string }) => {
       const res = await apiClient.post('/org-members', payload);
       return res.data;
     },
@@ -177,7 +178,7 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
       queryClient.invalidateQueries({ queryKey: ['trainer-cards'] });
       queryClient.invalidateQueries({ queryKey: ['org-members'] });
       setOpenAddTrainerDialog(false);
-      setAddTrainerForm({ nationalId: '', nameAr: '', titleAr: '', departmentId: '', maxTrainees: 5, isActive: true });
+      setAddTrainerForm({ nationalId: '', nameAr: '', titleAr: '', departmentId: '', password: '', maxTrainees: 5, isActive: true });
       setTrainerFormError(null);
       setSuccessMsg('تمت إضافة المدرب بنجاح إلى كادر التدريب بالمستشفى');
     },
@@ -221,6 +222,7 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
     const nameAr = addTrainerForm.nameAr.trim();
     const titleAr = addTrainerForm.titleAr.trim();
     const departmentId = addTrainerForm.departmentId;
+    const password = addTrainerForm.password;
 
     if (!nationalId) {
       setTrainerFormError('الرقم الوظيفي مطلوب');
@@ -238,6 +240,13 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
       setTrainerFormError('يرجى اختيار القسم السريري');
       return;
     }
+    // Without a password the backend stores a random one nobody holds, and the
+    // platform has no self-service reset — the trainer account would be created
+    // but could never be logged into. Mirrors the backend's 8-character rule.
+    if (password.length < 8) {
+      setTrainerFormError('كلمة المرور الابتدائية يجب أن تكون 8 أحرف على الأقل');
+      return;
+    }
 
     const duplicate = (trainers ?? []).some(
       (t: any) => (t.nationalId && t.nationalId === nationalId) || (t.person?.nationalId && t.person?.nationalId === nationalId)
@@ -252,6 +261,7 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
       nameAr,
       titleAr,
       departmentId,
+      password,
       roleCode: 'trainer',
       email: `trainer.${nationalId}@miran.sa`,
     });
@@ -623,6 +633,19 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
                 <MenuItem key={d.id} value={d.id}>{d.nameAr}</MenuItem>
               ))}
             </TextField>
+
+            <TextField
+              label="كلمة المرور الابتدائية"
+              type="password"
+              placeholder="8 أحرف على الأقل"
+              helperText="تُسلَّم للمدرب ليدخل بها أول مرة، ويغيّرها من ملفه الشخصي."
+              size="small"
+              fullWidth
+              required
+              autoComplete="new-password"
+              value={addTrainerForm.password}
+              onChange={(e) => setAddTrainerForm({ ...addTrainerForm, password: e.target.value })}
+            />
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5, borderTop: '1px solid #E2E8F0', pt: 1.5 }}>

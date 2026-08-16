@@ -19,20 +19,24 @@ export function notificationTarget(
     case 'TrainingRequest': {
       if (isHospital) return `/hospital?tab=requests${id ? `&request=${id}` : ''}`;
       if (isUniversity) return `/affiliations${id ? `?request=${id}` : ''}`;
-      // The cluster reads a request either as incoming or as already sent on;
-      // the notification type is what distinguishes them.
       const sent = ['allocation', 'distribution', 'sent_to_hospital'].includes(n.type ?? '');
       return `/affiliations?tab=${sent ? 'sent' : 'incoming'}${id ? `&request=${id}` : ''}`;
     }
-    // A training event notification only ever reaches someone who is a
-    // recipient of it — senders are not notified of their own event — so this
-    // always points at the recipient inbox rather than the sender console.
+    // Recipients (trainer/trainee) get the inbox of events addressed to them;
+    // only the management consoles get the sender screen. Routing everyone to
+    // /training-events bounced the trainee off it entirely — that route's
+    // allowedRoles in App.tsx has no TRAINEE — and showed the trainer the
+    // authoring console instead of the event they were told about.
     case 'TrainingEvent':
-      return '/my-training-events';
+      return isHospital || isCluster ? '/training-events' : '/my-training-events';
     case 'Incident':
       return `/incidents${id ? `?incident=${id}` : ''}`;
     case 'Rotation':
-      return isCluster ? '/cluster-trainees' : '/hospital?tab=trainees';
+    case 'TraineeAllocation':
+    case 'TrainingRequestTrainee':
+      if (isHospital) return '/hospital?tab=acceptance';
+      if (isCluster) return '/cluster-trainees';
+      return '/';
     case 'GeneratedReport':
       return '/reports';
     case 'ClinicalCaseLog':

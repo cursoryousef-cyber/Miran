@@ -622,7 +622,7 @@ interface AddMemberModalProps {
 
 const AddMemberModal: React.FC<AddMemberModalProps> = ({ roles, departments, onClose, onSuccess }) => {
   const [form, setForm] = useState({
-    nameAr: '', nationalId: '', email: '', phone: '',
+    nameAr: '', nationalId: '', email: '', phone: '', password: '',
     roleCode: 'trainee', departmentId: '', traineeNumber: '', level: 'intern',
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -634,6 +634,12 @@ const AddMemberModal: React.FC<AddMemberModalProps> = ({ roles, departments, onC
       setError('يرجى ملء جميع الحقول المطلوبة');
       return;
     }
+    // Mirrors the backend rule: a trainer needs a usable initial password
+    // because there is no self-service reset to recover from a missing one.
+    if (form.roleCode === 'trainer' && form.password.trim().length < 8) {
+      setError('كلمة المرور الابتدائية للمدرب يجب أن تكون 8 أحرف على الأقل');
+      return;
+    }
     setIsLoading(true);
     setError('');
     try {
@@ -642,6 +648,9 @@ const AddMemberModal: React.FC<AddMemberModalProps> = ({ roles, departments, onC
         departmentId: form.departmentId || undefined,
         traineeNumber: form.traineeNumber || undefined,
         level: form.roleCode === 'trainee' ? form.level : undefined,
+        // Only sent when the role actually needs it; other roles keep the
+        // existing behaviour of being created without a caller-set password.
+        password: form.roleCode === 'trainer' ? form.password : undefined,
       });
       onSuccess();
     } catch (e: any) {
@@ -702,6 +711,26 @@ const AddMemberModal: React.FC<AddMemberModalProps> = ({ roles, departments, onC
                   <option value="">اختر قسماً</option>
                   {departments.map(d => <option key={d.id} value={d.id}>{d.nameAr}</option>)}
                 </select>
+              </div>
+            )}
+
+            {/* Initial password — trainers only. The backend requires one for
+                this role because there is no self-service reset, so an account
+                created without it could never be logged into. */}
+            {form.roleCode === 'trainer' && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', fontSize: '13px', color: '#7E22CE', fontWeight: 600, marginBottom: '6px' }}>كلمة المرور الابتدائية</label>
+                <input
+                  style={inputStyle}
+                  type="password"
+                  autoComplete="new-password"
+                  value={form.password}
+                  onChange={e => setForm({ ...form, password: e.target.value })}
+                  placeholder="8 أحرف على الأقل"
+                />
+                <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
+                  تُسلَّم للمدرب ليدخل بها أول مرة، ويغيّرها من ملفه الشخصي.
+                </div>
               </div>
             )}
 

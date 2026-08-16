@@ -59,6 +59,9 @@ export const AcceptanceChain: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const isHospitalTrainingAdmin = user?.roles?.includes('hospital_training_admin');
+  const canReviewHospitalRequests = user?.roles?.some((r: string) =>
+    ['hospital_training_admin', 'cluster_manager', 'training_director', 'hospital_administrator', 'platform_owner', 'system_admin'].includes(r)
+  );
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['acceptance-chain-trainees', orgId],
@@ -66,7 +69,7 @@ export const AcceptanceChain: React.FC = () => {
       const res = await apiClient.get('/training-requests/hospital-review');
       return res.data;
     },
-    enabled: !!orgId,
+    enabled: Boolean(orgId && canReviewHospitalRequests),
     refetchInterval: 30000,
   });
 

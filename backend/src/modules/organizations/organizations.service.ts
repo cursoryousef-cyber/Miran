@@ -273,12 +273,12 @@ export class OrganizationsService {
    * viewed and disagreed with the dashboard. Both now read this one endpoint,
    * which counts across the whole set with one definition per figure.
    */
-  async getStatistics(scopeOrganizationId?: string) {
-    // Scope: everything, or one organisation and its descendants.
-    const scopeIds = scopeOrganizationId
-      ? [scopeOrganizationId, ...(await this.hierarchyService.getDescendantIds(scopeOrganizationId))]
-      : null;
-    const scopeWhere = scopeIds ? { id: { in: scopeIds } } : {};
+  async getStatistics(visibleOrgIds: string[] | null = null) {
+    // Same semantics as getTree: null is the platform's unrestricted view,
+    // anything else is exactly the caller's own visibleOrgIds — already
+    // widened to include a cluster's hospitals by ScopeContextService, so no
+    // separate descendant walk is needed here.
+    const scopeWhere = visibleOrgIds !== null ? { id: { in: visibleOrgIds } } : {};
 
     const [types, orgs] = await Promise.all([
       this.prisma.organizationType.findMany({ select: { id: true, code: true } }),

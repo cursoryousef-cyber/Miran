@@ -18,7 +18,7 @@ import { IAuthenticatedUser } from '../../common/interfaces';
 
 @ApiTags('Persons (إدارة الأشخاص والهويات)')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('persons')
 export class PersonsController {
   constructor(private personsService: PersonsService) {}
