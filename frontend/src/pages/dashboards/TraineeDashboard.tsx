@@ -96,13 +96,16 @@ export const TraineeDashboard: React.FC = () => {
     },
   });
 
+  // Compared in UTC, because that is the day the server keyed the row on: the
+  // attendance date is written as UTC midnight. Comparing local calendar days
+  // instead made the panel disagree with the backend for the hours where the
+  // two dates differ (00:00–03:00 in +03), offering a check-in the server then
+  // refused as a duplicate.
   const isSameDay = (value: any) => {
     if (!value) return false;
     const d = new Date(value);
-    const now = new Date();
-    return d.getFullYear() === now.getFullYear()
-      && d.getMonth() === now.getMonth()
-      && d.getDate() === now.getDate();
+    if (Number.isNaN(d.getTime())) return false;
+    return d.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
   };
   const todayAttendance = (attendance ?? []).find((a: any) => isSameDay(a.date));
   const [attendanceError, setAttendanceError] = React.useState<string | null>(null);

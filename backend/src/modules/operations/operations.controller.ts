@@ -857,9 +857,11 @@ export class OperationsController {
       throw new BadRequestException('تم تسجيل حضورك اليوم بالفعل — لا يمكن تسجيل الحضور مرتين');
     }
 
+    // No departmentId: Attendance has no such column (the rotation carries the
+    // department). Passing it made every check-in fail with a Prisma "Unknown
+    // argument" error surfaced as a 500, so attendance could never be recorded.
     const attendanceData = {
       organizationId: activeRotation.organizationId,
-      departmentId: activeRotation.departmentId,
       traineeProfileId: profile.id,
       date: today,
       checkIn: new Date(),
