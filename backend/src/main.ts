@@ -18,18 +18,33 @@ async function bootstrap() {
   // Security headers
   app.use(helmet());
 
-  // CORS setup — explicit list; dev includes localhost origins
-  const prodOrigins = process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+  // CORS setup — explicit list; includes staging frontend, env overrides, and dev origins
+  const envOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
     : [];
+  const defaultAllowedOrigins = [
+    'https://miraan.netlify.app',
+  ];
   const devOrigins = process.env.NODE_ENV === 'production'
     ? []
-    : ['http://localhost:5173', 'http://localhost:3001', 'http://127.0.0.1:5173'];
-  const allowedOrigins = [...prodOrigins, ...devOrigins];
+    : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:5173'];
+  const allowedOrigins = Array.from(
+    new Set([...defaultAllowedOrigins, ...envOrigins, ...devOrigins]),
+  );
 
   app.enableCors({
-    origin: allowedOrigins.length ? allowedOrigins : '*',
-    credentials: allowedOrigins.length > 0,
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Organization-Id',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+    ],
+    exposedHeaders: ['Authorization'],
   });
 
   // Global Prefix & API Versioning
