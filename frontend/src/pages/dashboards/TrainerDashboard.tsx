@@ -120,6 +120,21 @@ export const TrainerDashboard: React.FC = () => {
     },
   });
 
+  // Evaluations this account authored. The endpoint is server-scoped to rows
+  // this trainer wrote plus rows about their assigned trainees, so the
+  // evaluator check below narrows it to "mine" without being the boundary.
+  const { data: submittedEvaluations } = useQuery({
+    queryKey: ['tr-submitted-evaluations'],
+    queryFn: async () => {
+      const res = await apiClient.get('/operations/evaluations').catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+  });
+
+  const mySubmittedEvaluations: any[] = (submittedEvaluations ?? []).filter(
+    (ev: any) => ev.evaluatorId === user?.id,
+  );
+
   const { data: competencies, refetch: refetchCompetencies } = useQuery({
     queryKey: ['tr-competencies', selectedTraineeId],
     queryFn: async () => {
@@ -198,6 +213,10 @@ export const TrainerDashboard: React.FC = () => {
       setEvalError(null); setEvalMsg('تم اعتماد التقييم وحفظ الدرجة.');
       setCriterionScores({}); setEvalComments('');
       refetchTraineeDetail();
+      // Without this the new evaluation did not appear in "التقييمات التي
+      // أرسلتها" until a full reload, and the pending count kept counting it.
+      queryClient.invalidateQueries({ queryKey: ['tr-submitted-evaluations'] });
+      queryClient.invalidateQueries({ queryKey: ['tr-dashboard'] });
     },
     onError: (err: any) => {
       setEvalMsg(null);
@@ -456,6 +475,42 @@ export const TrainerDashboard: React.FC = () => {
             ))
           ) : (
             <EmptyState icon={BookOpen} title="لا توجد نشاطات حديثة" />
+          )}
+        </Panel>
+
+        {/* Evaluations this trainer has already submitted. Until now the only
+            confirmation a trainer got after grading was a transient success
+            message: the dashboard listed what was still *pending*, so a
+            finished evaluation disappeared from their view entirely and there
+            was no way to tell a submitted one from a never-started one. This
+            reads the same GET /operations/evaluations the trainee dashboard
+            uses, now scoped on the server to rows this account authored or
+            received. There is no edit action because the record is
+            append-only by design — see the note below the list. */}
+        <Panel title="التقييمات التي أرسلتها" icon={ClipboardCheck} tone="success">
+          {submittedEvaluations === undefined ? (
+            <PanelSkeleton rows={3} />
+          ) : mySubmittedEvaluations.length ? (
+            <>
+              {mySubmittedEvaluations.slice(0, 8).map((ev: any) => (
+                <ListRow
+                  key={ev.id}
+                  title={ev.evaluatee?.person?.nameAr ?? 'متدرب'}
+                  meta={`${ev.form?.nameAr ?? ev.evaluationType} · الدرجة ${ev.totalScore ?? '—'} · أُرسل ${new Date(ev.submittedAt).toLocaleDateString('ar-SA')}${ev.rotation?.department?.nameAr ? ` · ${ev.rotation.department.nameAr}` : ''}`}
+                  trailing={<Badge label="مُرسَل" tone="success" />}
+                  onClick={() => navigate('/logbook?tab=evaluations')}
+                />
+              ))}
+              <div style={{ padding: space.md, fontSize: 12, color: colour.muted }}>
+                التقييم سجل نهائي بعد الإرسال ولا يقبل التعديل — لا يوجد مسار تعديل في النظام.
+              </div>
+            </>
+          ) : (
+            <EmptyState
+              icon={ClipboardCheck}
+              title="لم ترسل أي تقييم بعد"
+              hint="تظهر هنا التقييمات فور اعتمادها من شاشة التقييم السريري."
+            />
           )}
         </Panel>
 

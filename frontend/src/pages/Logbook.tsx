@@ -40,12 +40,29 @@ import {
   Tab,
   Box,
 } from '@mui/material';
+import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
+/** Tabs addressable by `?tab=` — how a notification opens the right section. */
+const TAB_BY_NAME: Record<string, number> = {
+  cases: 0,
+  competencies: 1,
+  procedures: 2,
+  evaluations: 3,
+};
+
 export const LogbookPage: React.FC = () => {
   const { user, primaryRole } = useAuth();
-  const [tabIndex, setTabIndex] = useState(0);
+  const [searchParams] = useSearchParams();
+  const requestedTab = TAB_BY_NAME[searchParams.get('tab') ?? ''];
+  const [tabIndex, setTabIndex] = useState(requestedTab ?? 0);
+
+  // Opening a notification while already on this page changes the query string
+  // without remounting, so the initial state above would not see it.
+  useEffect(() => {
+    if (requestedTab !== undefined) setTabIndex(requestedTab);
+  }, [requestedTab]);
 
   // Modal State
   const [openModal, setOpenModal] = useState(false);
@@ -166,13 +183,50 @@ export const LogbookPage: React.FC = () => {
     }
   }, [rotationsData, rotationsLoading, isTrainerRole, evalRotationId, midpointRotationId]);
 
-  const { data: competenciesData } = useQuery({
-    queryKey: ['competencies-portfolio'],
+  // GET /logbook/competencies resolves the target trainee from the caller's own
+  // TraineeProfile when no `traineeId` is passed. A trainer has no such profile,
+  // so calling it bare returned `{ data: [], overallPercentage: 0 }` and the
+  // portfolio tab was permanently empty for exactly the role that maintains it.
+  // The trainee picker this page already uses for case entries supplies the id;
+  // the server re-checks trainer→trainee scope on the parameter, so passing it
+  // widens nothing.
+  const { data: competenciesData, refetch: refetchCompetencies } = useQuery({
+    queryKey: ['competencies-portfolio', isTrainerRole ? selectedTraineeId : 'self'],
+    enabled: !isTrainerRole || !!selectedTraineeId,
     queryFn: async () => {
-      const res = await apiClient.get('/logbook/competencies');
+      const res = await apiClient.get('/logbook/competencies', {
+        params: isTrainerRole && selectedTraineeId ? { traineeId: selectedTraineeId } : undefined,
+      });
       return res.data;
     },
   });
+
+  // Recording an execution against a competency. PATCH /logbook/competencies/:id
+  // already exists and already grants `trainer`, and it re-derives `status` and
+  // re-checks trainer scope and the graduation lock on the server — but the
+  // portfolio tab rendered progress bars with no way to move them, so the
+  // operational path Competency → evidence → progress ended at a read-only
+  // dashboard. This is the missing control, not a new capability.
+  const canUpdateCompetency = ['trainer', 'hospital_training_admin', 'org_manager', 'platform_owner'].includes(primaryRole);
+  const [compBusyId, setCompBusyId] = useState<string | null>(null);
+  const [compError, setCompError] = useState<string | null>(null);
+  const [compOk, setCompOk] = useState<string | null>(null);
+
+  const adjustCompetency = async (comp: any, delta: number) => {
+    const next = Math.max(0, (comp.completedCount ?? 0) + delta);
+    setCompBusyId(comp.id);
+    setCompError(null);
+    setCompOk(null);
+    try {
+      await apiClient.patch(`/logbook/competencies/${comp.id}`, { completedCount: next });
+      await refetchCompetencies();
+      setCompOk(`تم تحديث «${comp.procedure?.titleAr ?? 'الكفاءة'}» إلى ${next}`);
+    } catch (e: any) {
+      setCompError(e?.response?.data?.message || 'تعذر تحديث تقدم الكفاءة');
+    } finally {
+      setCompBusyId(null);
+    }
+  };
 
   const { data: statsData } = useQuery({
     queryKey: ['logbook-stats'],
@@ -541,10 +595,46 @@ export const LogbookPage: React.FC = () => {
                     </div>
                     <LinearProgress variant="determinate" value={perc} style={{ borderRadius: '6px', height: '8px', backgroundColor: '#E2E8F0' }} />
                   </div>
+                  {canUpdateCompetency && (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={compBusyId === comp.id || (comp.completedCount ?? 0) <= 0}
+                        onClick={() => adjustCompetency(comp, -1)}
+                      >
+                        −1
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        disabled={compBusyId === comp.id}
+                        onClick={() => adjustCompetency(comp, +1)}
+                      >
+                        {compBusyId === comp.id ? '...' : 'تسجيل تنفيذ +1'}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
+
+          {canUpdateCompetency && compError && (
+            <div style={{ color: '#DC2626', fontWeight: 700, fontSize: '13px' }}>{compError}</div>
+          )}
+          {canUpdateCompetency && compOk && (
+            <div style={{ color: '#059669', fontWeight: 700, fontSize: '13px' }}>{compOk}</div>
+          )}
+          {isTrainerRole && !selectedTraineeId ? (
+            <div style={{ color: '#64748B', fontSize: '13px' }}>
+              اختر متدرباً من قائمة «المتدرب» أعلى الصفحة لعرض حقيبة كفاءاته وتحديث تقدمه.
+            </div>
+          ) : !competenciesData?.data?.length ? (
+            <div style={{ color: '#64748B', fontSize: '13px' }}>
+              لا توجد كفاءات مسجلة لهذا المتدرب بعد.
+            </div>
+          ) : null}
         </div>
       )}
 

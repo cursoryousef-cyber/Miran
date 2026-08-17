@@ -42,6 +42,40 @@ export function notificationTarget(
     case 'ClinicalCaseLog':
     case 'Attendance':
       return '/logbook';
+    // An evaluation notification carried a referenceType and referenceId all
+    // along, but there was no case for it, so the switch fell through to null
+    // and opening the notification navigated nowhere. The evaluations tab of
+    // the logbook is where both the trainee's received scores and the trainer's
+    // submitted ones are rendered.
+    case 'Evaluation':
+      return '/logbook?tab=evaluations';
+    // The calls hub is mounted at /calls for the hospital, the trainer and the
+    // trainee alike, and renders the active call for whichever side is reading.
+    // The notification carried no referenceType until now, which is why opening
+    // a call alert went nowhere.
+    case 'TrainerCall':
+      return '/calls';
+    // The remaining reference types the backend actually emits. Each one used
+    // to fall through to `default` and navigate nowhere, so the reader was told
+    // something happened with no way to reach it. Nothing new is invented here:
+    // these are the existing routes and the existing hospital-workspace tab
+    // keys, picked per audience the same way the cases above do.
+    case 'Task':
+      // Tasks are listed on the reader's own dashboard, whichever side they sit
+      // on — the trainer who assigned it and the trainee who owes it.
+      return '/';
+    case 'TrainingSchedule':
+      return isHospital || isCluster ? '/hospital?tab=schedules' : '/schedules';
+    case 'TrainerLeave':
+      return isHospital ? '/hospital?tab=leaves' : '/';
+    case 'TrainerReassignment':
+      return isHospital ? '/hospital?tab=reassignment' : '/';
+    case 'TrainerProfile':
+      return isHospital ? '/hospital?tab=trainers' : '/';
+    case 'TraineeProfile':
+      if (isHospital) return '/hospital?tab=acceptance';
+      if (isCluster) return '/cluster-trainees';
+      return '/';
     default:
       return null;
   }

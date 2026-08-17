@@ -195,9 +195,21 @@ const TRAINER_NAV: NavSection[] = [
       { name: 'لوحة المدرب', path: '/', icon: UserCog },
       { name: 'فعاليات متدربيّ', path: '/training-events', icon: Megaphone, requires: ['training.operate'] },
       { name: 'الفعاليات الواردة', path: '/my-training-events', icon: Inbox },
-      { name: 'متدربيّ', path: '/org-members', icon: UsersRound },
+      // Labelled «متدربيّ» this pointed at /org-members, which is the
+      // organisation staff directory — it returned all 12 members of the
+      // hospital including the administrator, the academic supervisor and the
+      // other trainer. Presenting that as "my trainees" is the org-members
+      // substitution the trainee list must never rely on. The trainer's actual
+      // assigned trainees come from /operations/trainer/assigned-interns and
+      // are listed on the trainer dashboard; this entry now says what the
+      // screen it opens really is. Read access here is unchanged and every
+      // write on it already answers 403 to a trainer.
+      { name: 'أعضاء الجهة', path: '/org-members', icon: UsersRound },
       { name: 'جدولي والشفتات', path: '/schedules', icon: CalendarDays, requires: ['schedule.view'] },
       { name: 'سلسلة القبول', path: '/acceptance-chain', icon: CheckSquare },
+      // /calls was reachable only from a dashboard quick action, so the screen
+      // that launches and runs M-CALL had no entry in the trainer's own nav.
+      { name: 'نداءات M-CALL', path: '/calls', icon: Megaphone },
       { name: 'النداءات والإشعارات', path: '/notifications', icon: BellRing },
     ],
   },
@@ -216,7 +228,10 @@ const TRAINEE_NAV: NavSection[] = [
     title: 'رحلتي التدريبية',
     items: [
       { name: 'لوحتي', path: '/', icon: Route },
-      { name: 'النداءات والفعاليات', path: '/my-training-events', icon: Megaphone },
+      { name: 'الفعاليات التدريبية', path: '/my-training-events', icon: Megaphone },
+      // The trainee answers M-CALL (ack / on-way / arrived) on this screen; it
+      // had no nav entry, so an incoming call alert had nowhere to be opened.
+      { name: 'نداءات M-CALL', path: '/calls', icon: Megaphone },
       { name: 'جدولي والشفتات', path: '/schedules', icon: CalendarDays, requires: ['schedule.view'] },
       { name: 'السجل السريري', path: '/logbook', icon: BookOpen },
       { name: 'النداءات والإشعارات', path: '/notifications', icon: BellRing },

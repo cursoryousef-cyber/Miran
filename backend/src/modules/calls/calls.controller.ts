@@ -237,8 +237,15 @@ export class CallsController {
           organizationId: user.organizationId,
           userId: accountId,
           titleAr: `🔔 نداء جديد: ${dto.customTitle ?? call.callType}`,
-          bodyAr: dto.note ?? 'يُرجى التوجه فوراً للموقع المspecified',
+          bodyAr: dto.note ?? 'يُرجى التوجه فوراً للموقع المحدد',
           type: 'call_alert',
+          // Without these the notification named no record, so opening it had
+          // nowhere to go — the reader was told a call exists and left to find
+          // it. Every other notification in the system carries its reference;
+          // this one is the same Notification model and the call id already
+          // exists at this point, so no schema change is involved.
+          referenceType: 'TrainerCall',
+          referenceId: call.id,
           isRead: false,
         },
       });

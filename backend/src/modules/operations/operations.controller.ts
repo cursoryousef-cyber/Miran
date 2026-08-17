@@ -562,12 +562,84 @@ export class OperationsController {
   )
   async evaluations(@CurrentUser() user: IAuthenticatedUser) {
     const data = await this.prisma.evaluation.findMany({
-      where: { organizationId: user.organizationId },
+      where: {
+        organizationId: user.organizationId,
+        ...(await this.evaluationReadScope(user)),
+      },
       include: { form: true, evaluator: { include: { person: true } }, evaluatee: { include: { person: true } }, rotation: { include: { department: true } } },
       orderBy: { submittedAt: 'desc' },
       take: 100,
     });
     return { data };
+  }
+
+  /**
+   * Row filter for the evaluation list, on top of the organisation filter.
+   *
+   * This list used to be organisation-wide for every caller the capability
+   * guard let through, and that set includes `trainee` (SELF_VIEW) and plain
+   * `trainer` (EVALUATION_SUBMIT). So a trainee could read every evaluation
+   * every trainer in the hospital had written about every other trainee, and a
+   * trainer could read the scores of trainees who were never assigned to them.
+   * The trainee dashboard tried to narrow it in the browser, which is not a
+   * boundary at all — the raw response already carried the other rows.
+   *
+   * The boundary belongs here:
+   *   trainee → evaluations about them, plus the department evaluations they
+   *             themselves submitted;
+   *   trainer → evaluations they authored, plus evaluations about a trainee
+   *             currently assigned to them (the same active-rotation link
+   *             `trainerTraineeScope` uses everywhere else);
+   *   supervisory roles (hospital training administration, org manager,
+   *             academic supervisor, platform owner) → unchanged, hospital-wide.
+   */
+  private async evaluationReadScope(
+    user: IAuthenticatedUser,
+  ): Promise<Prisma.EvaluationWhereInput> {
+    const isSupervisory = [
+      'hospital_training_admin',
+      'academic_supervisor',
+      'org_manager',
+      'platform_owner',
+    ].some((role) => user.roles.includes(role));
+    if (isSupervisory) return {};
+
+    if (user.roles.includes('trainee')) {
+      return {
+        OR: [{ evaluateeId: user.accountId }, { evaluatorId: user.accountId }],
+      };
+    }
+
+    if (user.roles.includes('trainer')) {
+      const trainer = await this.myTrainer(user);
+      if (!trainer) return { evaluatorId: user.accountId };
+      return {
+        OR: [
+          { evaluatorId: user.accountId },
+          {
+            evaluatee: {
+              person: {
+                traineeProfile: {
+                  rotations: {
+                    some: {
+                      trainerProfileId: trainer.id,
+                      organizationId: user.organizationId,
+                      status: 'active',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      };
+    }
+
+    // Any other role the capability guard admits sees only what it authored or
+    // received — never a hospital-wide list by default.
+    return {
+      OR: [{ evaluateeId: user.accountId }, { evaluatorId: user.accountId }],
+    };
   }
 
   @Get('evaluations/forms')

@@ -121,15 +121,33 @@ export const CallsHub: React.FC = () => {
   const [selectedTrainers, setSelectedTrainers] = useState<string[]>([]);
   const [selectedTrainees, setSelectedTrainees] = useState<string[]>([]);
 
+  // Recipient pickers. `isTrainer` above is a broad "may operate calls" flag
+  // covering the hospital training administration *and* a plain trainer, but
+  // the two may read different recipient lists: `/trainers/workspace-cards` and
+  // `/trainees/incoming` are hospital-administration endpoints and answer 403
+  // to a plain trainer. Gating both on `isTrainer` therefore fired two
+  // guaranteed 403s for every trainer opening this screen and left the picker
+  // empty. A plain trainer's correct recipient list is their own assigned
+  // trainees — which is also exactly the set POST /calls/launch validates
+  // `targetTraineeIds` against, so the picker now offers only what the server
+  // will accept. No role was added to any endpoint.
+  const isHospitalAdmin = ['org_manager', 'platform_owner', 'hospital_training_admin', 'cluster_administrator'].includes(primaryRole ?? '');
+  const isPlainTrainer = primaryRole === 'trainer';
+
   const { data: hospitalTrainers } = useQuery({
     queryKey: ['calls-hospital-trainers'],
     queryFn: async () => (await apiClient.get('/trainers/workspace-cards')).data?.data ?? [],
-    enabled: isTrainer,
+    enabled: isHospitalAdmin,
   });
 
   const { data: hospitalTrainees } = useQuery({
-    queryKey: ['calls-hospital-trainees'],
-    queryFn: async () => (await apiClient.get('/trainees/incoming')).data?.data ?? [],
+    queryKey: ['calls-recipient-trainees', isPlainTrainer ? 'assigned' : 'hospital'],
+    queryFn: async () => {
+      const res = await apiClient.get(
+        isPlainTrainer ? '/operations/trainer/assigned-interns' : '/trainees/incoming',
+      );
+      return res.data?.data ?? [];
+    },
     enabled: isTrainer,
   });
 
@@ -412,11 +430,21 @@ export const CallsHub: React.FC = () => {
                   onChange={(e) => setTargetType(e.target.value)}
                   label="فئة المستلمين المستهدفة"
                 >
-                  <MenuItem value="all_trainees">جميع المتدربين بالمستشفى</MenuItem>
-                  <MenuItem value="selected_trainees">متدربون محددون</MenuItem>
-                  <MenuItem value="all_trainers">جميع المدربين بالمستشفى</MenuItem>
-                  <MenuItem value="selected_trainers">مدربون محددون</MenuItem>
-                  <MenuItem value="all_both">جميع المدربين والمتدربين</MenuItem>
+                  <MenuItem value="all_trainees">
+                    {isPlainTrainer ? 'متدربو قسمي' : 'جميع المتدربين بالمستشفى'}
+                  </MenuItem>
+                  <MenuItem value="selected_trainees">
+                    {isPlainTrainer ? 'متدربون محددون من متدربيّ' : 'متدربون محددون'}
+                  </MenuItem>
+                  {/* Addressing trainers is a hospital-administration broadcast.
+                      A plain trainer has no trainer directory to pick from —
+                      /trainers/workspace-cards refuses them — so these options
+                      would open an empty picker and launch a call reaching
+                      nobody. Hidden rather than disabled on the server, which
+                      already permits the shape for the administration. */}
+                  {isHospitalAdmin && <MenuItem value="all_trainers">جميع المدربين بالمستشفى</MenuItem>}
+                  {isHospitalAdmin && <MenuItem value="selected_trainers">مدربون محددون</MenuItem>}
+                  {isHospitalAdmin && <MenuItem value="all_both">جميع المدربين والمتدربين</MenuItem>}
                 </Select>
               </FormControl>
 

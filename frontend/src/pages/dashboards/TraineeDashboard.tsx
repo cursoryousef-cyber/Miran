@@ -166,9 +166,13 @@ export const TraineeDashboard: React.FC = () => {
   const { data: myEvaluations } = useQuery({
     queryKey: ['tr-my-evaluations'],
     queryFn: async () => {
+      // GET /operations/evaluations is scoped on the server to the rows this
+      // account authored or received. The filter that used to sit here was a
+      // no-op — `|| e.evaluateeId` is truthy on every row — and a browser-side
+      // filter was never the boundary anyway; the response already carried the
+      // other trainees' scores.
       const res = await apiClient.get('/operations/evaluations').catch(() => ({ data: { data: [] } }));
-      const all = res.data?.data ?? [];
-      return all.filter((e: any) => e.evaluatee?.person?.id === profile?.personId || e.evaluateeId);
+      return res.data?.data ?? [];
     },
     enabled: !!profile,
   });

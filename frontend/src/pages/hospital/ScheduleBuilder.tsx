@@ -91,24 +91,47 @@ export const ScheduleBuilder: React.FC = () => {
     },
   });
 
+  // Departments to build a schedule against.
+  //
+  // This derived the list from `/rotations`, i.e. only departments that already
+  // happen to carry a rotation, and without de-duplicating: against the current
+  // hospital that yields five entries which are all the *same* department, so
+  // the picker repeated «قسم الباطنية العام» five times and the other thirteen
+  // departments — Emergency, ICU, Surgery, Paediatrics — could not be scheduled
+  // at all. It also fetched `/operations/analytics` and discarded the result,
+  // paying for a seven-query aggregate on every mount for nothing.
+  //
+  // `/rotations/departments` is the hospital's own department catalogue: it
+  // filters on the caller's `organizationId` server-side and the hospital
+  // training administration already holds the capability it requires. No role,
+  // permission or endpoint was changed.
   const { data: departments } = useQuery({
-    queryKey: ['departments-list'],
+    queryKey: ['schedule-builder-departments'],
     queryFn: async () => {
-      const res = await apiClient.get('/operations/analytics');
-      const deptRes = await apiClient.get('/rotations');
-      return deptRes.data?.data?.map((r: any) => r.department).filter(Boolean) ?? [];
+      const res = await apiClient.get('/rotations/departments');
+      return res.data?.data ?? [];
     },
   });
 
-  const isTrainerOrAdmin = user?.roles?.some((r: string) =>
-    ['trainer', 'hospital_training_admin', 'org_manager', 'platform_owner'].includes(r),
+  // This screen belongs to the hospital training administration (the `/hospital`
+  // route admits no trainer at all), so it must read the hospital-scoped trainee
+  // list. It was calling `/operations/trainer/assigned-interns`, which answers a
+  // different question — "the trainees assigned to *me as a trainer*" — and is
+  // role-gated to `trainer`. The hospital training administration holds no
+  // TrainerProfile and no rotation, so that route answered 403 and the trainee
+  // picker came up empty for exactly the role that builds the schedules. The
+  // hospital-scoped equivalent is `/trainees/incoming`, which resolves the
+  // caller's organisation scope on the server. The role list below is the one
+  // that endpoint already grants — no role was added to either side.
+  const canReadHospitalTrainees = !!user?.roles?.some((r: string) =>
+    ['hospital_training_admin', 'platform_owner', 'cluster_administrator', 'cluster_manager', 'training_director'].includes(r),
   );
 
   const { data: trainees } = useQuery({
-    queryKey: ['trainees-list'],
-    enabled: !!isTrainerOrAdmin,
+    queryKey: ['schedule-builder-trainees'],
+    enabled: canReadHospitalTrainees,
     queryFn: async () => {
-      const res = await apiClient.get('/operations/trainer/assigned-interns');
+      const res = await apiClient.get('/trainees/incoming');
       return res.data?.data ?? [];
     },
   });
