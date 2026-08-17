@@ -11,7 +11,7 @@ services:
     # kept for deliberate, manual use — it is never invoked by a normal boot.
     # dist/src/main.js, not dist/main.js — nest build preserves the src/ layout
     # under dist/ since tsconfig has no explicit rootDir.
-    startCommand: npx prisma migrate deploy && node dist/src/main.js
+    startCommand: npx prisma migrate deploy && npx ts-node src/seed/seed.ts && node dist/src/main.js
     # main.ts's setGlobalPrefix only excludes '/' and 'api/docs' — health is NOT
     # excluded, so it carries both the API_PREFIX ('api') and the URI version
     # ('v1') like every other route. The served path is therefore /api/v1/health.
