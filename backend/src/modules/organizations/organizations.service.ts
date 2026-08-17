@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OrganizationHierarchyService } from './organization-hierarchy.service';
 import { CapacityService } from './capacity.service';
@@ -164,10 +164,35 @@ export class OrganizationsService {
   async update(id: string, dto: UpdateOrganizationDto, user?: IAuthenticatedUser) {
     await this.findOne(id);
 
+    // `create` normalises the code to upper case and refuses a duplicate; this
+    // did neither. Two consequences, both reachable through the edit dialog:
+    // a code saved as `hosp-x` sat alongside a created `HOSP-X` because the
+    // unique index is case-sensitive, so the same organisation could be
+    // addressed by two codes; and a genuine collision surfaced as a raw P2002
+    // reported to the user as "بيانات الحساب متعارضة" — an account error on an
+    // organisation form. Normalising and checking here keeps update and create
+    // on the same rule and names the actual conflict.
+    let code: string | undefined;
+    if (dto.code !== undefined) {
+      code = dto.code.trim().toUpperCase();
+      if (!code) throw new BadRequestException('رمز الجهة لا يمكن أن يكون فارغاً');
+
+      const clash = await this.prisma.organization.findFirst({
+        where: { code, id: { not: id } },
+        select: { id: true, nameAr: true },
+      });
+      if (clash) {
+        throw new ConflictException(
+          `رمز الجهة (${code}) مستخدم مسبقاً من قبل «${clash.nameAr}»`,
+        );
+      }
+    }
+
     return this.prisma.organization.update({
       where: { id },
       data: {
         ...dto,
+        ...(code !== undefined ? { code } : {}),
         updatedById: user?.accountId,
       },
       include: { organizationType: true },

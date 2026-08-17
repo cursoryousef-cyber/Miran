@@ -9,6 +9,8 @@ import {
   Query,
   UseGuards,
   ForbiddenException,
+  BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards';
@@ -27,6 +29,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { TrainerReassignmentService } from './trainer-reassignment.service';
 import { TrainerLeaveService } from './trainer-leave.service';
 import { TrainerQualificationService } from './trainer-qualification.service';
+import { UserAccountsService } from '../user-accounts/user-accounts.service';
 
 @ApiTags('Trainers (المدربون)')
 @Controller('trainers')
@@ -42,11 +45,148 @@ export class TrainersController {
     private reassignmentService: TrainerReassignmentService,
     private leaveService: TrainerLeaveService,
     private qualificationService: TrainerQualificationService,
+    private userAccountsService: UserAccountsService,
   ) {}
 
   // ─── Program Qualification ──────────────────────────────────────────────────
   // Registered before the parameterised trainer routes below so that the literal
   // segments are not swallowed by ':id'.
+
+  /**
+   * Create a trainer, account and all, inside the caller's own hospital.
+   *
+   * The hospital training administration is the role that staffs its own
+   * departments, but it had no way to do this: `POST /user-accounts` is gated on
+   * `manage_users`, which it does not hold, and no trainer-creation route
+   * existed at all. So a hospital could be given trainees it had no way to
+   * assign a trainer to, and every trainer had to be minted by the platform.
+   *
+   * Nothing here duplicates the account service — it delegates to the same
+   * `UserAccountsService.create` every other account goes through, and gets its
+   * duplicate-email, duplicate-person and activation handling for free. What
+   * this route adds is the two things that must not come from the client:
+   *
+   *   role  — pinned to 'trainer'. A `roleCode` in the body is ignored, so this
+   *           route can never mint a cluster or platform account, whatever the
+   *           caller sends.
+   *   scope — pinned to the caller's own organisation. A `hospitalId` in the
+   *           body is ignored, so a hospital supervisor cannot staff another
+   *           hospital.
+   *
+   * The password is never chosen here: the account service issues an activation
+   * token and a random unusable hash, so the trainer sets their own password
+   * through the activation link before they can sign in. That is the
+   * first-login-forces-password-change requirement, and it is stronger than a
+   * shared temporary password because no one but the trainer ever knows it.
+   */
+  @Post()
+  @RequireCapability(CAPABILITIES.TRAINER_MANAGE)
+  @ApiOperation({ summary: 'إضافة مدرب جديد بحساب دخول — ضمن مستشفى المشرف فقط' })
+  async createTrainer(
+    @CurrentUser() user: IAuthenticatedUser,
+    @Body()
+    dto: {
+      nameAr?: string;
+      nameEn?: string;
+      nationalId?: string;
+      email?: string;
+      phone?: string;
+      departmentId?: string;
+      specialization?: string;
+      titleAr?: string;
+      maxTrainees?: number;
+    },
+  ) {
+    const email = dto.email?.trim().toLowerCase();
+    if (!email) throw new BadRequestException('البريد الإلكتروني للمدرب مطلوب');
+    if (!dto.nameAr?.trim()) throw new BadRequestException('اسم المدرب بالعربية مطلوب');
+
+    const hospitalId = user.organizationId;
+    if (!hospitalId) throw new BadRequestException('تعذّر تحديد مستشفى المشرف');
+
+    // A department, when named, must be one of this hospital's own. Without
+    // this the trainer could be filed under another hospital's department.
+    if (dto.departmentId) {
+      const department = await this.prisma.department.findFirst({
+        where: { id: dto.departmentId, organizationId: hospitalId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!department) {
+        throw new ForbiddenException('القسم المحدد لا يتبع مستشفاك');
+      }
+    }
+
+    // A person may hold only one trainer profile — the schema makes personId
+    // unique on TrainerProfile, and a raw insert would surface that as a 500.
+    const existingByNationalId = dto.nationalId?.trim()
+      ? await this.prisma.person.findUnique({
+          where: { nationalId: dto.nationalId.trim() },
+          include: { trainerProfile: { select: { id: true, organizationId: true } } },
+        })
+      : null;
+    if (existingByNationalId?.trainerProfile) {
+      throw new ConflictException(
+        existingByNationalId.trainerProfile.organizationId === hospitalId
+          ? 'هذا الشخص مسجل كمدرب في مستشفاك بالفعل'
+          : 'هذا الشخص مسجل كمدرب في جهة أخرى — يلزم نقله عبر إعادة الإسناد',
+      );
+    }
+
+    // Role and scope are pinned, not taken from the body.
+    const created = await this.userAccountsService.create(
+      {
+        email,
+        nameAr: dto.nameAr.trim(),
+        nameEn: dto.nameEn?.trim(),
+        nationalId: dto.nationalId?.trim(),
+        phone: dto.phone?.trim(),
+        roleCode: 'trainer',
+        hospitalId,
+      } as never,
+      user,
+    );
+
+    const account = await this.prisma.userAccount.findUnique({
+      where: { id: created.account.id },
+      select: { personId: true },
+    });
+    if (!account) throw new BadRequestException('تعذّر إنشاء حساب المدرب');
+
+    const profile = await this.prisma.trainerProfile.create({
+      data: {
+        personId: account.personId,
+        organizationId: hospitalId,
+        departmentId: dto.departmentId ?? null,
+        specialization: dto.specialization?.trim() || null,
+        titleAr: dto.titleAr?.trim() || null,
+        maxTrainees: dto.maxTrainees ?? 5,
+        createdById: user.accountId,
+      },
+      include: { person: true, department: true },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: hospitalId,
+        actorId: user.accountId,
+        action: 'trainer.create',
+        entityType: 'TrainerProfile',
+        entityId: profile.id,
+        newValues: {
+          email,
+          hospitalId,
+          departmentId: profile.departmentId,
+          roleCode: 'trainer',
+        } as never,
+      },
+    });
+
+    return {
+      success: true,
+      data: { trainer: profile, activationLink: created.activationLink },
+      message: 'تم إنشاء المدرب وحسابه — أُرسل رابط التفعيل لتعيين كلمة المرور عند أول دخول',
+    };
+  }
 
   @Get('workspace-cards')
   @RequireCapability(

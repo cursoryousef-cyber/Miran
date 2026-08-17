@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export enum OrgLifecycleStatus {
@@ -70,7 +70,22 @@ export class CreateOrganizationDto {
   contactPhone?: string;
 }
 
-export class UpdateOrganizationDto extends CreateOrganizationDto {}
+/**
+ * PATCH /organizations/:id is a partial update, and this must model that.
+ *
+ * Extending CreateOrganizationDto directly carried its required fields onto
+ * the update, so `organizationTypeId`, `code` and `nameAr` were all mandatory
+ * on every edit: a caller sending `{ nameAr }` to rename an organisation was
+ * refused with "نوع الجهة مطلوب / رمز الجهة مطلوب" — verified against staging,
+ * which answered 400 to exactly that body. Any client that does not resend the
+ * whole entity cannot rename an organisation at all, and a client that does
+ * resend it risks writing back a stale copy of every other field.
+ *
+ * PartialType keeps the same validation rules and applies them only to the
+ * fields actually present. The service already spreads the DTO, so an absent
+ * field is simply not written.
+ */
+export class UpdateOrganizationDto extends PartialType(CreateOrganizationDto) {}
 
 export class ProvisionOrgWizardDto {
   @ApiProperty({ description: 'بيانات الجهة المراد إنشاؤها' })

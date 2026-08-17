@@ -124,6 +124,20 @@ export class AuthService {
       throw new ForbiddenException('الحساب مقفل مؤقتاً بسبب تكرار المحاولات الخاطئة');
     }
 
+    // An account created by an administrator carries an activation token and a
+    // random unusable password hash, so the holder must set their own password
+    // through the activation link before the account works. That was already
+    // true in effect — nobody can guess the random hash — but only by accident
+    // of the hash being unguessable, and the caller got "بيانات الدخول غير
+    // صحيحة", which reads as a wrong password rather than an unactivated
+    // account. Stating it here makes first-login-sets-the-password an explicit
+    // rule and tells the user what to actually do.
+    if (account.activationToken) {
+      throw new ForbiddenException(
+        'لم يتم تفعيل الحساب بعد — استخدم رابط التفعيل المُرسل إليك لتعيين كلمة المرور قبل أول دخول',
+      );
+    }
+
     const isPasswordValid = await bcrypt.compare(dto.password, account.passwordHash);
     if (!isPasswordValid) {
       const attempts = account.loginAttempts + 1;

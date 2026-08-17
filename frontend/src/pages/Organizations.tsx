@@ -236,8 +236,10 @@ export const Organizations: React.FC = () => {
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['organizations'] });
-      queryClient.invalidateQueries({ queryKey: ['organizations-tree'] });
+      // Same reasoning as the update mutation below: a new organisation has to
+      // appear in every hospital/cluster picker and scope list in the app, and
+      // those live under their own query keys.
+      queryClient.invalidateQueries();
       setOpenCreate(false);
       resetForm();
     },
@@ -261,8 +263,20 @@ export const Organizations: React.FC = () => {
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['organizations'] });
-      queryClient.invalidateQueries({ queryKey: ['organizations-tree'] });
+      // An organisation's name is read all over the app through embedded
+      // relations — targetOrg.nameAr on a training request, organization.nameAr
+      // on a trainee or a trainer card, the cluster and hospital dashboards,
+      // reports — and every one of those lives under a different query key.
+      // Invalidating only these two keys left roughly fifty render sites
+      // holding the previous name, and with the global staleTime of five
+      // minutes and refetchOnWindowFocus disabled they kept serving it until a
+      // hard reload. That is the "renamed the hospital but some screens still
+      // show the old name" report: the database was already correct — a rename
+      // propagates to every relation path server-side — the client cache was
+      // not. Renaming an organisation is rare and touches nearly every screen,
+      // so the proportionate remedy is to drop the whole cache rather than
+      // enumerate keys that will drift out of date as screens are added.
+      queryClient.invalidateQueries();
       setOpenEdit(null);
       resetForm();
     },
@@ -274,8 +288,9 @@ export const Organizations: React.FC = () => {
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['organizations'] });
-      queryClient.invalidateQueries({ queryKey: ['organizations-tree'] });
+      // A removed organisation must disappear from every picker and scope list
+      // for the same reason a renamed one must update in them.
+      queryClient.invalidateQueries();
       setDeleteId(null);
     },
   });
