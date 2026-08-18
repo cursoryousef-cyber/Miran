@@ -229,15 +229,68 @@ export const ScheduleBuilder: React.FC = () => {
     },
   });
 
+  // Ineligible participants state for warning banner in edit mode
+  const [ineligibleParticipants, setIneligibleParticipants] = useState<Array<{ id: string; nameAr: string; reason: string }>>([]);
+
   // Handler to open Schedule in Edit Mode
   const handleOpenEditSchedule = (sched: Schedule) => {
+    const targetDeptId = sched.departmentId || sched.department?.id || '';
+    const schedStart = sched.startDate ? new Date(sched.startDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const schedEnd = sched.endDate ? new Date(sched.endDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+
     setEditingScheduleId(sched.id);
     setWTitleAr(sched.titleAr || '');
-    setWDepartmentId(sched.departmentId || sched.department?.id || '');
-    setWStartDate(sched.startDate ? new Date(sched.startDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
-    setWEndDate(sched.endDate ? new Date(sched.endDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+    setWDepartmentId(targetDeptId);
+    setWStartDate(schedStart);
+    setWEndDate(schedEnd);
+
     const participantIds = sched.participants?.map((p) => p.traineeProfileId) || [];
-    setWSelectedTrainees(participantIds);
+    const eligibleIds: string[] = [];
+    const ineligible: Array<{ id: string; nameAr: string; reason: string }> = [];
+
+    participantIds.forEach((tId) => {
+      const traineeObj = (trainees || []).find((t: any) => t.id === tId);
+      const name = traineeObj?.person?.nameAr || sched.participants?.find((p) => p.traineeProfileId === tId)?.traineeProfile?.person?.nameAr || 'متدرب';
+
+      if (!traineeObj) {
+        ineligible.push({ id: tId, nameAr: name, reason: 'ملف المتدرب غير مسجل في قائمة المتدربين النشطين بالمستشفى' });
+        return;
+      }
+
+      const sD = new Date(schedStart);
+      const eD = new Date(schedEnd);
+
+      const activeRot = (traineeObj.rotations || []).find(
+        (r: any) => {
+          if (r.departmentId !== targetDeptId || !['active', 'scheduled'].includes(r.status)) return false;
+          if (r.startDate && r.endDate) {
+            const rotStart = new Date(r.startDate);
+            const rotEnd = new Date(r.endDate);
+            // Overlap condition: schedule starts before rotation ends AND schedule ends after rotation starts
+            return sD <= rotEnd && eD >= rotStart;
+          }
+          return true;
+        },
+      );
+
+      if (!activeRot) {
+        const otherRot = (traineeObj.rotations || []).find((r: any) => ['active', 'scheduled'].includes(r.status));
+        if (otherRot && otherRot.departmentId !== targetDeptId) {
+          const otherDeptName = otherRot?.department?.nameAr || 'قسم آخر';
+          ineligible.push({ id: tId, nameAr: name, reason: `المتدرب مسند لروتيشن في «${otherDeptName}» وليس لديه روتيشن مؤهل في هذا القسم` });
+        } else if (otherRot && otherRot.departmentId === targetDeptId) {
+          const rotRange = `${new Date(otherRot.startDate).toLocaleDateString('ar-SA')} - ${new Date(otherRot.endDate).toLocaleDateString('ar-SA')}`;
+          ineligible.push({ id: tId, nameAr: name, reason: `فترة روتيشن المتدرب (${rotRange}) لا تغطي فترة هذا الجدول` });
+        } else {
+          ineligible.push({ id: tId, nameAr: name, reason: 'المتدرب ليس لديه روتيشن نشط مؤهل في هذا القسم لهذه الفترة' });
+        }
+      } else {
+        eligibleIds.push(tId);
+      }
+    });
+
+    setWSelectedTrainees(eligibleIds);
+    setIneligibleParticipants(ineligible);
     setWizardStep(0);
     setWizardConflicts([]);
     setWizardOpen(true);
@@ -752,6 +805,22 @@ export const ScheduleBuilder: React.FC = () => {
 
           {wizardStep === 1 && (
             <Box>
+              {ineligibleParticipants.length > 0 && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                    ⚠️ تنبيه: تم استبعاد متدربين غير مؤهلين لهذا القسم/الفترة ({ineligibleParticipants.length}):
+                  </Typography>
+                  {ineligibleParticipants.map((inelig) => (
+                    <Typography key={inelig.id} variant="caption" display="block" sx={{ color: '#92400e' }}>
+                      • <strong>{inelig.nameAr}</strong>: {inelig.reason}
+                    </Typography>
+                  ))}
+                  <Typography variant="caption" display="block" sx={{ mt: 0.5, fontWeight: 'bold' }}>
+                    تم استبعادهم تلقائياً لمنع إنشاء جلسات متعارضة أو خارج الروتيشن.
+                  </Typography>
+                </Alert>
+              )}
+
               <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 'bold' }}>
                 المتدربون المؤهلون في {departments?.find((d: any) => d.id === wDepartmentId)?.nameAr || 'القسم'}:
               </Typography>
