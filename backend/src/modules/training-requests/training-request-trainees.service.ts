@@ -371,10 +371,11 @@ export class TrainingRequestTraineesService {
   async editTrainee(rowId: string, dto: UpdateTraineeRowDto, user: IAuthenticatedUser) {
     const existing = await this.requireRow(rowId);
 
+    const partialData = this.mapPartialRow(dto);
     const updated = await this.prisma.trainingRequestTrainee.update({
       where: { id: rowId },
       data: {
-        ...this.mapRow(dto),
+        ...partialData,
         clusterInternalNotes: dto.clusterInternalNotes ?? existing.clusterInternalNotes,
         officialComments: dto.officialComments ?? existing.officialComments,
         updatedById: user?.accountId,
@@ -598,10 +599,11 @@ export class TrainingRequestTraineesService {
     const row = await this.requireRow(rowId);
     assertValidTransition('صف المتدرب', row.status, TRAINEE_ROW_STATUS.SUBMITTED, TRAINING_REQUEST_TRAINEE_TRANSITIONS);
 
+    const partialData = this.mapPartialRow(dto);
     const updated = await this.prisma.trainingRequestTrainee.update({
       where: { id: rowId },
       data: {
-        ...this.mapRow(dto),
+        ...partialData,
         status: TRAINEE_ROW_STATUS.SUBMITTED,
         returnReason: null,
         updatedById: user?.accountId,
@@ -827,6 +829,26 @@ export class TrainingRequestTraineesService {
       endDate: row.endDate ? new Date(row.endDate) : undefined,
       priority: row.priority || 'normal',
     };
+  }
+
+  private mapPartialRow(row: UpdateTraineeRowDto) {
+    const data: Record<string, any> = {};
+    if (row.academicNumber !== undefined) data.academicNumber = row.academicNumber;
+    if (row.nationalId !== undefined) data.nationalId = row.nationalId;
+    if (row.nameAr !== undefined) data.nameAr = row.nameAr;
+    if (row.nameEn !== undefined) data.nameEn = row.nameEn;
+    if (row.gender !== undefined) data.gender = row.gender;
+    if (row.collegeOrgId !== undefined) data.collegeOrgId = row.collegeOrgId;
+    if (row.internshipProgram !== undefined) data.internshipProgram = row.internshipProgram;
+    if (row.specialty !== undefined) data.specialty = row.specialty;
+    if (row.gpa !== undefined) data.gpa = new Prisma.Decimal(row.gpa);
+    if (row.mobile !== undefined) data.mobile = row.mobile;
+    if (row.email !== undefined) data.email = row.email;
+    if (row.trainingPeriod !== undefined) data.trainingPeriod = row.trainingPeriod;
+    if (row.startDate !== undefined) data.startDate = row.startDate ? new Date(row.startDate) : null;
+    if (row.endDate !== undefined) data.endDate = row.endDate ? new Date(row.endDate) : null;
+    if (row.priority !== undefined) data.priority = row.priority;
+    return data;
   }
 
   /** لقطة الحقول التي يُتتبع تغيّرها في سجل الإصدارات */

@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
   IsArray,
   IsDateString,
@@ -105,7 +105,7 @@ export class ImportTraineesDto {
   rows!: TraineeRowDto[];
 }
 
-export class UpdateTraineeRowDto extends TraineeRowDto {
+export class UpdateTraineeRowDto extends PartialType(TraineeRowDto) {
   @ApiPropertyOptional({ description: 'ملاحظات داخلية للتجمع' })
   @IsOptional()
   @IsString()
