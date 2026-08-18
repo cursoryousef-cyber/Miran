@@ -587,18 +587,18 @@ export class SchedulesService {
       const nextRevision = (schedule.revisions[0]?.revision || 0) + 1;
       const snapshot = JSON.parse(JSON.stringify(schedule));
 
-      // 2. Create Revision Snapshot
-      await tx.scheduleRevision.create({
-        data: {
-          scheduleId: id,
-          revision: nextRevision,
-          snapshot: snapshot as Prisma.InputJsonValue,
-          oldValues: schedule.revisions[0]?.snapshot || {},
-          newValues: snapshot as Prisma.InputJsonValue,
-          changeReason: changeReason || 'نشر وتحديث الجدول التدريبي',
-          publishedById: user.accountId,
-        },
-      });
+        // 2. Create Revision Snapshot
+        await tx.scheduleRevision.create({
+          data: {
+            scheduleId: id,
+            revision: nextRevision,
+            snapshot: snapshot as Prisma.InputJsonValue,
+            oldValues: (schedule.revisions[0]?.snapshot || {}) as Prisma.InputJsonValue,
+            newValues: snapshot as Prisma.InputJsonValue,
+            changeReason: changeReason || 'نشر وتحديث الجدول التدريبي',
+            publishedById: user.accountId,
+          },
+        });
 
       // 3. Update Schedule Status to published ONLY after sessions/shifts validation
       await tx.trainingSchedule.update({
