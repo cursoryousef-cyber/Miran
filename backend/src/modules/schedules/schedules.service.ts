@@ -472,78 +472,117 @@ export class SchedulesService {
       throw new ForbiddenException('صلاحية النشر النهائي للجدول محصورة لإدارة التدريب بالمستشفى');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const schedule = await tx.trainingSchedule.findFirst({
-        where: { id, organizationId: user.organizationId },
-        include: {
-          sessions: { include: { department: true, trainerProfile: true, traineeProfile: true } },
-          participants: { include: { traineeProfile: { include: { person: true } } } },
-          revisions: { orderBy: { revision: 'desc' }, take: 1 },
-        },
-      });
-
-      if (!schedule) throw new NotFoundException('الجدول التدريبي غير موجود');
-
-      if (!schedule.sessions || schedule.sessions.length === 0) {
-        throw new BadRequestException('لا يمكن نشر جدول تدريبي لا يحتوي على أي جلسات أو مناوبات تدريبية');
-      }
-
-      // Re-check conflicts inside current transaction
-      const proposed: ProposedSession[] = schedule.sessions.map((s) => ({
-        date: new Date(s.date).toISOString().slice(0, 10),
-        startTime: s.startTime,
-        endTime: s.endTime,
-        departmentId: s.departmentId,
-        trainerProfileId: s.trainerProfileId,
-        traineeProfileIds: s.traineeProfileId
-          ? [s.traineeProfileId]
-          : schedule.participants.map((p) => p.traineeProfileId),
-      }));
-
-      const conflictCheck = await this.conflictEngine.validateSessions(user.organizationId, proposed, tx, id);
-      if (conflictCheck.hasConflict) {
-        throw new ConflictException({
-          message: 'لا يمكن نشر الجدول لوجود تعارضات حافلة في أوقات الجلسات أو السعة',
-          conflicts: conflictCheck.conflicts,
+    return this.prisma.$transaction(
+      async (tx) => {
+        const schedule = await tx.trainingSchedule.findFirst({
+          where: { id, organizationId: user.organizationId },
+          include: {
+            sessions: { include: { department: true, trainerProfile: true, traineeProfile: true } },
+            participants: { include: { traineeProfile: { include: { person: true } } } },
+            revisions: { orderBy: { revision: 'desc' }, take: 1 },
+          },
         });
-      }
 
-      // 1. Idempotently generate Shift records for trainees in sessions FIRST
-      let generatedShiftsCount = 0;
-      for (const session of schedule.sessions) {
-        const traineeIds = session.traineeProfileId
-          ? [session.traineeProfileId]
-          : schedule.participants.map((p) => p.traineeProfileId);
+        if (!schedule) throw new NotFoundException('الجدول التدريبي غير موجود');
 
-        for (const tid of traineeIds) {
-          const shiftDate = new Date(session.date);
-          const existingShift = await tx.shift.findFirst({
-            where: {
-              organizationId: user.organizationId,
-              traineeProfileId: tid,
-              departmentId: session.departmentId,
-              date: shiftDate,
-              shiftType: session.shiftType,
-            },
+        if (!schedule.sessions || schedule.sessions.length === 0) {
+          throw new BadRequestException('لا يمكن نشر جدول تدريبي لا يحتوي على أي جلسات أو مناوبات تدريبية');
+        }
+
+        // Re-check conflicts inside current transaction
+        const proposed: ProposedSession[] = schedule.sessions.map((s) => ({
+          date: new Date(s.date).toISOString().slice(0, 10),
+          startTime: s.startTime,
+          endTime: s.endTime,
+          departmentId: s.departmentId,
+          trainerProfileId: s.trainerProfileId,
+          traineeProfileIds: s.traineeProfileId
+            ? [s.traineeProfileId]
+            : schedule.participants.map((p) => p.traineeProfileId),
+        }));
+
+        const conflictCheck = await this.conflictEngine.validateSessions(user.organizationId, proposed, tx, id);
+        if (conflictCheck.hasConflict) {
+          throw new ConflictException({
+            message: 'لا يمكن نشر الجدول لوجود تعارضات حافلة في أوقات الجلسات أو السعة',
+            conflicts: conflictCheck.conflicts,
           });
+        }
 
-          if (!existingShift) {
-            await tx.shift.create({
-              data: {
+        // 1. Idempotently generate Shift records for trainees in sessions via Batch In-Memory Set & createMany
+        const desiredShiftsMap = new Map<string, {
+          organizationId: string;
+          traineeProfileId: string;
+          departmentId: string;
+          date: Date;
+          shiftType: string;
+          startTime: string | null;
+          endTime: string | null;
+          createdById: string;
+        }>();
+
+        const candidateTraineeIds = new Set<string>();
+        const candidateDates = new Set<string>();
+
+        for (const session of schedule.sessions) {
+          const traineeIds = session.traineeProfileId
+            ? [session.traineeProfileId]
+            : schedule.participants.map((p) => p.traineeProfileId);
+
+          for (const tid of traineeIds) {
+            const shiftDate = new Date(session.date);
+            const dateIso = shiftDate.toISOString().slice(0, 10);
+            candidateTraineeIds.add(tid);
+            candidateDates.add(dateIso);
+
+            // Deterministic key: traineeProfileId|departmentId|dateIso|shiftType
+            const key = `${tid}|${session.departmentId}|${dateIso}|${session.shiftType}`;
+            if (!desiredShiftsMap.has(key)) {
+              desiredShiftsMap.set(key, {
                 organizationId: user.organizationId,
                 traineeProfileId: tid,
                 departmentId: session.departmentId,
                 date: shiftDate,
                 shiftType: session.shiftType,
-                startTime: session.startTime,
-                endTime: session.endTime,
+                startTime: session.startTime || null,
+                endTime: session.endTime || null,
                 createdById: user.accountId,
-              },
-            });
-            generatedShiftsCount++;
+              });
+            }
           }
         }
-      }
+
+        // Single bulk query for existing shifts
+        const existingShifts = await tx.shift.findMany({
+          where: {
+            organizationId: user.organizationId,
+            traineeProfileId: { in: Array.from(candidateTraineeIds) },
+            date: { in: Array.from(candidateDates).map((d) => new Date(d)) },
+          },
+          select: {
+            traineeProfileId: true,
+            departmentId: true,
+            date: true,
+            shiftType: true,
+          },
+        });
+
+        const existingShiftKeys = new Set(
+          existingShifts.map(
+            (s) => `${s.traineeProfileId}|${s.departmentId}|${new Date(s.date).toISOString().slice(0, 10)}|${s.shiftType}`,
+          ),
+        );
+
+        // Filter missing shifts that need to be created
+        const shiftsToCreate = Array.from(desiredShiftsMap.entries())
+          .filter(([key]) => !existingShiftKeys.has(key))
+          .map(([, shiftData]) => shiftData);
+
+        if (shiftsToCreate.length > 0) {
+          await tx.shift.createMany({
+            data: shiftsToCreate,
+          });
+        }
 
       const nextRevision = (schedule.revisions[0]?.revision || 0) + 1;
       const snapshot = JSON.parse(JSON.stringify(schedule));
@@ -596,7 +635,12 @@ export class SchedulesService {
       }
 
       return { success: true, revision: nextRevision };
-    });
+      },
+      {
+        maxWait: 10000,
+        timeout: 30000,
+      },
+    );
   }
 
   /**
