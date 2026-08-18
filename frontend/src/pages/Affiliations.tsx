@@ -543,8 +543,12 @@ export const Affiliations: React.FC = () => {
       if (editTraineeForm.gender) payload.gender = editTraineeForm.gender;
       return apiClient.patch(`/training-requests/trainees/${editTraineeRow.id}`, payload);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      if (detailsReq?.id) {
+        await apiClient.post(`/training-requests/${detailsReq.id}/trainees/validate`).catch(() => undefined);
+      }
       queryClient.invalidateQueries({ queryKey: ['training-request-trainees'] });
+      queryClient.invalidateQueries({ queryKey: ['training-requests'] });
       setEditTraineeRow(null);
       setEditTraineeError(null);
     },
@@ -568,6 +572,14 @@ export const Affiliations: React.FC = () => {
 
   const allocateRowMutation = useMutation({
     mutationFn: async ({ row, hospitalId }: { row: any; hospitalId: string }) => {
+      // Step 1: If trainee row is still in 'submitted' state, approve it first
+      // to validate mandatory prerequisites, create TraineeProfile, and advance status to 'cluster_approved'.
+      if (row.status === 'submitted') {
+        await apiClient.post(`/training-requests/trainees/${row.id}/approve`);
+      }
+
+      // Step 2: Now that trainee is in a placeable state ('cluster_approved' or existing placeable state),
+      // allocate them to the chosen hospital.
       return apiClient.post(`/training-requests/trainees/${row.id}/allocations/hospital`, { hospitalId });
     },
     onMutate: ({ row }) => { setRowBusyId(row.id); setRowError(null); },
@@ -575,6 +587,7 @@ export const Affiliations: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['training-request-trainees'] });
       queryClient.invalidateQueries({ queryKey: ['training-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['hospitals-for-allocation'] });
       setSuccessMsg('تم اعتماد المتدرب وتوزيعه وإنشاء حسابه وملفه التدريبي بنجاح.');
     },
     onError: (err: any) => {
