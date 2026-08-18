@@ -154,25 +154,28 @@ export class ConflictEngineService {
         }
       }
 
-      // 2. Trainee Rotation Date Check
+      // 2. Trainee Rotation Date & Department Check
       for (const traineeId of pSession.traineeProfileIds || []) {
         const traineeObj = traineeMap.get(traineeId);
         const traineeRotations = (rotations as any[]).filter((r: any) => r.traineeProfileId === traineeId);
         const sessionD = new Date(sessionDate);
 
         const hasActiveRotation = traineeRotations.some((r) => {
-          return sessionD >= new Date(r.startDate) && sessionD <= new Date(r.endDate);
+          const inDateRange = sessionD >= new Date(r.startDate) && sessionD <= new Date(r.endDate);
+          const inDept = !pSession.departmentId || !r.departmentId || r.departmentId === pSession.departmentId;
+          return inDateRange && inDept;
         });
 
         if (traineeRotations.length > 0 && !hasActiveRotation) {
           result.hasConflict = true;
           result.conflicts.push({
             type: 'outside_rotation',
-            messageAr: `المتدرب ${traineeObj?.person?.nameAr || ''} ليس لديه روتيشن نشط بتاريخ ${sessionDate}`,
+            messageAr: `المتدرب ${traineeObj?.person?.nameAr || ''} ليس لديه روتيشن مؤهل في هذا القسم بتاريخ ${sessionDate}`,
             details: {
               traineeId,
               traineeName: traineeObj?.person?.nameAr,
               date: sessionDate,
+              departmentId: pSession.departmentId,
             },
           });
         }

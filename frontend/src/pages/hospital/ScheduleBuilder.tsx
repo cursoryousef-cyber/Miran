@@ -217,6 +217,43 @@ export const ScheduleBuilder: React.FC = () => {
     },
   });
 
+  // Preview & Pre-conflict Check state in Wizard
+  const [checkingConflicts, setCheckingConflicts] = useState(false);
+  const [wizardConflicts, setWizardConflicts] = useState<any[]>([]);
+
+  // Filter trainees based on selected Department Rotation
+  const departmentTrainees = (trainees || []).filter((t: any) => {
+    if (!wDepartmentId) return true;
+    const traineeRotations: any[] = t.rotations || [];
+    return traineeRotations.some((r: any) =>
+      r.departmentId === wDepartmentId && ['active', 'scheduled'].includes(r.status)
+    );
+  });
+
+  // Filter trainers based on selected Department
+  const departmentTrainers = (trainers || []).filter((tr: any) => {
+    if (!wDepartmentId) return true;
+    // Match either trainer department or department where trainer is assigned
+    return tr.departmentId === wDepartmentId || !tr.departmentId;
+  });
+
+  // When Department is changed, auto-align start/end dates from relevant rotations if possible
+  const handleDepartmentChange = (deptId: string) => {
+    setWDepartmentId(deptId);
+    setWSelectedTrainees([]);
+    // Find eligible trainees for this department
+    const eligible = (trainees || []).filter((t: any) =>
+      (t.rotations || []).some((r: any) => r.departmentId === deptId && ['active', 'scheduled'].includes(r.status))
+    );
+    if (eligible.length > 0) {
+      const activeRot = eligible[0].rotations?.find((r: any) => r.departmentId === deptId && ['active', 'scheduled'].includes(r.status));
+      if (activeRot?.startDate && activeRot?.endDate) {
+        setWStartDate(new Date(activeRot.startDate).toISOString().slice(0, 10));
+        setWEndDate(new Date(activeRot.endDate).toISOString().slice(0, 10));
+      }
+    }
+  };
+
   // Generate Wizard Sessions Preview
   const generateWizardSessions = () => {
     const sessions: any[] = [];
@@ -243,6 +280,39 @@ export const ScheduleBuilder: React.FC = () => {
     return sessions;
   };
 
+  // Check conflicts live when entering Step 3 (Preview)
+  const handleNextStep = async (nextStep: number) => {
+    if (nextStep === 3) {
+      const sessions = generateWizardSessions();
+      if (!sessions || sessions.length === 0) {
+        alert('لم يتم توليد أي جلسات تدريبية وفق التواريخ والأيام المحددة. يرجى مراجعة التواريخ والأيام.');
+        return;
+      }
+      setCheckingConflicts(true);
+      try {
+        const proposedSessions: any[] = sessions.map((s) => ({
+          ...s,
+          traineeProfileIds: wSelectedTrainees,
+        }));
+        const res = await apiClient.post('/schedules/check-conflicts', { sessions: proposedSessions });
+        const data = res.data?.data;
+        if (data?.hasConflict) {
+          setWizardConflicts(data.conflicts || []);
+        } else {
+          setWizardConflicts([]);
+        }
+      } catch (err: any) {
+        const conflicts = err.response?.data?.conflicts;
+        if (conflicts) {
+          setWizardConflicts(conflicts);
+        }
+      } finally {
+        setCheckingConflicts(false);
+      }
+    }
+    setWizardStep(nextStep);
+  };
+
   const handleCreateWizardSubmit = () => {
     if (!wTitleAr) return alert('الرجاء إدخال عنوان الجدول التدريبي');
     if (wSelectedTrainees.length === 0) return alert('الرجاء اختيار متدرب واحد على الأقل');
@@ -250,7 +320,7 @@ export const ScheduleBuilder: React.FC = () => {
 
     const sessions = generateWizardSessions();
     if (!sessions || sessions.length === 0) {
-      return alert('لم يتم توليد أي جلسات تدريبية وفق التواريخ والأيام المحددة. يرجى مراجعة التواريخ والأيام المختارة.');
+      return alert('لم يتم توليد أي جلسات تدريبية وفق التواريخ والأيام المحددة.');
     }
 
     createScheduleMutation.mutate({
@@ -488,7 +558,7 @@ export const ScheduleBuilder: React.FC = () => {
           </Stepper>
 
           {wizardStep === 0 && (
-            <Grid container spacing= {2}>
+            <Grid container spacing={2}>
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -498,11 +568,40 @@ export const ScheduleBuilder: React.FC = () => {
                   placeholder="مثال: جدول تدريب مناوبات قسم الباطنة - الدفعة الأولى"
                 />
               </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>القسم التدريبي المستهدف</InputLabel>
+                  <Select
+                    value={wDepartmentId}
+                    label="القسم التدريبي المستهدف"
+                    onChange={(e) => handleDepartmentChange(e.target.value)}
+                  >
+                    {departments?.map((d: any) => (
+                      <MenuItem key={d.id} value={d.id}>{d.nameAr}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>المدرب المشرف (اختياري)</InputLabel>
+                  <Select
+                    value={wTrainerProfileId}
+                    label="المدرب المشرف (اختياري)"
+                    onChange={(e) => setWTrainerProfileId(e.target.value)}
+                  >
+                    <MenuItem value="">بدون مدرب مخصص</MenuItem>
+                    {departmentTrainers.map((tr: any) => (
+                      <MenuItem key={tr.id} value={tr.id}>{tr.person?.nameAr}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
               <Grid item xs={6}>
                 <TextField
                   fullWidth
                   type="date"
-                  label="تاريخ البداية"
+                  label="تاريخ بداية الجدول"
                   value={wStartDate}
                   onChange={(e) => setWStartDate(e.target.value)}
                   InputLabelProps={{ shrink: true }}
@@ -512,7 +611,7 @@ export const ScheduleBuilder: React.FC = () => {
                 <TextField
                   fullWidth
                   type="date"
-                  label="تاريخ النهاية"
+                  label="تاريخ نهاية الجدول"
                   value={wEndDate}
                   onChange={(e) => setWEndDate(e.target.value)}
                   InputLabelProps={{ shrink: true }}
@@ -524,49 +623,53 @@ export const ScheduleBuilder: React.FC = () => {
           {wizardStep === 1 && (
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 'bold' }}>
-                اختر المتدربين المشمولين في هذا الجدول التدريبي:
+                المتدربون المؤهلون في {departments?.find((d: any) => d.id === wDepartmentId)?.nameAr || 'القسم'}:
               </Typography>
-              {(!trainees || trainees.length === 0) ? (
-                <Alert severity="info" sx={{ my: 2 }}>
-                  لا يوجد متدربون مؤهلون متاحون حالياً لهذا المستشفى. تأكد من قبول المتدربين من تبويب «طلبات التدريب الواردة».
+              {departmentTrainees.length === 0 ? (
+                <Alert severity="warning" sx={{ my: 2 }}>
+                  لا يوجد متدربون مسندون حالياً بروتيشن في هذا القسم. اختر قسماً آخر أو أسند المتدربين للقسم أولاً.
                 </Alert>
               ) : (
                 <Grid container spacing={1}>
-                  {trainees.map((t: any) => (
-                    <Grid item xs={12} sm={6} key={t.id}>
-                      <Box
-                        onClick={() => {
-                          if (wSelectedTrainees.includes(t.id)) {
-                            setWSelectedTrainees(wSelectedTrainees.filter((id) => id !== t.id));
-                          } else {
-                            setWSelectedTrainees([...wSelectedTrainees, t.id]);
-                          }
-                        }}
-                        sx={{
-                          p: 1.5,
-                          border: '1px solid #cbd5e1',
-                          borderRadius: 1.5,
-                          cursor: 'pointer',
-                          bgcolor: wSelectedTrainees.includes(t.id) ? '#eff6ff' : 'white',
-                          borderColor: wSelectedTrainees.includes(t.id) ? '#2563eb' : '#cbd5e1',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                        }}
-                      >
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                            {t.person?.nameAr || 'متدرب'}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            {t.traineeNumber || t.person?.nationalId || ''}
-                            {t.program?.nameAr ? ` — ${t.program.nameAr}` : ''}
-                          </Typography>
+                  {departmentTrainees.map((t: any) => {
+                    const activeRot = t.rotations?.find((r: any) => r.departmentId === wDepartmentId && ['active', 'scheduled'].includes(r.status));
+                    const isSelected = wSelectedTrainees.includes(t.id);
+                    return (
+                      <Grid item xs={12} sm={6} key={t.id}>
+                        <Box
+                          onClick={() => {
+                            if (isSelected) {
+                              setWSelectedTrainees(wSelectedTrainees.filter((id) => id !== t.id));
+                            } else {
+                              setWSelectedTrainees([...wSelectedTrainees, t.id]);
+                            }
+                          }}
+                          sx={{
+                            p: 1.5,
+                            border: '1px solid',
+                            borderRadius: 1.5,
+                            cursor: 'pointer',
+                            bgcolor: isSelected ? '#eff6ff' : 'white',
+                            borderColor: isSelected ? '#2563eb' : '#cbd5e1',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                              {t.person?.nameAr || 'متدرب'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              {t.traineeNumber || t.person?.nationalId || ''}
+                              {activeRot?.startDate && activeRot?.endDate ? ` · روتيشن: ${new Date(activeRot.startDate).toLocaleDateString('ar-SA')} - ${new Date(activeRot.endDate).toLocaleDateString('ar-SA')}` : ''}
+                            </Typography>
+                          </Box>
+                          {isSelected && <CheckCircle size={18} color="#2563eb" />}
                         </Box>
-                        {wSelectedTrainees.includes(t.id) && <CheckCircle size={18} color="#2563eb" />}
-                      </Box>
-                    </Grid>
-                  ))}
+                      </Grid>
+                    );
+                  })}
                 </Grid>
               )}
             </Box>
@@ -574,27 +677,6 @@ export const ScheduleBuilder: React.FC = () => {
 
           {wizardStep === 2 && (
             <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>القسم التدريبي</InputLabel>
-                  <Select value={wDepartmentId} label="القسم التدريبي" onChange={(e) => setWDepartmentId(e.target.value)}>
-                    {departments?.map((d: any) => (
-                      <MenuItem key={d.id} value={d.id}>{d.nameAr}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>المدرب المشرف (اختياري)</InputLabel>
-                  <Select value={wTrainerProfileId} label="المدرب المشرف (اختياري)" onChange={(e) => setWTrainerProfileId(e.target.value)}>
-                    <MenuItem value="">بدون مدرب مخصص</MenuItem>
-                    {trainers?.map((tr: any) => (
-                      <MenuItem key={tr.id} value={tr.id}>{tr.person?.nameAr}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
               <Grid item xs={6}>
                 <TextField
                   fullWidth
@@ -615,18 +697,70 @@ export const ScheduleBuilder: React.FC = () => {
                   InputLabelProps={{ shrink: true }}
                 />
               </Grid>
+              <Grid item xs={6}>
+                <FormControl fullWidth>
+                  <InputLabel>نوع الجلسة</InputLabel>
+                  <Select value={wSessionType} label="نوع الجلسة" onChange={(e) => setWSessionType(e.target.value)}>
+                    <MenuItem value="clinical_round">مرور سريري (Clinical Round)</MenuItem>
+                    <MenuItem value="emergency_shift">مناوبة طوارئ (Emergency Shift)</MenuItem>
+                    <MenuItem value="lecture">محاضرة / سيمنار (Lecture)</MenuItem>
+                    <MenuItem value="workshop">ورشة عمل مهارية (Workshop)</MenuItem>
+                    <MenuItem value="call">مناوبة واستدعاء On-Call</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={6}>
+                <FormControl fullWidth>
+                  <InputLabel>فترة الشيفت</InputLabel>
+                  <Select value={wShiftType} label="فترة الشيفت" onChange={(e) => setWShiftType(e.target.value)}>
+                    <MenuItem value="morning">صباحي (Morning)</MenuItem>
+                    <MenuItem value="evening">مسائي (Evening)</MenuItem>
+                    <MenuItem value="night">ليلي (Night)</MenuItem>
+                    <MenuItem value="24h">مناوبة كاملة 24 ساعة</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
             </Grid>
           )}
 
           {wizardStep === 3 && (
-            <Box sx={{ textAlign: 'center', py: 2 }}>
-              <CheckCircle size={48} color="#059669" style={{ marginBottom: 12 }} />
-              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
-                جاهز لإنشاء ورسم مسودة الجدول التدريبي
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                سيتم إجراء فحص التعارضات الآلي للتأكد من عدم وجود تعارض في وقت المتدربين أو المدربين أو سعة القسم.
-              </Typography>
+            <Box sx={{ py: 1 }}>
+              {checkingConflicts ? (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                  <CircularProgress size={36} sx={{ color: '#2563eb', mb: 2 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    جارٍ فحص التعارضات الزمانية والمكانية وسعة القسم عبر Conflict Engine...
+                  </Typography>
+                </Box>
+              ) : wizardConflicts.length > 0 ? (
+                <Box>
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                      تم اكتشاف {wizardConflicts.length} تعارض(ات) يمنع حفظ الجدول:
+                    </Typography>
+                    <Box component="ul" sx={{ pl: 2, mb: 0 }}>
+                      {wizardConflicts.map((c: any, idx: number) => (
+                        <li key={idx} style={{ fontSize: 13, marginTop: 4 }}>
+                          {c.messageAr || c.type} ({c.details?.date || ''})
+                        </li>
+                      ))}
+                    </Box>
+                  </Alert>
+                  <Typography variant="caption" color="text.secondary">
+                    يرجى الرجوع للخطوات السابقة وتعديل التواريخ أو الأوقات لحل التعارض.
+                  </Typography>
+                </Box>
+              ) : (
+                <Box sx={{ textAlign: 'center', py: 2 }}>
+                  <CheckCircle size={48} color="#059669" style={{ marginBottom: 12 }} />
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#059669' }}>
+                    تم التحقق بنجاح — لا توجد أي تعارضات
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    سيتم إنشاء {generateWizardSessions().length} جلسة تدريبية لـ {wSelectedTrainees.length} متدرب في {departments?.find((d: any) => d.id === wDepartmentId)?.nameAr}.
+                  </Typography>
+                </Box>
+              )}
             </Box>
           )}
         </DialogContent>
@@ -637,7 +771,11 @@ export const ScheduleBuilder: React.FC = () => {
           </Button>
 
           {wizardStep < 3 ? (
-            <Button variant="contained" onClick={() => setWizardStep(wizardStep + 1)}>
+            <Button
+              variant="contained"
+              onClick={() => handleNextStep(wizardStep + 1)}
+              disabled={(wizardStep === 0 && !wDepartmentId) || (wizardStep === 1 && wSelectedTrainees.length === 0)}
+            >
               التالي
             </Button>
           ) : (
@@ -645,9 +783,9 @@ export const ScheduleBuilder: React.FC = () => {
               variant="contained"
               color="success"
               onClick={handleCreateWizardSubmit}
-              disabled={createScheduleMutation.isPending}
+              disabled={createScheduleMutation.isPending || checkingConflicts || wizardConflicts.length > 0}
             >
-              {createScheduleMutation.isPending ? <CircularProgress size={20} /> : 'إنشاء مسودة الجدول'}
+              {createScheduleMutation.isPending ? <CircularProgress size={20} /> : 'حفظ الجدول التدريبي'}
             </Button>
           )}
         </DialogActions>
