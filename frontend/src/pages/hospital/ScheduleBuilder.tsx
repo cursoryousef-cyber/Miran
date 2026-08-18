@@ -232,6 +232,23 @@ export const ScheduleBuilder: React.FC = () => {
   // Ineligible participants state for warning banner in edit mode
   const [ineligibleParticipants, setIneligibleParticipants] = useState<Array<{ id: string; nameAr: string; reason: string }>>([]);
 
+  // Handler to open Schedule Wizard in CREATE Mode (Clean state)
+  const handleOpenCreateSchedule = () => {
+    setEditingScheduleId(null);
+    setWTitleAr('');
+    setWDepartmentId('');
+    setWTrainerProfileId('');
+    setWStartDate(new Date().toISOString().slice(0, 10));
+    setWEndDate(new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10));
+    setWSelectedTrainees([]);
+    setIneligibleParticipants([]);
+    setTraineeScheduleConfig({});
+    setCustomSessions([]);
+    setWizardStep(0);
+    setWizardConflicts([]);
+    setWizardOpen(true);
+  };
+
   // Handler to open Schedule in Edit Mode
   const handleOpenEditSchedule = (sched: Schedule) => {
     const targetDeptId = sched.departmentId || sched.department?.id || '';
@@ -508,11 +525,11 @@ export const ScheduleBuilder: React.FC = () => {
           <Button
             variant="contained"
             color="primary"
-            startIcon={<Layers size={18} />}
-            onClick={() => setWizardOpen(true)}
-            sx={{ background: 'linear-gradient(135deg, #2563eb, #1d4ed8)' }}
+            startIcon={<Plus size={18} />}
+            onClick={handleOpenCreateSchedule}
+            sx={{ background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', fontWeight: 'bold' }}
           >
-            معالج معمارية الجدول (Schedule Wizard)
+            إنشاء جدول جديد (Schedule Wizard)
           </Button>
         </Box>
       </Box>
@@ -731,7 +748,17 @@ export const ScheduleBuilder: React.FC = () => {
 
       {/* Schedule Wizard Modal */}
       <Dialog open={wizardOpen} onClose={() => setWizardOpen(false)} maxWidth="md" fullWidth dir="rtl">
-        <DialogTitle sx={{ fontWeight: 'bold' }}>معالج إنشاء وتوزيع الجدول التدريبي (Schedule Wizard)</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+          {editingScheduleId ? (
+            <>
+              <Edit3 size={20} color="#2563eb" /> تعديل الجدول التدريبي: {wTitleAr || 'الحالي'}
+            </>
+          ) : (
+            <>
+              <Plus size={20} color="#16a34a" /> إنشاء جدول تدريبي جديد (New Schedule Wizard)
+            </>
+          )}
+        </DialogTitle>
         <DialogContent dividers>
           <Stepper activeStep={wizardStep} sx={{ mb: 3 }}>
             <Step><StepLabel>البيانات العامة</StepLabel></Step>
@@ -1124,9 +1151,20 @@ export const ScheduleBuilder: React.FC = () => {
               variant="contained"
               color="success"
               onClick={handleCreateWizardSubmit}
-              disabled={createScheduleMutation.isPending || checkingConflicts || wizardConflicts.length > 0}
+              disabled={
+                createScheduleMutation.isPending ||
+                updateScheduleMutation.isPending ||
+                checkingConflicts ||
+                wizardConflicts.length > 0
+              }
             >
-              {createScheduleMutation.isPending ? <CircularProgress size={20} /> : 'حفظ الجدول التدريبي'}
+              {createScheduleMutation.isPending || updateScheduleMutation.isPending ? (
+                <CircularProgress size={20} />
+              ) : editingScheduleId ? (
+                'حفظ التعديلات على الجدول'
+              ) : (
+                'إنشاء وحفظ الجدول الجديد'
+              )}
             </Button>
           )}
         </DialogActions>
