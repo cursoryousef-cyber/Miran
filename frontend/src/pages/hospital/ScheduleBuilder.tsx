@@ -217,6 +217,20 @@ export const ScheduleBuilder: React.FC = () => {
     },
   });
 
+  // Available Time Slots definition
+  const TIME_SLOTS = [
+    { label: '08:00 - 10:00', start: '08:00', end: '10:00' },
+    { label: '10:00 - 12:00', start: '10:00', end: '12:00' },
+    { label: '12:00 - 14:00', start: '12:00', end: '14:00' },
+    { label: '14:00 - 16:00', start: '14:00', end: '16:00' },
+    { label: '16:00 - 20:00', start: '16:00', end: '20:00' },
+  ];
+
+  // Per-trainee days and slots configuration for Smart Availability Distribution
+  const [traineeScheduleConfig, setTraineeScheduleConfig] = useState<Record<string, { days: number[]; slots: string[]; targetHours?: number }>>({});
+  const [distributionMode, setDistributionMode] = useState<'balanced' | 'custom'>('balanced');
+  const [customSessions, setCustomSessions] = useState<any[]>([]);
+
   // Preview & Pre-conflict Check state in Wizard
   const [checkingConflicts, setCheckingConflicts] = useState(false);
   const [wizardConflicts, setWizardConflicts] = useState<any[]>([]);
@@ -233,7 +247,6 @@ export const ScheduleBuilder: React.FC = () => {
   // Filter trainers based on selected Department
   const departmentTrainers = (trainers || []).filter((tr: any) => {
     if (!wDepartmentId) return true;
-    // Match either trainer department or department where trainer is assigned
     return tr.departmentId === wDepartmentId || !tr.departmentId;
   });
 
@@ -241,7 +254,8 @@ export const ScheduleBuilder: React.FC = () => {
   const handleDepartmentChange = (deptId: string) => {
     setWDepartmentId(deptId);
     setWSelectedTrainees([]);
-    // Find eligible trainees for this department
+    setTraineeScheduleConfig({});
+    setCustomSessions([]);
     const eligible = (trainees || []).filter((t: any) =>
       (t.rotations || []).some((r: any) => r.departmentId === deptId && ['active', 'scheduled'].includes(r.status))
     );
@@ -254,36 +268,60 @@ export const ScheduleBuilder: React.FC = () => {
     }
   };
 
-  // Generate Wizard Sessions Preview
-  const generateWizardSessions = () => {
-    const sessions: any[] = [];
+  // Smart Availability-Driven Session Generator:
+  // Balances sessions across available slots without forcing all trainees into identical daily times
+  const generateSmartSessions = () => {
+    if (customSessions.length > 0) return customSessions;
+
+    const generated: any[] = [];
     const start = new Date(wStartDate);
     const end = new Date(wEndDate);
-    const curr = new Date(start);
 
-    while (curr <= end) {
-      const dayOfWeek = curr.getDay(); // 0: Sun, 6: Sat
-      if (wDaysOfWeek.includes(dayOfWeek)) {
-        const dateStr = curr.toISOString().slice(0, 10);
-        sessions.push({
-          date: dateStr,
-          startTime: wStartTime,
-          endTime: wEndTime,
-          departmentId: wDepartmentId,
-          trainerProfileId: wTrainerProfileId || undefined,
-          sessionType: wSessionType,
-          shiftType: wShiftType,
-        });
+    // If trainees are selected, distribute based on their specific rotation ranges and configured days
+    wSelectedTrainees.forEach((traineeId, idx) => {
+      const traineeObj = trainees?.find((t: any) => t.id === traineeId);
+      const rot = traineeObj?.rotations?.find((r: any) => r.departmentId === wDepartmentId && ['active', 'scheduled'].includes(r.status));
+
+      const tStart = rot?.startDate ? new Date(Math.max(new Date(rot.startDate).getTime(), start.getTime())) : start;
+      const tEnd = rot?.endDate ? new Date(Math.min(new Date(rot.endDate).getTime(), end.getTime())) : end;
+
+      // Smart default: alternate days between trainees if balanced mode
+      // Trainee 0: Sun(0), Tue(2), Thu(4)
+      // Trainee 1: Mon(1), Wed(3)
+      const config = traineeScheduleConfig[traineeId];
+      const assignedDays = config?.days || (distributionMode === 'balanced'
+        ? (idx % 2 === 0 ? [0, 2, 4] : [1, 3])
+        : wDaysOfWeek);
+
+      const assignedSlot = config?.slots?.[0] || '10:00 - 12:00';
+      const [sTime, eTime] = assignedSlot.split(' - ');
+
+      const curr = new Date(tStart);
+      while (curr <= tEnd) {
+        const dayOfWeek = curr.getDay();
+        if (assignedDays.includes(dayOfWeek)) {
+          generated.push({
+            date: curr.toISOString().slice(0, 10),
+            startTime: sTime || wStartTime,
+            endTime: eTime || wEndTime,
+            departmentId: wDepartmentId,
+            trainerProfileId: rot?.trainerProfileId || wTrainerProfileId || undefined,
+            traineeProfileId: traineeId,
+            sessionType: wSessionType,
+            shiftType: wShiftType,
+          });
+        }
+        curr.setDate(curr.getDate() + 1);
       }
-      curr.setDate(curr.getDate() + 1);
-    }
-    return sessions;
+    });
+
+    return generated;
   };
 
-  // Check conflicts live when entering Step 3 (Preview)
+  // Check conflicts live when entering Step 3 (Review & Preview)
   const handleNextStep = async (nextStep: number) => {
     if (nextStep === 3) {
-      const sessions = generateWizardSessions();
+      const sessions = generateSmartSessions();
       if (!sessions || sessions.length === 0) {
         alert('لم يتم توليد أي جلسات تدريبية وفق التواريخ والأيام المحددة. يرجى مراجعة التواريخ والأيام.');
         return;
@@ -292,7 +330,7 @@ export const ScheduleBuilder: React.FC = () => {
       try {
         const proposedSessions: any[] = sessions.map((s) => ({
           ...s,
-          traineeProfileIds: wSelectedTrainees,
+          traineeProfileIds: s.traineeProfileId ? [s.traineeProfileId] : wSelectedTrainees,
         }));
         const res = await apiClient.post('/schedules/check-conflicts', { sessions: proposedSessions });
         const data = res.data?.data;
@@ -318,7 +356,7 @@ export const ScheduleBuilder: React.FC = () => {
     if (wSelectedTrainees.length === 0) return alert('الرجاء اختيار متدرب واحد على الأقل');
     if (!wDepartmentId) return alert('الرجاء اختيار القسم التدريبي الرئيسي');
 
-    const sessions = generateWizardSessions();
+    const sessions = generateSmartSessions();
     if (!sessions || sessions.length === 0) {
       return alert('لم يتم توليد أي جلسات تدريبية وفق التواريخ والأيام المحددة.');
     }
@@ -676,51 +714,141 @@ export const ScheduleBuilder: React.FC = () => {
           )}
 
           {wizardStep === 2 && (
-            <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <TextField
-                  fullWidth
-                  type="time"
-                  label="وقت بداية الجلسة"
-                  value={wStartTime}
-                  onChange={(e) => setWStartTime(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                />
+            <Box>
+              {/* Distribution Mode & Strategy */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, p: 1.5, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                <Box>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                    استراتيجية توزيع الجلسات والمناوبات:
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    توزيع متوازن على أيام متفرقة لمنع تكدس المتدربين وتجنب التعارضات
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button
+                    size="small"
+                    variant={distributionMode === 'balanced' ? 'contained' : 'outlined'}
+                    onClick={() => setDistributionMode('balanced')}
+                  >
+                    توزيع ذكي متوازن (أيام متفرقة)
+                  </Button>
+                  <Button
+                    size="small"
+                    variant={distributionMode === 'custom' ? 'contained' : 'outlined'}
+                    onClick={() => setDistributionMode('custom')}
+                  >
+                    مخصص للجميع
+                  </Button>
+                </Box>
+              </Box>
+
+              {/* Per-Trainee Slot Configuration Card */}
+              <Box sx={{ mb: 2.5 }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  توزيع أيام وأوقات الحضور لكل متدرب:
+                </Typography>
+                <Grid container spacing={1.5}>
+                  {wSelectedTrainees.map((traineeId, idx) => {
+                    const tObj = trainees?.find((t: any) => t.id === traineeId);
+                    const config = traineeScheduleConfig[traineeId] || {
+                      days: distributionMode === 'balanced' ? (idx % 2 === 0 ? [0, 2, 4] : [1, 3]) : wDaysOfWeek,
+                      slots: ['10:00 - 12:00'],
+                    };
+
+                    return (
+                      <Grid item xs={12} key={traineeId}>
+                        <Card variant="outlined" sx={{ p: 1.5, bgcolor: '#ffffff', borderRadius: 1.5 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#1e293b' }}>
+                              👤 {tObj?.person?.nameAr || 'متدرب'}
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 0.5 }}>
+                              {['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس'].map((dayName, dIdx) => {
+                                const isDayActive = config.days.includes(dIdx);
+                                return (
+                                  <Chip
+                                    key={dIdx}
+                                    label={dayName}
+                                    size="small"
+                                    color={isDayActive ? 'primary' : 'default'}
+                                    variant={isDayActive ? 'filled' : 'outlined'}
+                                    onClick={() => {
+                                      const nextDays = isDayActive
+                                        ? config.days.filter((d) => d !== dIdx)
+                                        : [...config.days, dIdx];
+                                      setTraineeScheduleConfig({
+                                        ...traineeScheduleConfig,
+                                        [traineeId]: { ...config, days: nextDays },
+                                      });
+                                    }}
+                                    sx={{ cursor: 'pointer', fontWeight: isDayActive ? 'bold' : 'normal' }}
+                                  />
+                                );
+                              })}
+                            </Box>
+                          </Box>
+
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ minWidth: 80 }}>
+                              الفترة الزمنية:
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                              {TIME_SLOTS.map((slot) => {
+                                const isSlotSelected = (config.slots || []).includes(slot.label);
+                                return (
+                                  <Chip
+                                    key={slot.label}
+                                    label={slot.label}
+                                    size="small"
+                                    color={isSlotSelected ? 'success' : 'default'}
+                                    variant={isSlotSelected ? 'filled' : 'outlined'}
+                                    onClick={() => {
+                                      setTraineeScheduleConfig({
+                                        ...traineeScheduleConfig,
+                                        [traineeId]: { ...config, slots: [slot.label] },
+                                      });
+                                    }}
+                                    sx={{ cursor: 'pointer' }}
+                                  />
+                                );
+                              })}
+                            </Box>
+                          </Box>
+                        </Card>
+                      </Grid>
+                    );
+                  })}
+                </Grid>
+              </Box>
+
+              {/* Session General Settings */}
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>نوع الجلسة</InputLabel>
+                    <Select value={wSessionType} label="نوع الجلسة" onChange={(e) => setWSessionType(e.target.value)}>
+                      <MenuItem value="clinical_round">مرور سريري (Clinical Round)</MenuItem>
+                      <MenuItem value="emergency_shift">مناوبة طوارئ (Emergency Shift)</MenuItem>
+                      <MenuItem value="lecture">محاضرة / سيمنار (Lecture)</MenuItem>
+                      <MenuItem value="workshop">ورشة عمل مهارية (Workshop)</MenuItem>
+                      <MenuItem value="call">مناوبة واستدعاء On-Call</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={6}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>فترة الشيفت</InputLabel>
+                    <Select value={wShiftType} label="فترة الشيفت" onChange={(e) => setWShiftType(e.target.value)}>
+                      <MenuItem value="morning">صباحي (Morning)</MenuItem>
+                      <MenuItem value="evening">مسائي (Evening)</MenuItem>
+                      <MenuItem value="night">ليلي (Night)</MenuItem>
+                      <MenuItem value="24h">مناوبة كاملة 24 ساعة</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
               </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  fullWidth
-                  type="time"
-                  label="وقت نهاية الجلسة"
-                  value={wEndTime}
-                  onChange={(e) => setWEndTime(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>نوع الجلسة</InputLabel>
-                  <Select value={wSessionType} label="نوع الجلسة" onChange={(e) => setWSessionType(e.target.value)}>
-                    <MenuItem value="clinical_round">مرور سريري (Clinical Round)</MenuItem>
-                    <MenuItem value="emergency_shift">مناوبة طوارئ (Emergency Shift)</MenuItem>
-                    <MenuItem value="lecture">محاضرة / سيمنار (Lecture)</MenuItem>
-                    <MenuItem value="workshop">ورشة عمل مهارية (Workshop)</MenuItem>
-                    <MenuItem value="call">مناوبة واستدعاء On-Call</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>فترة الشيفت</InputLabel>
-                  <Select value={wShiftType} label="فترة الشيفت" onChange={(e) => setWShiftType(e.target.value)}>
-                    <MenuItem value="morning">صباحي (Morning)</MenuItem>
-                    <MenuItem value="evening">مسائي (Evening)</MenuItem>
-                    <MenuItem value="night">ليلي (Night)</MenuItem>
-                    <MenuItem value="24h">مناوبة كاملة 24 ساعة</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-            </Grid>
+            </Box>
           )}
 
           {wizardStep === 3 && (
@@ -751,14 +879,66 @@ export const ScheduleBuilder: React.FC = () => {
                   </Typography>
                 </Box>
               ) : (
-                <Box sx={{ textAlign: 'center', py: 2 }}>
-                  <CheckCircle size={48} color="#059669" style={{ marginBottom: 12 }} />
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#059669' }}>
-                    تم التحقق بنجاح — لا توجد أي تعارضات
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    سيتم إنشاء {generateWizardSessions().length} جلسة تدريبية لـ {wSelectedTrainees.length} متدرب في {departments?.find((d: any) => d.id === wDepartmentId)?.nameAr}.
-                  </Typography>
+                <Box sx={{ py: 1 }}>
+                  <Box sx={{ textAlign: 'center', mb: 2 }}>
+                    <CheckCircle size={44} color="#059669" style={{ marginBottom: 8 }} />
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#059669' }}>
+                      تم فحص التعارضات بنجاح — الجدول جاهز للاعتماد
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      تم توزيع الجلسات بطريقة متوازنة ومتباعدة على أيام متفرقة لكل متدرب.
+                    </Typography>
+                  </Box>
+
+                  {/* Summary Metric Cards */}
+                  <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                    <Grid item xs={3}>
+                      <Card variant="outlined" sx={{ p: 1, textAlign: 'center', bgcolor: '#f8fafc' }}>
+                        <Typography variant="caption" color="text.secondary">القسم</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{departments?.find((d: any) => d.id === wDepartmentId)?.nameAr || '—'}</Typography>
+                      </Card>
+                    </Grid>
+                    <Grid item xs={3}>
+                      <Card variant="outlined" sx={{ p: 1, textAlign: 'center', bgcolor: '#f8fafc' }}>
+                        <Typography variant="caption" color="text.secondary">عدد المتدربين</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#2563eb' }}>{wSelectedTrainees.length} متدربين</Typography>
+                      </Card>
+                    </Grid>
+                    <Grid item xs={3}>
+                      <Card variant="outlined" sx={{ p: 1, textAlign: 'center', bgcolor: '#f8fafc' }}>
+                        <Typography variant="caption" color="text.secondary">إجمالي الجلسات</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#059669' }}>{generateSmartSessions().length} جلسة</Typography>
+                      </Card>
+                    </Grid>
+                    <Grid item xs={3}>
+                      <Card variant="outlined" sx={{ p: 1, textAlign: 'center', bgcolor: '#f8fafc' }}>
+                        <Typography variant="caption" color="text.secondary">متوسط الساعات/متدرب</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#7c3aed' }}>
+                          {wSelectedTrainees.length ? Math.round((generateSmartSessions().length * 2) / wSelectedTrainees.length) : 0} ساعة
+                        </Typography>
+                      </Card>
+                    </Grid>
+                  </Grid>
+
+                  {/* Per-Trainee Breakdown Preview */}
+                  <Box sx={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 1.5, p: 1 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#475569', mb: 0.5, display: 'block' }}>
+                      تفاصيل توزيع جلسات المتدربين:
+                    </Typography>
+                    {wSelectedTrainees.map((traineeId) => {
+                      const tObj = trainees?.find((t: any) => t.id === traineeId);
+                      const tSessions = generateSmartSessions().filter((s) => s.traineeProfileId === traineeId);
+                      return (
+                        <Box key={traineeId} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.5, borderBottom: '1px solid #f1f5f9' }}>
+                          <Typography variant="body2">👤 {tObj?.person?.nameAr || 'متدرب'}</Typography>
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Chip size="small" label={`${tSessions.length} جلسات`} color="primary" variant="outlined" />
+                            <Chip size="small" label={`${tSessions.length * 2} ساعة`} color="success" variant="outlined" />
+                          </Box>
+                        </Box>
+                      );
+                    })}
+                  </Box>
                 </Box>
               )}
             </Box>

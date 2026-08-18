@@ -181,56 +181,76 @@ export class ConflictEngineService {
         }
       }
 
-      // 3. Trainer Overlap Check
-      if (pSession.trainerProfileId) {
-        const trainerOverlaps = existingSessions.filter((es) => {
-          const esDateStr = new Date(es.date).toISOString().slice(0, 10);
-          if (esDateStr !== sessionDate) return false;
-          if (es.trainerProfileId !== pSession.trainerProfileId) return false;
-          return isTimeOverlapping(pSession.startTime, pSession.endTime, es.startTime, es.endTime);
-        });
-
-        if (trainerOverlaps.length > 0) {
-          result.hasConflict = true;
-          result.conflicts.push({
-            type: 'trainer_overlap',
-            messageAr: `المدرب ${pTrainer?.person?.nameAr || ''} لديه جلسة متداخلة بتاريخ ${sessionDate} بين ${pSession.startTime} - ${pSession.endTime}`,
-            details: {
-              trainerId: pSession.trainerProfileId,
-              trainerName: pTrainer?.person?.nameAr,
-              date: sessionDate,
-              time: `${pSession.startTime} - ${pSession.endTime}`,
-            },
+        // 3. Trainer Overlap Check (Against existing DB sessions + other proposed sessions in batch)
+        if (pSession.trainerProfileId) {
+          const trainerDbOverlaps = existingSessions.filter((es) => {
+            const esDateStr = new Date(es.date).toISOString().slice(0, 10);
+            if (esDateStr !== sessionDate) return false;
+            if (es.trainerProfileId !== pSession.trainerProfileId) return false;
+            return isTimeOverlapping(pSession.startTime, pSession.endTime, es.startTime, es.endTime);
           });
-        }
-      }
 
-      // 4. Trainee Overlap Check
-      for (const traineeId of pSession.traineeProfileIds || []) {
-        const traineeObj = traineeMap.get(traineeId);
-        const traineeOverlaps = existingSessions.filter((es) => {
-          const esDateStr = new Date(es.date).toISOString().slice(0, 10);
-          if (esDateStr !== sessionDate) return false;
-          const isTraineeInSession = es.traineeProfileId === traineeId ||
-            es.schedule?.participants?.some((p) => p.traineeProfileId === traineeId);
-          if (!isTraineeInSession) return false;
-          return isTimeOverlapping(pSession.startTime, pSession.endTime, es.startTime, es.endTime);
-        });
-
-        if (traineeOverlaps.length > 0) {
-          result.hasConflict = true;
-          result.conflicts.push({
-            type: 'trainee_overlap',
-            messageAr: `المتدرب ${traineeObj?.person?.nameAr || ''} لديه جلسة متداخلة بتاريخ ${sessionDate} (${pSession.startTime} - ${pSession.endTime})`,
-            details: {
-              traineeId,
-              traineeName: traineeObj?.person?.nameAr,
-              date: sessionDate,
-              time: `${pSession.startTime} - ${pSession.endTime}`,
-            },
+          // Also check other proposed sessions in the same batch for trainer overlap
+          const trainerBatchOverlaps = sessions.filter((other, oIdx) => {
+            if (other === pSession) return false;
+            if (other.date !== sessionDate) return false;
+            if (other.trainerProfileId !== pSession.trainerProfileId) return false;
+            // Only report once (e.g. earlier index)
+            if (sessions.indexOf(pSession) > oIdx) return false;
+            return isTimeOverlapping(pSession.startTime, pSession.endTime, other.startTime, other.endTime);
           });
+
+          if (trainerDbOverlaps.length > 0 || trainerBatchOverlaps.length > 0) {
+            result.hasConflict = true;
+            result.conflicts.push({
+              type: 'trainer_overlap',
+              messageAr: `المدرب ${pTrainer?.person?.nameAr || ''} لديه جلسة متداخلة بتاريخ ${sessionDate} بين ${pSession.startTime} - ${pSession.endTime}`,
+              details: {
+                trainerId: pSession.trainerProfileId,
+                trainerName: pTrainer?.person?.nameAr,
+                date: sessionDate,
+                time: `${pSession.startTime} - ${pSession.endTime}`,
+              },
+            });
+          }
         }
-      }
+
+        // 4. Trainee Overlap Check (Against existing DB sessions + other proposed sessions in batch)
+        for (const traineeId of pSession.traineeProfileIds || []) {
+          const traineeObj = traineeMap.get(traineeId);
+          const traineeDbOverlaps = existingSessions.filter((es) => {
+            const esDateStr = new Date(es.date).toISOString().slice(0, 10);
+            if (esDateStr !== sessionDate) return false;
+            const isTraineeInSession = es.traineeProfileId
+              ? es.traineeProfileId === traineeId
+              : es.schedule?.participants?.some((p) => p.traineeProfileId === traineeId);
+            if (!isTraineeInSession) return false;
+            return isTimeOverlapping(pSession.startTime, pSession.endTime, es.startTime, es.endTime);
+          });
+
+          const traineeBatchOverlaps = sessions.filter((other, oIdx) => {
+            if (other === pSession) return false;
+            if (other.date !== sessionDate) return false;
+            const hasTrainee = (other.traineeProfileIds || []).includes(traineeId);
+            if (!hasTrainee) return false;
+            if (sessions.indexOf(pSession) > oIdx) return false;
+            return isTimeOverlapping(pSession.startTime, pSession.endTime, other.startTime, other.endTime);
+          });
+
+          if (traineeDbOverlaps.length > 0 || traineeBatchOverlaps.length > 0) {
+            result.hasConflict = true;
+            result.conflicts.push({
+              type: 'trainee_overlap',
+              messageAr: `المتدرب ${traineeObj?.person?.nameAr || ''} لديه جلسة متداخلة بتاريخ ${sessionDate} (${pSession.startTime} - ${pSession.endTime})`,
+              details: {
+                traineeId,
+                traineeName: traineeObj?.person?.nameAr,
+                date: sessionDate,
+                time: `${pSession.startTime} - ${pSession.endTime}`,
+              },
+            });
+          }
+        }
 
       // 5. Department Capacity Check
       if (pDepartment) {
