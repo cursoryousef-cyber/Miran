@@ -590,11 +590,9 @@ export class TraineesController {
             OR: [
               filter,
               {
-                trainingRequestRows: {
-                  some: {
-                    assignedHospitalId: { in: scope.visibleOrgIds },
-                    status: { notIn: ['rejected', 'merged', 'split'] },
-                  },
+                trainingRequestRow: {
+                  assignedHospitalId: { in: scope.visibleOrgIds },
+                  status: { notIn: ['rejected', 'merged', 'split'] },
                 },
               },
             ],

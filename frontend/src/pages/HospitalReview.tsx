@@ -184,7 +184,7 @@ export const HospitalReview: React.FC = () => {
   // Stats are computed over actionable rows only — upstream-pending rows are shown separately.
   const pendingRows = rows.filter((r: any) => ['allocated', 'hospital_review'].includes(r.status)).length;
   const onHold = rows.filter((r: any) => r.status === 'on_hold').length;
-  const acceptedRows = rows.filter((r: any) => ['accepted', 'active', 'hospital_administrator_accepted', 'supervisor_accepted', 'training_supervisor_accepted', 'trainer_accepted'].includes(r.status)).length;
+  const acceptedRows = rows.filter((r: any) => ['hospital_accepted', 'accepted', 'active', 'hospital_administrator_accepted', 'supervisor_accepted', 'training_supervisor_accepted', 'trainer_accepted'].includes(r.status)).length;
   const rejectedRows = rows.filter((r: any) => ['rejected', 'returned', 'hospital_returned_to_cluster'].includes(r.status)).length;
   const missingDocs = rows.filter((r: any) => (r.requiredDocuments?.length ?? 0) > 0).length;
 

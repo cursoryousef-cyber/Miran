@@ -126,8 +126,8 @@ export const HospitalDashboard: React.FC = () => {
 
       {/* 2. KPI GRID */}
       <KpiGrid>
-        <KpiCard label="أطباء الامتياز النشطون" value={timeline?.traineeCount ?? activeTraineesList.length} icon={Users} tone="primary" loading={tlLoading} onClick={() => navigate('/hospital?tab=trainees')} />
-        <KpiCard label="الروتيشنات السريرية النشطة" value={activeRotations} icon={Activity} tone="info" onClick={() => navigate('/hospital?tab=overview')} />
+        <KpiCard label="أطباء الامتياز النشطون" value={timeline?.traineeCount ?? activeTraineesList.length ?? 0} icon={Users} tone="primary" loading={tlLoading || traineesLoading} onClick={() => navigate('/hospital?tab=trainees')} />
+        <KpiCard label="الروتيشنات السريرية النشطة" value={timeline?.rotationsActive ?? activeRotations} icon={Activity} tone="info" onClick={() => navigate('/hospital?tab=overview')} />
         <KpiCard label="حضور اليوم بالقطاعات" value={`${present}/${todayRows.length}`} icon={CalendarCheck} tone="violet" />
         <KpiCard label="تقييمات ولوجبوك معلّق" value={pendingEvaluations} icon={ClipboardCheck} tone="warning" loading={tlLoading} />
         <KpiCard label="مرشحون لإكمال التدريب" value={timeline?.readyForGraduation ?? 0} icon={GraduationCap} tone="success" loading={tlLoading} onClick={() => navigate('/hospital?tab=graduation')} />

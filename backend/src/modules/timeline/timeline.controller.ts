@@ -48,7 +48,7 @@ export class TimelineController {
   @RequireRoles(
     'platform_owner', 'system_admin', 'org_manager',
     'cluster_administrator', 'cluster_manager', 'training_director',
-    'hospital_training_admin',
+    'hospital_training_admin', 'hospital_administrator',
     'university_administrator', 'academic_supervisor',
   )
   @ApiOperation({ summary: 'ملخص الخطوط الزمنية للوحات المستشفى والجامعة والتجمع' })

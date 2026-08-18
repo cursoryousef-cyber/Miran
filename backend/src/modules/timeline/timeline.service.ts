@@ -569,7 +569,15 @@ export class TimelineService {
         return {
           ...base,
           deletedAt: null,
-          organizationId: params.organizationId,
+          OR: [
+            { organizationId: params.organizationId },
+            {
+              trainingRequestRow: {
+                assignedHospitalId: params.organizationId,
+                status: { notIn: ['rejected', 'merged', 'split'] },
+              },
+            },
+          ],
         };
     }
   }
