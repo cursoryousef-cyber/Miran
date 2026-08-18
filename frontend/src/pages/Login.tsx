@@ -140,8 +140,9 @@ export const Login: React.FC = () => {
           </Button>
         </form>
 
-        <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '12px', color: '#64748B' }}>
-          حسابات التجارب: <span style={{ color: '#0F766E', fontWeight: 700 }}>admin@miran.health</span> | <span style={{ color: '#0891B2', fontWeight: 700 }}>uni.admin@nbu.edu.sa</span>
+        <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '12px', color: '#64748B', lineHeight: '1.6' }}>
+          جميع الحقوق محفوظة 2026<br />
+          د. فواز جمال الديدب
         </div>
       </div>
     </div>
