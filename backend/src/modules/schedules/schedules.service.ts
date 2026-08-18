@@ -326,17 +326,25 @@ export class SchedulesService {
 
     // If updating sessions, check conflicts
     if (dto.sessions && dto.sessions.length > 0) {
-      const traineeIds = existing.participants.map((p) => p.traineeProfileId);
-      const proposed: ProposedSession[] = dto.sessions.map((s) => ({
-        date: s.date,
-        startTime: s.startTime,
-        endTime: s.endTime,
-        departmentId: s.departmentId || existing.departmentId || '',
-        trainerProfileId: s.trainerProfileId,
-        traineeProfileIds: s.traineeProfileId ? [s.traineeProfileId] : traineeIds,
-        sessionType: s.sessionType,
-        shiftType: s.shiftType,
-      }));
+      const proposed: ProposedSession[] = dto.sessions.map((s) => {
+        let traineeProfileIds: string[] = [];
+        if (s.traineeProfileId) {
+          traineeProfileIds = [s.traineeProfileId];
+        } else if ((s as any).traineeProfileIds && (s as any).traineeProfileIds.length > 0) {
+          traineeProfileIds = (s as any).traineeProfileIds;
+        }
+
+        return {
+          date: s.date,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          departmentId: s.departmentId || existing.departmentId || '',
+          trainerProfileId: s.trainerProfileId,
+          traineeProfileIds,
+          sessionType: s.sessionType,
+          shiftType: s.shiftType,
+        };
+      });
 
       const conflictCheck = await this.conflictEngine.validateSessions(user.organizationId, proposed, undefined, id);
       if (conflictCheck.hasConflict) {
@@ -363,6 +371,32 @@ export class SchedulesService {
       });
 
       if (dto.sessions) {
+        // Synchronize participants based on actual active session trainees if provided
+        const activeTraineeIds = Array.from(
+          new Set(
+            dto.sessions
+              .flatMap((s) => (s.traineeProfileId ? [s.traineeProfileId] : (s as any).traineeProfileIds || []))
+              .filter(Boolean),
+          ),
+        ) as string[];
+
+        if (activeTraineeIds.length > 0) {
+          // Upsert participant records for all active session trainees
+          for (const tid of activeTraineeIds) {
+            const exists = await tx.scheduleParticipant.findFirst({
+              where: { scheduleId: id, traineeProfileId: tid },
+            });
+            if (!exists) {
+              await tx.scheduleParticipant.create({
+                data: {
+                  scheduleId: id,
+                  traineeProfileId: tid,
+                },
+              });
+            }
+          }
+        }
+
         // When updating a schedule's sessions from Wizard, delete existing non-id sessions
         const sessionIdsToKeep = dto.sessions.map((s) => s.id).filter(Boolean) as string[];
         await tx.scheduleSession.deleteMany({
@@ -402,7 +436,7 @@ export class SchedulesService {
                 organizationId: user.organizationId,
                 departmentId: s.departmentId || existing.departmentId || '',
                 trainerProfileId: s.trainerProfileId,
-                traineeProfileId: s.traineeProfileId || existing.participants[0]?.traineeProfileId,
+                traineeProfileId: s.traineeProfileId,
                 date: new Date(s.date),
                 startTime: s.startTime,
                 endTime: s.endTime,

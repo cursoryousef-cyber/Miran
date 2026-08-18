@@ -112,6 +112,10 @@ describe('SchedulesService resource scoping', () => {
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
         create: jest.fn().mockResolvedValue({ id: 'sess-new' }),
       },
+      scheduleParticipant: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'part-1' }),
+        create: jest.fn().mockResolvedValue({ id: 'part-new' }),
+      },
       traineeProfile: { count: jest.fn().mockResolvedValue(1) },
       trainerProfile: { count: jest.fn().mockResolvedValue(1) },
       department: { count: jest.fn().mockResolvedValue(1) },
@@ -144,6 +148,72 @@ describe('SchedulesService resource scoping', () => {
       expect.any(Array),
       undefined,
       'sched-1',
+    );
+  });
+
+  it('preserves exact single trainee identity and does not blanket-assign other schedule participants', async () => {
+    const conflictEngine = {
+      validateSessions: jest.fn().mockResolvedValue({ hasConflict: false, conflicts: [] }),
+    };
+    const prisma = {
+      trainingSchedule: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'sched-multi',
+          organizationId: HOSPITAL_A,
+          departmentId: 'dept-A',
+          participants: [
+            { traineeProfileId: 'trainee-A' },
+            { traineeProfileId: 'trainee-B' },
+            { traineeProfileId: 'trainee-C' },
+          ],
+        }),
+        update: jest.fn().mockResolvedValue({ id: 'sched-multi' }),
+      },
+      scheduleSession: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+        create: jest.fn().mockResolvedValue({ id: 'sess-new' }),
+      },
+      scheduleParticipant: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'part-1' }),
+        create: jest.fn().mockResolvedValue({ id: 'part-new' }),
+      },
+      traineeProfile: { count: jest.fn().mockResolvedValue(1) },
+      trainerProfile: { count: jest.fn().mockResolvedValue(1) },
+      department: { count: jest.fn().mockResolvedValue(1) },
+      $transaction: jest.fn().mockImplementation(async (cb) => cb(prisma)),
+    } as any;
+
+    const service = new SchedulesService(prisma, conflictEngine as any);
+    service.findOne = jest.fn().mockResolvedValue({ id: 'sched-multi', titleAr: 'جدول متعدد' });
+
+    const user = { accountId: 'acc-1', organizationId: HOSPITAL_A, roles: ['hospital_training_admin'] } as any;
+    const dto = {
+      titleAr: 'جدول متعدد',
+      sessions: [
+        {
+          date: '2026-09-08',
+          startTime: '10:00',
+          endTime: '12:00',
+          departmentId: 'dept-A',
+          trainerProfileId: 'trainer-A',
+          traineeProfileId: 'trainee-A', // Only trainee-A is in this session
+        },
+      ],
+    };
+
+    await service.update('sched-multi', user, dto);
+
+    // Verify ProposedSession contains ONLY trainee-A, not trainee-B or trainee-C
+    expect(conflictEngine.validateSessions).toHaveBeenCalledWith(
+      HOSPITAL_A,
+      [
+        expect.objectContaining({
+          traineeProfileIds: ['trainee-A'],
+          trainerProfileId: 'trainer-A',
+        }),
+      ],
+      undefined,
+      'sched-multi',
     );
   });
 });
