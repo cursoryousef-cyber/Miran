@@ -567,23 +567,31 @@ export class SchedulesService {
         data: { status: 'published', updatedById: user.accountId },
       });
 
-      // 4. Send notifications to participants
+      // 4. Send notifications to participants (safe & non-blocking if trainee has no userAccount yet)
       for (const part of schedule.participants) {
-        const traineeUser = await tx.userAccount.findFirst({
-          where: { person: { traineeProfile: { id: part.traineeProfileId } } },
-        });
-        if (traineeUser) {
-          await tx.notification.create({
-            data: {
-              organizationId: user.organizationId,
-              userId: traineeUser.id,
-              titleAr: 'تم نشر الجدول التدريبي الخاص بك',
-              bodyAr: `تمت إضافة/تحديث جلساتك التدريبية في جدول: ${schedule.titleAr}`,
-              type: 'schedule_published',
-              referenceType: 'TrainingSchedule',
-              referenceId: id,
-            },
-          });
+        const personId = part.traineeProfile?.personId;
+        if (personId) {
+          try {
+            const traineeUser = await tx.userAccount.findFirst({
+              where: { personId },
+              select: { id: true },
+            });
+            if (traineeUser) {
+              await tx.notification.create({
+                data: {
+                  organizationId: user.organizationId,
+                  userId: traineeUser.id,
+                  titleAr: 'تم نشر الجدول التدريبي الخاص بك',
+                  bodyAr: `تمت إضافة/تحديث جلساتك التدريبية في جدول: ${schedule.titleAr}`,
+                  type: 'schedule_published',
+                  referenceType: 'TrainingSchedule',
+                  referenceId: id,
+                },
+              });
+            }
+          } catch (notifErr) {
+            // Notification creation should never roll back the publish transaction
+          }
         }
       }
 
