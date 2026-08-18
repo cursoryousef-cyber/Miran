@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader, DataPageShell } from '../components/ui';
@@ -7,7 +7,7 @@ import {
   FileText, CheckCircle2, Clock, Building2, Send, AlertCircle, RefreshCw,
   FolderGit2, Clock3, Sparkles, Users, XCircle, Trash2, FileSpreadsheet, Eye,
   Undo2, ShieldCheck, Search, Filter, Calendar, History, UserCheck, Layers, ArrowRight,
-  Download, Upload,
+  Download, Upload, Plus,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -44,6 +44,8 @@ export const Affiliations: React.FC = () => {
   const { user, hasAnyRole, hasCapability } = useAuth();
   /** The university/sponsor side of this shared page — labels and copy follow it. */
   const isUniversitySponsor = hasAnyRole(['university_administrator', 'academic_affairs']);
+  /** Only roles that the API permits to POST /programs may add to the catalog inline. */
+  const canManagePrograms = hasAnyRole(['cluster_manager', 'platform_owner', 'system_admin']);
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -66,6 +68,25 @@ export const Affiliations: React.FC = () => {
   const [returnReq, setReturnReq] = useState<any>(null);
   const [returnNotes, setReturnNotes] = useState('');
 
+  const closeDetailsModal = () => {
+    setDetailsReq(null);
+    if (searchParams.has('request')) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('request');
+      setSearchParams(nextParams, { replace: true });
+    }
+  };
+
+  const openDetailsModal = (req: any, tab: 'info' | 'trainees' | 'history' = 'info') => {
+    setDetailsReq(req);
+    setDetailTab(tab);
+    if (req?.id && searchParams.get('request') !== req.id) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set('request', req.id);
+      setSearchParams(nextParams, { replace: true });
+    }
+  };
+
   // Hospital seat allocations — dynamic
   const [allocations, setAllocations] = useState<Record<string, number>>({});
 
@@ -78,9 +99,50 @@ export const Affiliations: React.FC = () => {
   // "طب بشري" is not a specialty code and every trainee row would fail
   // validation the moment the roster is submitted.
   const [reqSpecialty, setReqSpecialty] = useState('internal_medicine');
-  const [reqDurationMonths, setReqDurationMonths] = useState(12);
+  const [reqDurationMonths, setReqDurationMonths] = useState<number | ''>(12);
+  const [durationUserOverridden, setDurationUserOverridden] = useState(false);
   const [reqStartDate, setReqStartDate] = useState('2026-09-01');
   const [reqEndDate, setReqEndDate] = useState('2027-08-31');
+
+  const calculateEndDate = (startDateStr: string, months: number): string => {
+    if (!startDateStr || !months || months < 1) return '';
+    const parts = startDateStr.split('-').map(Number);
+    if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return '';
+    const [year, month, day] = parts;
+    const target = new Date(Date.UTC(year, month - 1 + months, day));
+    target.setUTCDate(target.getUTCDate() - 1);
+    const y = target.getUTCFullYear();
+    const m = String(target.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(target.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const handleDurationChange = (val: string) => {
+    setDurationUserOverridden(true);
+    // Allow the field to be cleared so the user can retype a valid number.
+    if (val === '' || val === null) {
+      setReqDurationMonths('');
+      return;
+    }
+    const num = parseInt(val, 10);
+    if (isNaN(num) || num < 1) {
+      // Keep state as empty so the submit guard catches it; don't silently ignore.
+      setReqDurationMonths('');
+      return;
+    }
+    setReqDurationMonths(num);
+    if (reqStartDate) {
+      setReqEndDate(calculateEndDate(reqStartDate, num));
+    }
+  };
+
+  const handleStartDateChange = (val: string) => {
+    setReqStartDate(val);
+    const num = Number(reqDurationMonths);
+    if (val && num >= 1) {
+      setReqEndDate(calculateEndDate(val, num));
+    }
+  };
   const [reqRotations, setReqRotations] = useState<Array<{ departmentNameAr: string; durationWeeks: number }>>([
     { departmentNameAr: 'الباطنة العامة', durationWeeks: 8 },
     { departmentNameAr: 'الأطفال', durationWeeks: 8 },
@@ -98,9 +160,26 @@ export const Affiliations: React.FC = () => {
     endDate?: string;
     email?: string;
     mobile?: string;
+    gender?: string;
   }>>([
-    { academicNumber: '441001', nationalId: '1099112233', nameAr: 'أحمد محمد علي' },
-    { academicNumber: '441002', nationalId: '1099112234', nameAr: 'خالد عبدالله عمر' },
+    {
+      academicNumber: '441001',
+      nationalId: '1099112233',
+      nameAr: 'أحمد محمد علي',
+      gender: 'male',
+      email: 'ahmed.ali@example.edu.sa',
+      mobile: '0501112233',
+      specialty: 'internal_medicine',
+    },
+    {
+      academicNumber: '441002',
+      nationalId: '1099112234',
+      nameAr: 'خالد عبدالله عمر',
+      gender: 'male',
+      email: 'khaled.omar@example.edu.sa',
+      mobile: '0501112234',
+      specialty: 'internal_medicine',
+    },
   ]);
 
   // Cluster Request State
@@ -115,6 +194,52 @@ export const Affiliations: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [excelErrors, setExcelErrors] = useState<Array<{ rowNumber: number; academicNumber?: string; nationalId?: string; errors: string[] }>>([]);
   const [excelSuccessMsg, setExcelSuccessMsg] = useState<string | null>(null);
+
+  // ── Add Program inline (cluster_manager / platform_owner only) ────────────
+  const emptyAddProgram = { code: '', nameAr: '', nameEn: '', programType: 'internship', durationMonths: 12, description: '' };
+  const [addProgramOpen, setAddProgramOpen] = useState(false);
+  const [addProgramForm, setAddProgramForm] = useState(emptyAddProgram);
+  const [addProgramError, setAddProgramError] = useState<string | null>(null);
+  const addProgramMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        code: addProgramForm.code.trim(),
+        nameAr: addProgramForm.nameAr.trim(),
+        nameEn: addProgramForm.nameEn.trim() || undefined,
+        programType: addProgramForm.programType,
+        durationMonths: Number(addProgramForm.durationMonths),
+        description: addProgramForm.description.trim() || undefined,
+      };
+      const res = await apiClient.post('/programs', payload);
+      return res.data?.data ?? res.data;
+    },
+    onSuccess: (newProgram: any) => {
+      queryClient.invalidateQueries({ queryKey: ['programs-list'] });
+      queryClient.invalidateQueries({ queryKey: ['programs-catalog'] });
+      setAddProgramOpen(false);
+      setAddProgramForm(emptyAddProgram);
+      setAddProgramError(null);
+      // Auto-select the newly created program.
+      if (newProgram?.id) {
+        setReqProgramId(newProgram.id);
+        if (newProgram.durationMonths && !durationUserOverridden) {
+          setReqDurationMonths(newProgram.durationMonths);
+          if (reqStartDate) setReqEndDate(calculateEndDate(reqStartDate, newProgram.durationMonths));
+        }
+      }
+    },
+    onError: (err: any) => {
+      setAddProgramError(
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        'تعذّر إضافة البرنامج — تحقق من البيانات وأعد المحاولة.'
+      );
+    },
+  });
+  const addProgramFormValid =
+    addProgramForm.code.trim().length > 0 &&
+    addProgramForm.nameAr.trim().length > 0 &&
+    Number(addProgramForm.durationMonths) >= 1;
 
   /**
    * The official roster template. Its headers are exactly the column names the
@@ -169,6 +294,7 @@ export const Affiliations: React.FC = () => {
 
         const seenAcademicNumbers = new Map<string, number>();
         const seenNationalIds = new Map<string, number>();
+        const seenEmails = new Map<string, number>();
 
         rawData.forEach((row, idx) => {
           const rowNumber = idx + 2; // 1-based header offset
@@ -206,6 +332,10 @@ export const Affiliations: React.FC = () => {
           }
           if (!nameAr) rowIssues.push('الاسم بالعربية مطلوب');
 
+          if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            rowIssues.push('صيغة البريد الإلكتروني غير صالحة');
+          }
+
           if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
             rowIssues.push('تاريخ نهاية التدريب يجب أن يكون بعد تاريخ البداية');
           }
@@ -226,6 +356,16 @@ export const Affiliations: React.FC = () => {
               rowIssues.push(`رقم الهوية الوطنية (${nationalId}) مكرر داخل الملف (الصف ${prevRow} والصف ${rowNumber})`);
             } else {
               seenNationalIds.set(nationalId, rowNumber);
+            }
+          }
+
+          if (email) {
+            const emailLower = email.toLowerCase();
+            if (seenEmails.has(emailLower)) {
+              const prevRow = seenEmails.get(emailLower);
+              rowIssues.push(`البريد الإلكتروني (${email}) مكرر داخل الملف (الصف ${prevRow} والصف ${rowNumber})`);
+            } else {
+              seenEmails.set(emailLower, rowNumber);
             }
           }
 
@@ -390,6 +530,33 @@ export const Affiliations: React.FC = () => {
   const [rowBusyId, setRowBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
 
+  // ── Cluster: inline trainee data completion (missing mobile/email/gender) ──
+  const [editTraineeRow, setEditTraineeRow] = useState<any | null>(null);
+  const [editTraineeForm, setEditTraineeForm] = useState({ mobile: '', email: '', gender: '' });
+  const [editTraineeError, setEditTraineeError] = useState<string | null>(null);
+  const patchTraineeMutation = useMutation({
+    mutationFn: async () => {
+      if (!editTraineeRow) return;
+      const payload: Record<string, string> = {};
+      if (editTraineeForm.mobile.trim()) payload.mobile = editTraineeForm.mobile.trim();
+      if (editTraineeForm.email.trim()) payload.email = editTraineeForm.email.trim();
+      if (editTraineeForm.gender) payload.gender = editTraineeForm.gender;
+      return apiClient.patch(`/training-requests/trainees/${editTraineeRow.id}`, payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['training-request-trainees'] });
+      setEditTraineeRow(null);
+      setEditTraineeError(null);
+    },
+    onError: (err: any) => {
+      setEditTraineeError(
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        'تعذّر حفظ البيانات — تحقّق وأعد المحاولة.'
+      );
+    },
+  });
+
   const ALLOCATED_ROW_STATUSES = ['allocated', 'hospital_review', 'accepted', 'active', 'graduated'];
   /** The sponsor attaches the candidate's documents; the cluster may also fix them. */
   const canUploadDocs = hasAnyRole([
@@ -401,15 +568,6 @@ export const Affiliations: React.FC = () => {
 
   const allocateRowMutation = useMutation({
     mutationFn: async ({ row, hospitalId }: { row: any; hospitalId: string }) => {
-      if (row.status === 'submitted' || row.status === 'duplicate_flagged') {
-        // Re-run the validation engine first: the errors stored on the row are a
-        // snapshot from submission time, so documents or details corrected since
-        // then would otherwise still read as blocking.
-        if (row.trainingRequestId) {
-          await apiClient.post(`/training-requests/${row.trainingRequestId}/trainees/validate`).catch(() => undefined);
-        }
-        await apiClient.post(`/training-requests/trainees/${row.id}/approve`);
-      }
       return apiClient.post(`/training-requests/trainees/${row.id}/allocations/hospital`, { hospitalId });
     },
     onMutate: ({ row }) => { setRowBusyId(row.id); setRowError(null); },
@@ -417,7 +575,7 @@ export const Affiliations: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['training-request-trainees'] });
       queryClient.invalidateQueries({ queryKey: ['training-requests'] });
-      setSuccessMsg('تم اعتماد المتدرب وإسناده للمستشفى المحدد.');
+      setSuccessMsg('تم اعتماد المتدرب وتوزيعه وإنشاء حسابه وملفه التدريبي بنجاح.');
     },
     onError: (err: any) => {
       setRowError(err.response?.data?.message || err.message || 'تعذر إسناد المتدرب للمستشفى');
@@ -688,6 +846,28 @@ export const Affiliations: React.FC = () => {
 
   const reqRows: any[] = data?.data ?? [];
 
+  // Deep linking: auto-open request details modal when ?request=<id> is present
+  const requestIdParam = searchParams.get('request');
+  useEffect(() => {
+    if (!requestIdParam) return;
+    if (detailsReq?.id === requestIdParam) return;
+
+    // Check if the request is in the current fetched list
+    const found = reqRows.find((r: any) => r.id === requestIdParam);
+    if (found) {
+      setDetailsReq(found);
+    } else if (!isLoading) {
+      // Fetch directly if not in current list or page loaded with deep link
+      apiClient
+        .get(`/training-requests/${requestIdParam}`)
+        .then((res) => {
+          const req = res.data?.data ?? res.data;
+          if (req) setDetailsReq(req);
+        })
+        .catch(() => {});
+    }
+  }, [requestIdParam, reqRows, isLoading, detailsReq?.id]);
+
   // A request reaches the hospital only once the cluster approves it. Allocation
   // is a proposal that still sits with the cluster, so the allocated statuses —
   // and the old "has any allocations" fallback — belong to the incoming tab under
@@ -921,10 +1101,7 @@ export const Affiliations: React.FC = () => {
                             variant="outlined"
                             size="small"
                             startIcon={<Eye size={14} />}
-                            onClick={() => {
-                              setDetailsReq(req);
-                              setDetailTab('info');
-                            }}
+                            onClick={() => openDetailsModal(req, 'info')}
                             style={{ fontWeight: 700, fontSize: '11px', color: '#0F766E', borderColor: '#0F766E' }}
                           >
                             التفاصيل والمتابعة
@@ -1110,6 +1287,131 @@ export const Affiliations: React.FC = () => {
         </DialogActions>
       </Dialog>
 
+      {/* ── Trainee data completion dialog (cluster: fill missing mobile/email/gender) ── */}
+      <Dialog open={!!editTraineeRow} onClose={() => setEditTraineeRow(null)} maxWidth="xs" fullWidth>
+        <DialogTitle style={{ fontWeight: 800 }}>تكملة بيانات المتدرب — {editTraineeRow?.nameAr}</DialogTitle>
+        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '16px' }}>
+          {editTraineeError && <Alert severity="error" onClose={() => setEditTraineeError(null)}>{editTraineeError}</Alert>}
+          <Alert severity="info" style={{ fontSize: '12px' }}>
+            أدخل الحقول الناقصة التي تمنع اعتماد المتدرب. سيُعاد التحقق تلقائياً عند الاعتماد.
+          </Alert>
+          <TextField
+            label="رقم الجوال"
+            value={editTraineeForm.mobile}
+            onChange={(e) => setEditTraineeForm({ ...editTraineeForm, mobile: e.target.value })}
+            placeholder="05xxxxxxxx"
+            fullWidth
+            inputProps={{ inputMode: 'numeric' }}
+          />
+          <TextField
+            label="البريد الإلكتروني"
+            value={editTraineeForm.email}
+            onChange={(e) => setEditTraineeForm({ ...editTraineeForm, email: e.target.value })}
+            placeholder="trainee@example.edu.sa"
+            type="email"
+            fullWidth
+          />
+          <FormControl fullWidth>
+            <InputLabel>الجنس</InputLabel>
+            <Select
+              value={editTraineeForm.gender}
+              label="الجنس"
+              onChange={(e) => setEditTraineeForm({ ...editTraineeForm, gender: e.target.value })}
+            >
+              <MenuItem value="male">ذكر</MenuItem>
+              <MenuItem value="female">أنثى</MenuItem>
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions style={{ padding: '16px 24px' }}>
+          <Button onClick={() => setEditTraineeRow(null)}>إلغاء</Button>
+          <Button
+            variant="contained"
+            disabled={patchTraineeMutation.isPending}
+            onClick={() => patchTraineeMutation.mutate()}
+            style={{ background: '#B45309', fontWeight: 700 }}
+          >
+            {patchTraineeMutation.isPending ? <CircularProgress size={20} /> : 'حفظ البيانات'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Add Program mini-dialog (cluster_manager / platform_owner only) ── */}
+      <Dialog open={addProgramOpen} onClose={() => setAddProgramOpen(false)} maxWidth="sm" fullWidth>
+
+        <DialogTitle style={{ fontWeight: 800 }}>إضافة برنامج جديد للكتالوج الوطني</DialogTitle>
+        <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '16px' }}>
+          {addProgramError && <Alert severity="error" onClose={() => setAddProgramError(null)}>{addProgramError}</Alert>}
+          <Alert severity="info" style={{ fontSize: '12px' }}>
+            البرامج المضافة هنا وطنية ومرئية لجميع الجهات الموفدة. سيُختار البرنامج الجديد تلقائياً بعد الحفظ.
+          </Alert>
+          <TextField
+            label="رمز البرنامج *"
+            value={addProgramForm.code}
+            onChange={(e) => setAddProgramForm({ ...addProgramForm, code: e.target.value })}
+            helperText="مثال: INTERN-2026 — يجب أن يكون فريداً"
+            fullWidth
+            required
+          />
+          <TextField
+            label="اسم البرنامج بالعربية *"
+            value={addProgramForm.nameAr}
+            onChange={(e) => setAddProgramForm({ ...addProgramForm, nameAr: e.target.value })}
+            fullWidth
+            required
+          />
+          <TextField
+            label="اسم البرنامج بالإنجليزية"
+            value={addProgramForm.nameEn}
+            onChange={(e) => setAddProgramForm({ ...addProgramForm, nameEn: e.target.value })}
+            fullWidth
+          />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <FormControl fullWidth>
+              <InputLabel>نوع البرنامج</InputLabel>
+              <Select
+                value={addProgramForm.programType}
+                label="نوع البرنامج"
+                onChange={(e) => setAddProgramForm({ ...addProgramForm, programType: e.target.value })}
+              >
+                <MenuItem value="internship">امتياز طبي</MenuItem>
+                <MenuItem value="residency">إقامة</MenuItem>
+                <MenuItem value="fellowship">زمالة</MenuItem>
+                <MenuItem value="other">أخرى</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              label="المدة (بالأشهر) *"
+              type="number"
+              value={addProgramForm.durationMonths}
+              onChange={(e) => setAddProgramForm({ ...addProgramForm, durationMonths: Number(e.target.value) })}
+              inputProps={{ min: 1, step: 1 }}
+              fullWidth
+              required
+            />
+          </div>
+          <TextField
+            label="وصف البرنامج"
+            value={addProgramForm.description}
+            onChange={(e) => setAddProgramForm({ ...addProgramForm, description: e.target.value })}
+            multiline
+            rows={2}
+            fullWidth
+          />
+        </DialogContent>
+        <DialogActions style={{ padding: '16px 24px' }}>
+          <Button onClick={() => setAddProgramOpen(false)}>إلغاء</Button>
+          <Button
+            variant="contained"
+            disabled={!addProgramFormValid || addProgramMutation.isPending}
+            onClick={() => addProgramMutation.mutate()}
+            style={{ background: '#059669', fontWeight: 700 }}
+          >
+            {addProgramMutation.isPending ? <CircularProgress size={20} /> : 'حفظ البرنامج'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Dialog open={openCreateModal} onClose={() => setOpenCreateModal(false)} maxWidth="md" fullWidth>
         <DialogTitle style={{ fontWeight: 800 }}>تقديم طلب تدريب جديد</DialogTitle>
         <DialogContent style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingTop: '16px' }}>
@@ -1160,26 +1462,87 @@ export const Affiliations: React.FC = () => {
                 </div>
               </div>
             )}
-            <FormControl fullWidth required error={programsUnavailable}>
-              <InputLabel>البرنامج التدريبي</InputLabel>
-              <Select value={reqProgramId} label="البرنامج التدريبي" disabled={programsLoading || programsUnavailable} onChange={(e) => { const p = programs.find((x: any) => x.id === e.target.value); setReqProgramId(e.target.value); if (p?.durationMonths) setReqDurationMonths(p.durationMonths); }}>
-                {programs.map((p: any) => <MenuItem key={p.id} value={p.id}>{p.nameAr} ({p.durationMonths} شهر)</MenuItem>)}
-              </Select>
-              {programsLoading && <FormHelperText>جارٍ تحميل كتالوج البرامج التدريبية…</FormHelperText>}
-              {programsUnavailable && (
-                <FormHelperText>
-                  {programsError
-                    ? 'تعذّر تحميل كتالوج البرامج التدريبية الوطني — حدّث الصفحة أو تواصل مع مدير المنصة.'
-                    : 'لا توجد برامج تدريبية في الكتالوج الوطني. البرنامج مطلوب لأن روتيشنات الطلب تُبنى عليه — يضيف مشرف التجمع الصحي البرامج من كتالوج البرامج التدريبية.'}
-                </FormHelperText>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <FormControl fullWidth required error={programsUnavailable} style={{ flex: 1 }}>
+                <InputLabel>البرنامج التدريبي</InputLabel>
+                <Select
+                  value={reqProgramId}
+                  label="البرنامج التدريبي"
+                  disabled={programsLoading || (programsUnavailable && !canManagePrograms)}
+                  onChange={(e) => {
+                    const p = programs.find((x: any) => x.id === e.target.value);
+                    setReqProgramId(e.target.value);
+                    if (p?.durationMonths && !durationUserOverridden) {
+                      setReqDurationMonths(p.durationMonths);
+                      if (reqStartDate) {
+                        setReqEndDate(calculateEndDate(reqStartDate, p.durationMonths));
+                      }
+                    }
+                  }}
+                >
+                  {programs.map((p: any) => <MenuItem key={p.id} value={p.id}>{p.nameAr} ({p.durationMonths} شهر)</MenuItem>)}
+                </Select>
+                {programsLoading && <FormHelperText>جارٍ تحميل كتالوج البرامج التدريبية…</FormHelperText>}
+                {programsUnavailable && (
+                  <FormHelperText>
+                    {programsError
+                      ? 'تعذّر تحميل كتالوج البرامج التدريبية الوطني — حدّث الصفحة أو تواصل مع مدير المنصة.'
+                      : canManagePrograms
+                        ? 'لا توجد برامج في الكتالوج — أضف برنامجاً جديداً باستخدام زر (+).'
+                        : 'لا توجد برامج تدريبية في الكتالوج الوطني. يضيف مشرف التجمع الصحي البرامج من صفحة «كتالوج البرامج التدريبية».'}
+                  </FormHelperText>
+                )}
+              </FormControl>
+              {canManagePrograms && (
+                <Tooltip title="إضافة برنامج جديد للكتالوج">
+                  <span>
+                    <IconButton
+                      onClick={() => { setAddProgramOpen(true); setAddProgramError(null); addProgramMutation.reset(); }}
+                      style={{
+                        marginTop: '8px',
+                        border: '1px solid rgba(16,185,129,0.5)',
+                        borderRadius: '8px',
+                        color: '#059669',
+                        background: 'rgba(16,185,129,0.07)',
+                      }}
+                    >
+                      <Plus size={18} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
               )}
-            </FormControl>
+            </div>
           </div>
           <TextField label="رمز التخصص (Specialty Code)" value={reqSpecialty} onChange={(e) => setReqSpecialty(e.target.value)} helperText="رمز التخصص — مثال: internal_medicine" fullWidth />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-            <TextField label="مدة البرنامج (بالأشهر)" type="number" value={reqDurationMonths} InputProps={{ readOnly: true }} fullWidth />
-            <TextField label="تاريخ بداية التدريب" type="date" value={reqStartDate} onChange={(e) => setReqStartDate(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth />
-            <TextField label="تاريخ نهاية التدريب" type="date" value={reqEndDate} onChange={(e) => setReqEndDate(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth />
+            <TextField
+              label="فترة التدريب (بالأشهر) *"
+              type="number"
+              value={reqDurationMonths}
+              onChange={(e) => handleDurationChange(e.target.value)}
+              inputProps={{ min: 1, step: 1 }}
+              helperText="المدة بالأشهر (رقم صحيح موجب)"
+              fullWidth
+              required
+            />
+            <TextField
+              label="تاريخ بداية التدريب *"
+              type="date"
+              value={reqStartDate}
+              onChange={(e) => handleStartDateChange(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+              required
+            />
+            <TextField
+              label="تاريخ نهاية التدريب (محسوب تلقائياً)"
+              type="date"
+              value={reqEndDate}
+              InputLabelProps={{ shrink: true }}
+              InputProps={{ readOnly: true }}
+              helperText="محسوب آلياً بناءً على تاريخ البداية ومدة التدريب"
+              fullWidth
+            />
           </div>
           {/* Roster — the Excel entry point the sponsor submits its trainees with.
               Rows parsed here go out with the request and are written by the same
@@ -1264,35 +1627,88 @@ export const Affiliations: React.FC = () => {
         </DialogContent>
         <DialogActions style={{ padding: '16px 24px' }}>
           <Button onClick={() => setOpenCreateModal(false)}>إلغاء</Button>
-          <Button variant="contained" onClick={() => createRequestMutation.mutate()} disabled={createRequestMutation.isPending || !reqTargetOrgId || !reqProgramId || reqTrainees.length === 0} style={{ background: '#059669', fontWeight: 700 }}>
+          <Button
+            variant="contained"
+            onClick={() => createRequestMutation.mutate()}
+            disabled={
+              createRequestMutation.isPending ||
+              !reqTargetOrgId ||
+              !reqProgramId ||
+              reqTrainees.length === 0 ||
+              !reqDurationMonths ||
+              Number(reqDurationMonths) < 1
+            }
+            style={{ background: '#059669', fontWeight: 700 }}
+          >
             {createRequestMutation.isPending ? <CircularProgress size={20} /> : 'إرسال طلب التدريب'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={!!detailsReq} onClose={() => setDetailsReq(null)} maxWidth="md" fullWidth>
-        <DialogTitle style={{ fontWeight: 800, borderBottom: '1px solid #E2E8F0', paddingBottom: '12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>تفاصيل طلب التدريب <strong>{detailsReq?.requestNumber}</strong></div>
+      <Dialog
+        open={!!detailsReq}
+        onClose={closeDetailsModal}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: {
+            width: '100%',
+            maxWidth: 'min(96vw, 1100px)',
+            margin: { xs: '8px', sm: '16px', md: '24px' },
+            borderRadius: '14px',
+            overflow: 'hidden',
+          },
+        }}
+      >
+        <DialogTitle style={{ fontWeight: 800, borderBottom: '1px solid #E2E8F0', padding: '16px 20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ fontSize: '16px', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+              تفاصيل طلب التدريب <strong>{detailsReq?.requestNumber}</strong>
+            </div>
             <div>{detailsReq && getStatusChip(detailsReq.status)}</div>
           </div>
         </DialogTitle>
-        <DialogContent style={{ paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <DialogContent
+          sx={{
+            padding: { xs: '12px', sm: '20px' },
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            overflowX: 'hidden',
+            width: '100%',
+            boxSizing: 'border-box',
+          }}
+        >
           {detailLoading ? (
             <div style={{ textAlign: 'center', padding: '32px' }}><CircularProgress size={28} /></div>
           ) : detailData ? (
             <>
-              <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                <Tabs value={detailTab} onChange={(_, val) => setDetailTab(val)}>
+              <Box sx={{ borderBottom: 1, borderColor: 'divider', width: '100%', overflowX: 'auto' }}>
+                <Tabs
+                  value={detailTab}
+                  onChange={(_, val) => setDetailTab(val)}
+                  variant="scrollable"
+                  scrollButtons="auto"
+                  allowScrollButtonsMobile
+                >
                   <Tab value="info" label="📋 البيانات الأساسية" />
                   <Tab value="trainees" label={`👥 المتدربون والمستشفيات (${detailTrainees?.length || 0})`} />
                   <Tab value="history" label="⏱️ السجل الزمني والتاريخ" />
                 </Tabs>
               </Box>
               {detailTab === 'info' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <Paper style={{ padding: '16px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+                  <Paper style={{ padding: '16px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', width: '100%', boxSizing: 'border-box' }}>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                        gap: '12px',
+                        fontSize: '13px',
+                        overflowWrap: 'anywhere',
+                        wordBreak: 'break-word',
+                      }}
+                    >
                       <div>الجهة الموفِّدة (الجامعة): <strong>{detailData.sourceOrg?.nameAr || '—'}</strong></div>
                       <div>الجهة المستقبلة (التجمع): <strong>{detailData.targetOrg?.nameAr || '—'}</strong></div>
                       <div>البرنامج التدريبي: <strong>{detailData.program?.nameAr || detailData.specialty || '—'}</strong></div>
@@ -1303,11 +1719,15 @@ export const Affiliations: React.FC = () => {
                       <div>فترة التدريب: <strong>{detailData.trainingStartDate ? new Date(detailData.trainingStartDate).toISOString().split('T')[0] : '—'} إلى {detailData.trainingEndDate ? new Date(detailData.trainingEndDate).toISOString().split('T')[0] : '—'}</strong></div>
                       <div>الدفعة الأكاديمية: <strong>{detailData.producedBatch?.nameAr || detailData.producedBatch?.code || detailData.academicIntake?.nameAr || '—'}</strong></div>
                       <div>الحالة الحالية: <strong>{getStatusChip(detailData.status)}</strong></div>
-                    </div>
+                    </Box>
                   </Paper>
-                  {detailData.notes && <Alert severity="info"><strong>ملاحظات الطلب:</strong> {detailData.notes}</Alert>}
+                  {detailData.notes && (
+                    <Alert severity="info" sx={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                      <strong>ملاحظات الطلب:</strong> {detailData.notes}
+                    </Alert>
+                  )}
                   {Array.isArray(detailData.allocations) && detailData.allocations.length > 0 && (
-                    <Paper style={{ padding: '16px', border: '1px solid #99F6E4', backgroundColor: '#F0FDFA', borderRadius: '10px' }}>
+                    <Paper style={{ padding: '16px', border: '1px solid #99F6E4', backgroundColor: '#F0FDFA', borderRadius: '10px', width: '100%', boxSizing: 'border-box' }}>
                       <div style={{ fontWeight: 800, color: '#0F766E', marginBottom: '8px' }}>🏥 المستشفيات المسند إليها مقاعد التدريب:</div>
                       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                         {detailData.allocations.map((a: any, idx: number) => (
@@ -1319,15 +1739,15 @@ export const Affiliations: React.FC = () => {
                 </div>
               )}
               {detailTab === 'trainees' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
                   {rowError && <Alert severity="error" onClose={() => setRowError(null)}>{rowError}</Alert>}
                   {detailTraineesError ? (
                     <Alert severity="error">تعذر تحميل قائمة المتدربين: {(detailTraineesError as any)?.response?.data?.message || (detailTraineesError as any)?.message}</Alert>
                   ) : traineesLoading ? (
                     <div style={{ textAlign: 'center', padding: '24px' }}><CircularProgress size={24} /></div>
                   ) : detailTrainees?.length ? (
-                    <TableContainer component={Paper}>
-                      <Table size="small">
+                    <TableContainer component={Paper} sx={{ width: '100%', maxWidth: '100%', overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+                      <Table size="small" sx={{ minWidth: { xs: 650, md: 800 } }}>
                         <TableHead>
                           <TableRow>
                             <TableCell style={{ fontWeight: 700 }}>الاسم</TableCell>
@@ -1347,11 +1767,11 @@ export const Affiliations: React.FC = () => {
                             const chosen = rowHospital[t.id] || t.assignedHospitalId || '';
                             return (
                             <TableRow key={t.id}>
-                              <TableCell style={{ fontWeight: 700 }}>{t.nameAr}</TableCell>
-                              <TableCell style={{ fontFamily: 'monospace', fontSize: '12px' }}>{t.academicNumber}</TableCell>
-                              <TableCell style={{ fontFamily: 'monospace', fontSize: '12px' }}>{t.nationalId}</TableCell>
-                              <TableCell>{t.assignedHospital?.nameAr || '—'}</TableCell>
-                              <TableCell style={{ fontSize: '12px' }}>{t.assignedDepartment?.nameAr ? `قسم: ${t.assignedDepartment.nameAr}` : '—'}</TableCell>
+                              <TableCell style={{ fontWeight: 700, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{t.nameAr}</TableCell>
+                              <TableCell style={{ fontFamily: 'monospace', fontSize: '12px', whiteSpace: 'nowrap' }}>{t.academicNumber}</TableCell>
+                              <TableCell style={{ fontFamily: 'monospace', fontSize: '12px', whiteSpace: 'nowrap' }}>{t.nationalId}</TableCell>
+                              <TableCell style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{t.assignedHospital?.nameAr || '—'}</TableCell>
+                              <TableCell style={{ fontSize: '12px', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{t.assignedDepartment?.nameAr ? `قسم: ${t.assignedDepartment.nameAr}` : '—'}</TableCell>
                               <TableCell>{getStatusChip(t.status)}</TableCell>
                               <TableCell>
                                 {(() => {
@@ -1384,8 +1804,8 @@ export const Affiliations: React.FC = () => {
                                       ✔ مُسند — {t.assignedHospital?.nameAr || 'مستشفى محدد'}
                                     </span>
                                   ) : (
-                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minWidth: '320px' }}>
-                                      <FormControl size="small" style={{ minWidth: '170px' }}>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minWidth: '280px', flexWrap: 'wrap' }}>
+                                      <FormControl size="small" style={{ minWidth: '150px', flex: '1 1 auto' }}>
                                         <InputLabel>المستشفى</InputLabel>
                                         <Select
                                           value={chosen}
@@ -1393,7 +1813,7 @@ export const Affiliations: React.FC = () => {
                                           onChange={(e) => setRowHospital({ ...rowHospital, [t.id]: e.target.value })}
                                         >
                                           {hospitals.map((h: any) => (
-                                            <MenuItem key={h.id} value={h.id}>
+                                             <MenuItem key={h.id} value={h.id}>
                                               {h.nameAr} {typeof h.available === 'number' ? `— متاح ${h.available}` : ''}
                                             </MenuItem>
                                           ))}
@@ -1411,8 +1831,27 @@ export const Affiliations: React.FC = () => {
                                     </div>
                                   )}
                                   {blockingErrors.length > 0 && !alreadyAllocated && (
-                                    <div style={{ fontSize: '11px', color: '#B91C1C', marginTop: '4px', maxWidth: '320px' }}>
+                                    <div style={{ fontSize: '11px', color: '#B91C1C', marginTop: '4px', maxWidth: '320px', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                                       ملاحظات التحقق (قد تكون مُعالجة بعد آخر فحص): {blockingErrors.map((e: any) => e.messageAr).join('، ')}
+                                      {blockingErrors.some((e: any) => ['mobile', 'email', 'gender'].includes(e.field)) && canAllocateRows && (
+                                        <Button
+                                          size="small"
+                                          variant="outlined"
+                                          onClick={() => {
+                                            setEditTraineeRow(t);
+                                            setEditTraineeForm({
+                                              mobile: t.mobile || '',
+                                              email: t.email || '',
+                                              gender: t.gender || '',
+                                            });
+                                            setEditTraineeError(null);
+                                            patchTraineeMutation.reset();
+                                          }}
+                                          style={{ marginTop: '4px', fontSize: '11px', borderColor: '#B45309', color: '#B45309' }}
+                                        >
+                                          تكملة البيانات الناقصة
+                                        </Button>
+                                      )}
                                     </div>
                                   )}
                                 </TableCell>
@@ -1429,9 +1868,9 @@ export const Affiliations: React.FC = () => {
                 </div>
               )}
               {detailTab === 'history' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
                   {/* Dynamic Timeline derived strictly from DB relations and fields */}
-                  <Paper style={{ padding: '20px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px' }}>
+                  <Paper style={{ padding: '20px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', width: '100%', boxSizing: 'border-box' }}>
                     <div style={{ fontWeight: 800, color: '#0F172A', marginBottom: '16px', fontSize: '14px' }}>
                       🔄 المراحل التتابعية لطلب التدريب (Backend Workflow Progression)
                     </div>
@@ -1451,8 +1890,8 @@ export const Affiliations: React.FC = () => {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                           {/* Step 1: Submission */}
                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                            <div style={{ background: '#059669', color: '#fff', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' }}>1</div>
-                            <div>
+                            <div style={{ background: '#059669', color: '#fff', borderRadius: '50%', width: '28px', height: '28px', minWidth: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' }}>1</div>
+                            <div style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                               <div style={{ fontWeight: 700, color: '#0F172A' }}>التقديم (Request Submission)</div>
                               <div style={{ fontSize: '12px', color: '#64748B' }}>
                                 الجهة الموفدة: <strong>{detailData.sourceOrg?.nameAr || '—'}</strong> · تاريخ الإرسال: {detailData.createdAt ? new Date(detailData.createdAt).toLocaleString('ar-SA') : '—'}
@@ -1462,8 +1901,8 @@ export const Affiliations: React.FC = () => {
 
                           {/* Step 2: Cluster Allocation */}
                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                            <div style={{ background: isAllocated ? '#059669' : '#CBD5E1', color: '#fff', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' }}>2</div>
-                            <div>
+                            <div style={{ background: isAllocated ? '#059669' : '#CBD5E1', color: '#fff', borderRadius: '50%', width: '28px', height: '28px', minWidth: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' }}>2</div>
+                            <div style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                               <div style={{ fontWeight: 700, color: isAllocated ? '#0F172A' : '#64748B' }}>التوزيع التجمعي (Cluster Seat Allocation)</div>
                               <div style={{ fontSize: '12px', color: '#64748B' }}>
                                 {hasAllocations
@@ -1475,8 +1914,8 @@ export const Affiliations: React.FC = () => {
 
                           {/* Step 3: Hospital Review */}
                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                            <div style={{ background: isHospitalReviewed ? '#059669' : '#CBD5E1', color: '#fff', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' }}>3</div>
-                            <div>
+                            <div style={{ background: isHospitalReviewed ? '#059669' : '#CBD5E1', color: '#fff', borderRadius: '50%', width: '28px', height: '28px', minWidth: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' }}>3</div>
+                            <div style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                               <div style={{ fontWeight: 700, color: isHospitalReviewed ? '#0F172A' : '#64748B' }}>مراجعة المستشفى (Hospital Review Chain)</div>
                               <div style={{ fontSize: '12px', color: '#64748B' }}>
                                 {isHospitalReviewed ? `مرحلة القبول بالمستشفى · الحالة الحالية: ${getStatusChip(detailData.status).props.label}` : 'بانتظار وصول الطلب لمراجعة المستشفى'}
@@ -1486,8 +1925,8 @@ export const Affiliations: React.FC = () => {
 
                           {/* Step 4: Trainer Assignment */}
                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                            <div style={{ background: isTrainerAssigned ? '#059669' : '#CBD5E1', color: '#fff', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' }}>4</div>
-                            <div>
+                            <div style={{ background: isTrainerAssigned ? '#059669' : '#CBD5E1', color: '#fff', borderRadius: '50%', width: '28px', height: '28px', minWidth: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' }}>4</div>
+                            <div style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                               <div style={{ fontWeight: 700, color: isTrainerAssigned ? '#0F172A' : '#64748B' }}>إسناد المدرب (Trainer Assignment)</div>
                               <div style={{ fontSize: '12px', color: '#64748B' }}>
                                 {isTrainerAssigned
@@ -1499,8 +1938,8 @@ export const Affiliations: React.FC = () => {
 
                           {/* Step 5: Active Rotation */}
                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                            <div style={{ background: isRotationActive ? '#059669' : '#CBD5E1', color: '#fff', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' }}>5</div>
-                            <div>
+                            <div style={{ background: isRotationActive ? '#059669' : '#CBD5E1', color: '#fff', borderRadius: '50%', width: '28px', height: '28px', minWidth: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' }}>5</div>
+                            <div style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                               <div style={{ fontWeight: 700, color: isRotationActive ? '#0F172A' : '#64748B' }}>Rotation النشط (Active Training Rotation)</div>
                               <div style={{ fontSize: '12px', color: '#64748B' }}>
                                 {isRotationActive
@@ -1520,8 +1959,8 @@ export const Affiliations: React.FC = () => {
                       <div style={{ fontWeight: 800, color: '#0F172A', marginBottom: '12px', fontSize: '14px' }}>
                         📜 سجل الإجراءات والتعديلات (Audit Log Trail)
                       </div>
-                      <TableContainer component={Paper}>
-                        <Table size="small">
+                      <TableContainer component={Paper} sx={{ width: '100%', maxWidth: '100%', overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+                        <Table size="small" sx={{ minWidth: { xs: 550, md: 700 } }}>
                           <TableHead>
                             <TableRow>
                               <TableCell style={{ fontWeight: 700 }}>التاريخ والوقت</TableCell>
@@ -1533,16 +1972,16 @@ export const Affiliations: React.FC = () => {
                           <TableBody>
                             {detailData.auditLogs.map((log: any) => (
                               <TableRow key={log.id}>
-                                <TableCell style={{ fontSize: '12px', color: '#64748B' }}>
+                                <TableCell style={{ fontSize: '12px', color: '#64748B', whiteSpace: 'nowrap' }}>
                                   {new Date(log.createdAt).toLocaleString('ar-SA')}
                                 </TableCell>
-                                <TableCell style={{ fontSize: '12px', fontWeight: 700 }}>
+                                <TableCell style={{ fontSize: '12px', fontWeight: 700, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                                   {log.actor?.person?.nameAr || log.actor?.email || 'النظام'}
                                 </TableCell>
                                 <TableCell>
                                   <Chip label={log.action} size="small" variant="outlined" color="primary" />
                                 </TableCell>
-                                <TableCell style={{ fontSize: '12px', color: '#334155' }}>
+                                <TableCell style={{ fontSize: '12px', color: '#334155', overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '280px' }}>
                                   {log.newValues ? JSON.stringify(log.newValues).slice(0, 80) : '—'}
                                 </TableCell>
                               </TableRow>
@@ -1559,14 +1998,14 @@ export const Affiliations: React.FC = () => {
             </>
           ) : <Alert severity="error">تعذر تحميل تفاصيل الطلب</Alert>}
         </DialogContent>
-        <DialogActions style={{ padding: '16px 24px', borderTop: '1px solid #E2E8F0', gap: '8px' }}>
+        <DialogActions style={{ padding: '16px 24px', borderTop: '1px solid #E2E8F0', gap: '8px', flexWrap: 'wrap' }}>
           {detailsReq && canAssign && ASSIGNABLE.includes(detailsReq.status) && (
-            <Button variant="contained" size="small" onClick={() => { setDetailsReq(null); openAllocationDialog(detailsReq); }} style={{ background: '#0891B2', fontWeight: 700 }}>مراجعة وتوزيع المقاعد</Button>
+            <Button variant="contained" size="small" onClick={() => { closeDetailsModal(); openAllocationDialog(detailsReq); }} style={{ background: '#0891B2', fontWeight: 700 }}>مراجعة وتوزيع المقاعد</Button>
           )}
           {detailsReq && canApprove && APPROVEABLE.includes(detailsReq.status) && (
-            <Button variant="contained" size="small" startIcon={<ShieldCheck size={14} />} onClick={() => { setDetailsReq(null); setConfirmApproveReq(detailsReq); }} style={{ background: '#059669', fontWeight: 700 }}>اعتماد نهائي</Button>
+            <Button variant="contained" size="small" startIcon={<ShieldCheck size={14} />} onClick={() => { closeDetailsModal(); setConfirmApproveReq(detailsReq); }} style={{ background: '#059669', fontWeight: 700 }}>اعتماد نهائي</Button>
           )}
-          <Button onClick={() => setDetailsReq(null)} color="inherit">إغلاق</Button>
+          <Button onClick={closeDetailsModal} color="inherit">إغلاق</Button>
         </DialogActions>
       </Dialog>
 

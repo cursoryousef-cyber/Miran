@@ -158,7 +158,7 @@ export const UniversityDashboard: React.FC = () => {
                   title={`طلب رقم ${r.requestNumber}`}
                   meta={`${r.targetOrg?.nameAr ?? 'التجمع الصحي'} · ${r.studentCount ?? 0} متدرب · ${r.specialty ?? 'طب عام'}`}
                   trailing={<Badge label={statusInfo.label} tone={statusInfo.tone} />}
-                  onClick={() => navigate('/affiliations')}
+                  onClick={() => navigate(`/affiliations?request=${r.id}`)}
                 />
               );
             })

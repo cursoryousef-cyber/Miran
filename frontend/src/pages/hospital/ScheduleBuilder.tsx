@@ -124,7 +124,7 @@ export const ScheduleBuilder: React.FC = () => {
   // caller's organisation scope on the server. The role list below is the one
   // that endpoint already grants — no role was added to either side.
   const canReadHospitalTrainees = !!user?.roles?.some((r: string) =>
-    ['hospital_training_admin', 'platform_owner', 'cluster_administrator', 'cluster_manager', 'training_director'].includes(r),
+    ['hospital_training_admin', 'hospital_administrator', 'org_manager', 'platform_owner', 'cluster_administrator', 'cluster_manager', 'training_director'].includes(r),
   );
 
   const { data: trainees } = useQuery({
@@ -526,37 +526,49 @@ export const ScheduleBuilder: React.FC = () => {
               <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 'bold' }}>
                 اختر المتدربين المشمولين في هذا الجدول التدريبي:
               </Typography>
-              <Grid container spacing={1}>
-                {trainees?.map((t: any) => (
-                  <Grid item xs={6} key={t.id}>
-                    <Box
-                      onClick={() => {
-                        if (wSelectedTrainees.includes(t.id)) {
-                          setWSelectedTrainees(wSelectedTrainees.filter((id) => id !== t.id));
-                        } else {
-                          setWSelectedTrainees([...wSelectedTrainees, t.id]);
-                        }
-                      }}
-                      sx={{
-                        p: 1.5,
-                        border: '1px solid #cbd5e1',
-                        borderRadius: 1.5,
-                        cursor: 'pointer',
-                        bgcolor: wSelectedTrainees.includes(t.id) ? '#eff6ff' : 'white',
-                        borderColor: wSelectedTrainees.includes(t.id) ? '#2563eb' : '#cbd5e1',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justify: 'space-between',
-                      }}
-                    >
-                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                        {t.person?.nameAr || 'متدرب'}
-                      </Typography>
-                      {wSelectedTrainees.includes(t.id) && <CheckCircle size={18} color="#2563eb" />}
-                    </Box>
-                  </Grid>
-                ))}
-              </Grid>
+              {(!trainees || trainees.length === 0) ? (
+                <Alert severity="info" sx={{ my: 2 }}>
+                  لا يوجد متدربون مؤهلون متاحون حالياً لهذا المستشفى. تأكد من قبول المتدربين من تبويب «طلبات التدريب الواردة».
+                </Alert>
+              ) : (
+                <Grid container spacing={1}>
+                  {trainees.map((t: any) => (
+                    <Grid item xs={12} sm={6} key={t.id}>
+                      <Box
+                        onClick={() => {
+                          if (wSelectedTrainees.includes(t.id)) {
+                            setWSelectedTrainees(wSelectedTrainees.filter((id) => id !== t.id));
+                          } else {
+                            setWSelectedTrainees([...wSelectedTrainees, t.id]);
+                          }
+                        }}
+                        sx={{
+                          p: 1.5,
+                          border: '1px solid #cbd5e1',
+                          borderRadius: 1.5,
+                          cursor: 'pointer',
+                          bgcolor: wSelectedTrainees.includes(t.id) ? '#eff6ff' : 'white',
+                          borderColor: wSelectedTrainees.includes(t.id) ? '#2563eb' : '#cbd5e1',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                            {t.person?.nameAr || 'متدرب'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            {t.traineeNumber || t.person?.nationalId || ''}
+                            {t.program?.nameAr ? ` — ${t.program.nameAr}` : ''}
+                          </Typography>
+                        </Box>
+                        {wSelectedTrainees.includes(t.id) && <CheckCircle size={18} color="#2563eb" />}
+                      </Box>
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
             </Box>
           )}
 

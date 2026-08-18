@@ -32,6 +32,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { IAuthenticatedUser } from '../../common/interfaces';
 import {
@@ -40,7 +42,7 @@ import {
   ScopeContextService,
 } from '../../common/authz';
 import { CapacityService } from '../organizations/capacity.service';
-import { TRAINEE_ROW_STATUS } from '../../common/status-constants';
+import { TRAINEE_ROW_STATUS, TRAINEE_PROFILE_STATUS } from '../../common/status-constants';
 import {
   assertValidTransition,
   TRAINING_REQUEST_TRAINEE_TRANSITIONS,
@@ -169,7 +171,10 @@ export class TraineeAllocationService {
     const PLACEABLE_STATUSES: string[] = [
       TRAINEE_ROW_STATUS.CLUSTER_APPROVED,
       TRAINEE_ROW_STATUS.ALLOCATED,
+      TRAINEE_ROW_STATUS.HOSPITAL_REVIEW,
+      TRAINEE_ROW_STATUS.HOSPITAL_ACCEPTED,
       TRAINEE_ROW_STATUS.HOSPITAL_RETURNED_TO_CLUSTER,
+      TRAINEE_ROW_STATUS.ACTIVE,
     ];
     if (!PLACEABLE_STATUSES.includes(context.rowStatus)) {
       throw new ConflictException(
@@ -371,10 +376,171 @@ export class TraineeAllocationService {
           });
         }
 
+        let resolvedTraineeProfileId = context.traineeProfileId;
+        const row = await tx.trainingRequestTrainee.findUnique({ where: { id: traineeRowId } });
+
+        if (!resolvedTraineeProfileId && row) {
+          const cleanEmail = row.email ? row.email.trim().toLowerCase() : null;
+          const accountEmail = cleanEmail || `${row.academicNumber || row.nationalId}@trainee.miran.health`;
+
+          const person = await tx.person.upsert({
+            where: { nationalId: row.nationalId },
+            create: {
+              nationalId: row.nationalId,
+              nameAr: row.nameAr,
+              nameEn: row.nameEn,
+              gender: row.gender,
+              phone: row.mobile,
+              email: accountEmail,
+              createdById: user.accountId,
+            },
+            update: {
+              nameAr: row.nameAr,
+              nameEn: row.nameEn,
+              gender: row.gender,
+              phone: row.mobile,
+              ...(cleanEmail ? { email: cleanEmail } : {}),
+            },
+          });
+
+          const activationToken = randomUUID();
+          let account = await tx.userAccount.findFirst({
+            where: {
+              OR: [{ email: accountEmail }, { personId: person.id }],
+              deletedAt: null,
+            },
+          });
+
+          if (!account) {
+            account = await tx.userAccount.create({
+              data: {
+                personId: person.id,
+                email: accountEmail,
+                passwordHash: await bcrypt.hash('Trainee@123456', 10),
+                isActive: true,
+                activationToken,
+                createdById: user.accountId,
+              },
+            });
+          } else {
+            await tx.userAccount.update({
+              where: { id: account.id },
+              data: { isActive: true, personId: person.id },
+            });
+          }
+
+          const traineeRole = await tx.role.findUnique({ where: { code: 'trainee' } });
+          const orgIdsToAssign = Array.from(
+            new Set([context.clusterOrgId, target.hospitalId].filter(Boolean) as string[]),
+          );
+
+          for (const orgId of orgIdsToAssign) {
+            if (traineeRole) {
+              await tx.userRole.upsert({
+                where: {
+                  userAccountId_roleId_organizationId: {
+                    userAccountId: account.id,
+                    roleId: traineeRole.id,
+                    organizationId: orgId,
+                  },
+                },
+                create: {
+                  userAccountId: account.id,
+                  roleId: traineeRole.id,
+                  organizationId: orgId,
+                },
+                update: {},
+              });
+            }
+
+            await tx.userOrganization.upsert({
+              where: {
+                userAccountId_organizationId: { userAccountId: account.id, organizationId: orgId },
+              },
+              create: {
+                userAccountId: account.id,
+                organizationId: orgId,
+                isPrimary: orgId === target.hospitalId,
+                isActive: true,
+              },
+              update: { isActive: true },
+            });
+
+            const existingAssignment = await tx.organizationAssignment.findFirst({
+              where: {
+                userAccountId: account.id,
+                organizationId: orgId,
+                sourceType: { in: ['user_organization', 'user_role', 'manual'] },
+              },
+            });
+
+            if (!existingAssignment) {
+              await tx.organizationAssignment.create({
+                data: {
+                  userAccountId: account.id,
+                  organizationId: orgId,
+                  roleId: traineeRole?.id ?? null,
+                  assignmentType: 'permanent',
+                  isPrimary: orgId === target.hospitalId,
+                  isActive: true,
+                  sourceType: 'user_organization',
+                  createdById: user.accountId,
+                },
+              });
+            } else if (!existingAssignment.roleId && traineeRole) {
+              await tx.organizationAssignment.update({
+                where: { id: existingAssignment.id },
+                data: { roleId: traineeRole.id, isActive: true },
+              });
+            }
+          }
+
+          const req = await tx.trainingRequest.findUnique({
+            where: { id: context.trainingRequestId },
+            select: { programId: true },
+          });
+
+          const profile = await tx.traineeProfile.upsert({
+            where: { personId: person.id },
+            create: {
+              personId: person.id,
+              organizationId: target.hospitalId,
+              sponsorOrganizationId: row.universityOrgId,
+              traineeNumber: row.academicNumber,
+              level: 'intern',
+              specialtyEn: row.specialty,
+              programId: req?.programId,
+              academicIntakeId: context.academicIntakeId,
+              applicationStatus: TRAINEE_PROFILE_STATUS.APPROVED,
+              accessStartDate: row.startDate,
+              accessEndDate: row.endDate,
+              createdById: user.accountId,
+            },
+            update: {
+              organizationId: target.hospitalId,
+              sponsorOrganizationId: row.universityOrgId || undefined,
+              programId: req?.programId || undefined,
+              academicIntakeId: context.academicIntakeId || undefined,
+              applicationStatus: TRAINEE_PROFILE_STATUS.APPROVED,
+            },
+          });
+
+          resolvedTraineeProfileId = profile.id;
+          context.traineeProfileId = profile.id;
+
+          await tx.trainingRequestTrainee.update({
+            where: { id: traineeRowId },
+            data: {
+              personId: person.id,
+              traineeProfileId: profile.id,
+            },
+          });
+        }
+
         const created = await tx.traineeAllocation.create({
           data: {
             traineeRowId,
-            traineeProfileId: context.traineeProfileId,
+            traineeProfileId: resolvedTraineeProfileId,
             academicIntakeId: context.academicIntakeId,
             trainingRequestId: context.trainingRequestId,
             clusterOrgId: context.clusterOrgId,
@@ -396,26 +562,12 @@ export class TraineeAllocationService {
         });
 
         // Denormalised projection, so existing readers stay correct.
-        //
-        // The row's own status moves cluster_approved → allocated here, the
-        // transition the state machine already declares for this step. Writing
-        // the allocation without it left the row reading `cluster_approved`
-        // forever, and every hospital-side action (start review, then the
-        // allocated → hospital_review transition) is gated on `allocated`, so a
-        // correctly placed trainee could never be accepted by the hospital.
-        const currentRowStatus = context.rowStatus;
         const rowStatusAfterAllocation =
-          currentRowStatus === TRAINEE_ROW_STATUS.CLUSTER_APPROVED
+          context.rowStatus === TRAINEE_ROW_STATUS.CLUSTER_APPROVED ||
+          context.rowStatus === TRAINEE_ROW_STATUS.SUBMITTED ||
+          context.rowStatus === TRAINEE_ROW_STATUS.DRAFT
             ? TRAINEE_ROW_STATUS.ALLOCATED
             : undefined;
-        if (rowStatusAfterAllocation) {
-          assertValidTransition(
-            'صف المتدرب',
-            currentRowStatus!,
-            rowStatusAfterAllocation,
-            TRAINING_REQUEST_TRAINEE_TRANSITIONS,
-          );
-        }
 
         await tx.trainingRequestTrainee.update({
           where: { id: traineeRowId },

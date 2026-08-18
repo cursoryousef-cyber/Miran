@@ -116,7 +116,20 @@ export const ClusterDashboard: React.FC = () => {
 
       {/* 2. KPI GRID */}
       <KpiGrid>
-        <KpiCard label="طلبات ينتظر التوزيع" value={pendingRequests.length} icon={FolderGit2} tone={pendingRequests.length ? 'warning' : 'success'} loading={reqLoading} onClick={() => navigate('/cluster-trainees')} />
+        <KpiCard
+          label="طلبات ينتظر التوزيع"
+          value={pendingRequests.length}
+          icon={FolderGit2}
+          tone={pendingRequests.length ? 'warning' : 'success'}
+          loading={reqLoading}
+          onClick={() => {
+            if (pendingRequests.length === 1 && pendingRequests[0]?.id) {
+              navigate(`/affiliations?tab=incoming&request=${pendingRequests[0].id}`);
+            } else {
+              navigate('/affiliations?tab=incoming');
+            }
+          }}
+        />
         <KpiCard label="إجمالي أطباء الامتياز" value={totalOccupied} icon={Users} tone="primary" loading={statsLoading} />
         <KpiCard label="المستشفيات التابعة" value={hospitals.length} icon={Building2} tone="info" loading={cardsLoading} />
         <KpiCard label="الطاقة الاستيعابية الكلية" value={totalCapacity} icon={BedDouble} tone="neutral" loading={statsLoading} />
@@ -153,7 +166,15 @@ export const ClusterDashboard: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={() => navigate('/cluster-trainees')}
+            onClick={() => {
+              if (pendingRequests.length === 1 && pendingRequests[0]?.id) {
+                navigate(`/affiliations?tab=incoming&request=${pendingRequests[0].id}`);
+              } else if (pendingRequests.length > 1) {
+                navigate('/affiliations?tab=incoming');
+              } else {
+                navigate('/cluster-trainees');
+              }
+            }}
             style={{
               padding: '8px 16px',
               borderRadius: '8px',
@@ -175,7 +196,7 @@ export const ClusterDashboard: React.FC = () => {
         <Panel
           title="الطلبات الواردة من الجامعات والتوزيع الآلي"
           icon={FolderGit2}
-          action={<PanelLink label="صفحة التوزيع" onClick={() => navigate('/cluster-trainees')} />}
+          action={<PanelLink label="جميع الطلبات الواردة" onClick={() => navigate('/affiliations?tab=incoming')} />}
         >
           {reqLoading ? (
             <PanelSkeleton rows={5} />
@@ -190,7 +211,7 @@ export const ClusterDashboard: React.FC = () => {
                   title={`طلب ${r.requestNumber} — ${r.sourceOrg?.nameAr ?? 'الجامعة'}`}
                   meta={`عدد المتدربين: ${r.studentCount ?? 0} · التخصص: ${r.specialty ?? 'طب عام'}`}
                   trailing={<Badge label={st.label} tone={st.tone} />}
-                  onClick={() => navigate('/cluster-trainees')}
+                  onClick={() => navigate(`/affiliations?tab=incoming&request=${r.id}`)}
                 />
               );
             })

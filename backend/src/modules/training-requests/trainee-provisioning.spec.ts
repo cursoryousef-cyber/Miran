@@ -60,7 +60,9 @@ describe('BD-11 — trainee provisioning creates OrganizationAssignment', () => 
       },
       userAccount: {
         findUnique: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: ACCOUNT_ID }),
+        update: jest.fn().mockResolvedValue({ id: ACCOUNT_ID }),
       },
       role: {
         findUnique: jest.fn().mockResolvedValue({ id: TRAINEE_ROLE_ID, code: 'trainee' }),

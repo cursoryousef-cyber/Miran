@@ -1,4 +1,18 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, ForbiddenException, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  ForbiddenException,
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { CurrentUser } from '../../common/decorators';
@@ -345,11 +359,16 @@ export class RotationsController {
     CAPABILITIES.DEPARTMENT_MANAGE,
     CAPABILITIES.CAPACITY_VIEW,
     CAPABILITIES.TRAINEE_VIEW_HOSPITAL,
+    CAPABILITIES.TRAINEE_VIEW_DEPARTMENT,
   )
   @ApiOperation({ summary: 'قائمة الأقسام السريرية وطاقتها الاستيعابية' })
-  async getDepartments(@CurrentUser() user: IAuthenticatedUser) {
+  async getDepartments(
+    @CurrentUser() user: IAuthenticatedUser,
+    @Query('organizationId') organizationId?: string,
+  ) {
+    const targetOrgId = organizationId || user.organizationId;
     const departments = await this.prisma.department.findMany({
-      where: { organizationId: user.organizationId, isActive: true, deletedAt: null },
+      where: { organizationId: targetOrgId, isActive: true, deletedAt: null },
       include: {
         _count: { select: { rotations: true, trainerProfiles: true } },
       },

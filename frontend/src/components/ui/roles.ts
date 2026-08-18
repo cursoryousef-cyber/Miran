@@ -3,6 +3,7 @@ import {
   Building2, ClipboardList, FolderGit2, FileSpreadsheet, BookOpen, AlertTriangle,
   Shield, Key, Activity, GitMerge, Settings, FileSignature, BellRing, UsersRound,
   Route, PhoneCall, Send, Inbox, CheckSquare, RotateCcw, Megaphone, CalendarDays,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 /**
@@ -150,12 +151,8 @@ const HOSPITAL_TRAINING_NAV: NavSection[] = [
         name: 'طلبات التدريب الواردة', path: '/hospital?tab=requests', icon: Inbox,
         requires: ['trainee.view.hospital'],
       },
-      // Points at the reassignment section, which is the workspace surface that
-      // actually lists the hospital's trainees and moves them between
-      // departments/trainers. There is no `trainees` tab — that key fell through
-      // to the overview, so the link silently went nowhere.
       {
-        name: 'المتدربون والتوزيع', path: '/hospital?tab=reassignment', icon: UsersRound,
+        name: 'المتدربون والتوزيع', path: '/hospital?tab=trainers', icon: UsersRound,
         requires: ['trainee.view.hospital'],
       },
     ],
@@ -169,6 +166,10 @@ const HOSPITAL_TRAINING_NAV: NavSection[] = [
       },
       {
         name: 'بطاقات المدربين', path: '/hospital?tab=trainers', icon: UsersRound,
+        requires: ['trainer.manage'],
+      },
+      {
+        name: 'إعادة إسناد المدربين', path: '/hospital?tab=reassignment', icon: ArrowRightLeft,
         requires: ['trainer.manage'],
       },
     ],

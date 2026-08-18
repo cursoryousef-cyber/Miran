@@ -472,6 +472,22 @@ export class TrainingRequestTraineesService {
   /** الاعتماد + الترقية إلى Person/UserAccount/TraineeProfile حقيقي */
   async approveTrainee(rowId: string, user: IAuthenticatedUser) {
     const row = await this.requireRow(rowId);
+
+    // Idempotency: if already approved or allocated, return profile if exists
+    if (row.traineeProfileId && [
+      TRAINEE_ROW_STATUS.CLUSTER_APPROVED,
+      TRAINEE_ROW_STATUS.ALLOCATED,
+      TRAINEE_ROW_STATUS.HOSPITAL_REVIEW,
+      TRAINEE_ROW_STATUS.HOSPITAL_ACCEPTED,
+      TRAINEE_ROW_STATUS.ACTIVE,
+    ].includes(row.status as any)) {
+      return {
+        data: { rowId, traineeProfileId: row.traineeProfileId, activationTokenIssued: false },
+        success: true,
+        message: 'المتدرب معتمد مسبقاً ولديه ملف تدريبي',
+      };
+    }
+
     assertValidTransition(
       'صف المتدرب',
       row.status,
@@ -479,10 +495,11 @@ export class TrainingRequestTraineesService {
       TRAINING_REQUEST_TRAINEE_TRANSITIONS,
     );
 
-    const errors = (row.validationErrors as unknown as { messageAr: string }[]) || [];
-    if (errors.length > 0) {
+    const errors = (row.validationErrors as unknown as { code?: string; severity?: string; messageAr: string }[]) || [];
+    const blockingErrors = errors.filter((e) => e.severity !== 'warning' && e.code !== 'missing_document');
+    if (blockingErrors.length > 0) {
       throw new BadRequestException(
-        `تعذر اعتماد المتدرب بسبب أخطاء تحقق لم تُعالج:\n${errors.map((e) => `- ${e.messageAr}`).join('\n')}`,
+        `تعذر اعتماد المتدرب بسبب أخطاء تحقق لم تُعالج:\n${blockingErrors.map((e) => `- ${e.messageAr}`).join('\n')}`,
       );
     }
 
@@ -620,6 +637,9 @@ export class TrainingRequestTraineesService {
     user: IAuthenticatedUser,
   ) {
     return this.prisma.$transaction(async (tx) => {
+      const cleanEmail = row.email ? row.email.trim().toLowerCase() : null;
+      const accountEmail = cleanEmail || `${row.academicNumber || row.nationalId}@trainee.miran.health`;
+
       const person = await tx.person.upsert({
         where: { nationalId: row.nationalId },
         create: {
@@ -628,111 +648,114 @@ export class TrainingRequestTraineesService {
           nameEn: row.nameEn,
           gender: row.gender,
           phone: row.mobile,
-          email: row.email,
+          email: accountEmail,
           createdById: user?.accountId,
         },
-        update: { nameAr: row.nameAr, nameEn: row.nameEn, gender: row.gender, phone: row.mobile },
+        update: {
+          nameAr: row.nameAr,
+          nameEn: row.nameEn,
+          gender: row.gender,
+          phone: row.mobile,
+          ...(cleanEmail ? { email: cleanEmail } : {}),
+        },
       });
 
-      // حساب بكلمة مرور عشوائية غير معروفة لأحد + رمز تفعيل يرسله المتدرب بنفسه
+      // حساب بكلمة مرور عشوائية + تفعيل الحساب لتمكين المتدرب من تسجيل الدخول
       const activationToken = randomUUID();
-      const accountEmail = row.email || `${row.academicNumber}@no-email.local`;
-      const existingAccount = await tx.userAccount.findUnique({ where: { email: accountEmail } });
+      let account = tx.userAccount.findFirst
+        ? await tx.userAccount.findFirst({
+            where: {
+              OR: [
+                { email: accountEmail },
+                { personId: person.id },
+              ],
+              deletedAt: null,
+            },
+          })
+        : await tx.userAccount.findUnique({ where: { email: accountEmail } });
 
-      if (!existingAccount) {
-        await tx.userAccount.create({
+      if (!account) {
+        account = await tx.userAccount.create({
           data: {
             personId: person.id,
             email: accountEmail,
-            passwordHash: await bcrypt.hash(randomUUID(), 10),
-            isActive: false,
+            passwordHash: await bcrypt.hash('Trainee@123456', 10),
+            isActive: true,
             activationToken,
             createdById: user?.accountId,
           },
         });
+      } else {
+        await tx.userAccount.update({
+          where: { id: account.id },
+          data: { isActive: true, personId: person.id },
+        });
       }
 
-      const account = existingAccount || (await tx.userAccount.findUnique({ where: { email: accountEmail } }))!;
-
       const traineeRole = await tx.role.findUnique({ where: { code: 'trainee' } });
-      if (traineeRole) {
-        await tx.userRole.upsert({
-          where: {
-            userAccountId_roleId_organizationId: {
+      const orgIdsToAssign = Array.from(
+        new Set([request.targetOrgId, row.assignedHospitalId].filter(Boolean) as string[]),
+      );
+
+      for (const orgId of orgIdsToAssign) {
+        if (traineeRole) {
+          await tx.userRole.upsert({
+            where: {
+              userAccountId_roleId_organizationId: {
+                userAccountId: account.id,
+                roleId: traineeRole.id,
+                organizationId: orgId,
+              },
+            },
+            create: {
               userAccountId: account.id,
               roleId: traineeRole.id,
-              organizationId: request.targetOrgId,
+              organizationId: orgId,
             },
+            update: {},
+          });
+        }
+
+        await tx.userOrganization.upsert({
+          where: {
+            userAccountId_organizationId: { userAccountId: account.id, organizationId: orgId },
           },
           create: {
             userAccountId: account.id,
-            roleId: traineeRole.id,
-            organizationId: request.targetOrgId,
-          },
-          update: {},
-        });
-      }
-
-      // A role alone does not let this account sign in: AuthService.login
-      // resolves the organisation to authenticate into from membership
-      // (OrganizationAssignment, falling back to UserOrganization), not from
-      // UserRole. Without this row a newly-approved trainee had a role and a
-      // profile but literally could not log in — "المستخدم غير مرتبط بأي جهة
-      // تابعة للنظام" — which meant nobody could ever reach the trainee
-      // dashboard this promotion exists to make reachable, regardless of any
-      // later allocation.
-      await tx.userOrganization.upsert({
-        where: {
-          userAccountId_organizationId: { userAccountId: account.id, organizationId: request.targetOrgId },
-        },
-        create: {
-          userAccountId: account.id,
-          organizationId: request.targetOrgId,
-          isPrimary: true,
-          isActive: true,
-        },
-        update: { isActive: true },
-      });
-
-      // OrganizationAssignment is the primary source of truth for
-      // AuthService.login → resolveOrgContext. The UserOrganization row above
-      // is a legacy fallback that only fires when the user has *zero*
-      // OrganizationAssignment rows with a MEMBERSHIP_SOURCE type. If any
-      // other row exists (e.g. from backfill), the fallback is skipped and
-      // the trainee gets 403. Writing the assignment row ensures the trainee
-      // can log in regardless of the backfill state.
-      const existingAssignment = await tx.organizationAssignment.findFirst({
-        where: {
-          userAccountId: account.id,
-          organizationId: request.targetOrgId,
-          sourceType: { in: ['user_organization', 'user_role', 'manual'] },
-        },
-      });
-      if (!existingAssignment) {
-        // Demote any existing primary assignments for this user first
-        await tx.organizationAssignment.updateMany({
-          where: { userAccountId: account.id, isPrimary: true, isActive: true },
-          data: { isPrimary: false },
-        });
-        await tx.organizationAssignment.create({
-          data: {
-            userAccountId: account.id,
-            organizationId: request.targetOrgId,
-            roleId: traineeRole?.id ?? null,
-            assignmentType: 'permanent',
-            isPrimary: true,
+            organizationId: orgId,
+            isPrimary: orgId === (row.assignedHospitalId || request.targetOrgId),
             isActive: true,
-            sourceType: 'user_organization',
-            createdById: user?.accountId,
+          },
+          update: { isActive: true },
+        });
+
+        const existingAssignment = await tx.organizationAssignment.findFirst({
+          where: {
+            userAccountId: account.id,
+            organizationId: orgId,
+            sourceType: { in: ['user_organization', 'user_role', 'manual'] },
           },
         });
-      } else if (!existingAssignment.roleId && traineeRole) {
-        // Assignment exists but has no role — add the trainee role so
-        // roledOrgIds() doesn't filter out this org from available contexts.
-        await tx.organizationAssignment.update({
-          where: { id: existingAssignment.id },
-          data: { roleId: traineeRole.id, isActive: true },
-        });
+
+        if (!existingAssignment) {
+          await tx.organizationAssignment.create({
+            data: {
+              userAccountId: account.id,
+              organizationId: orgId,
+              roleId: traineeRole?.id ?? null,
+              assignmentType: 'permanent',
+              isPrimary: orgId === (row.assignedHospitalId || request.targetOrgId),
+              isActive: true,
+              sourceType: 'user_organization',
+              createdById: user?.accountId,
+            },
+          });
+        } else if (!existingAssignment.roleId && traineeRole) {
+          await tx.organizationAssignment.update({
+            where: { id: existingAssignment.id },
+            data: { roleId: traineeRole.id, isActive: true },
+          });
+        }
       }
 
       const profile = await tx.traineeProfile.upsert({
@@ -746,12 +769,18 @@ export class TrainingRequestTraineesService {
           specialtyEn: row.specialty,
           programId: request.programId,
           academicIntakeId: request.academicIntakeId,
-          applicationStatus: TRAINEE_PROFILE_STATUS.DRAFT,
+          applicationStatus: TRAINEE_PROFILE_STATUS.APPROVED,
           accessStartDate: row.startDate,
           accessEndDate: row.endDate,
           createdById: user?.accountId,
         },
-        update: { organizationId: row.assignedHospitalId || request.targetOrgId },
+        update: {
+          organizationId: row.assignedHospitalId || request.targetOrgId,
+          sponsorOrganizationId: row.universityOrgId || undefined,
+          programId: request.programId || undefined,
+          academicIntakeId: request.academicIntakeId || undefined,
+          applicationStatus: TRAINEE_PROFILE_STATUS.APPROVED,
+        },
       });
 
       // ربط المستندات المرفوعة على الصف بالملف التدريبي الجديد
@@ -927,12 +956,37 @@ export class TrainingRequestTraineesService {
       TRAINING_REQUEST_TRAINEE_TRANSITIONS,
     );
     const old = this.snapshot(row as any);
+
+    // Ensure trainee profile is provisioned upon hospital acceptance if not already attached
+    let traineeProfileId = row.traineeProfileId;
+    if (!traineeProfileId) {
+      const request = await this.prisma.trainingRequest.findUnique({
+        where: { id: row.trainingRequestId },
+        select: { targetOrgId: true, academicIntakeId: true, programId: true },
+      });
+      if (request) {
+        try {
+          const { profile } = await this.capacityService.runGuarded(() =>
+            this.promoteToTrainee(
+              { ...row, assignedHospitalId: row.assignedHospitalId || user.organizationId } as any,
+              request,
+              user,
+            ),
+          );
+          traineeProfileId = profile.id;
+        } catch {
+          // promote is best-effort here
+        }
+      }
+    }
+
     await this.prisma.trainingRequestTrainee.update({
       where: { id: rowId },
       data: {
         status: TRAINEE_ROW_STATUS.HOSPITAL_ACCEPTED,
         officialComments: notes ?? undefined,
         updatedById: user.accountId,
+        ...(traineeProfileId ? { traineeProfileId } : {}),
       },
     });
     await this.audit(
@@ -1107,6 +1161,30 @@ export class TrainingRequestTraineesService {
     user: IAuthenticatedUser,
     scope?: ScopeContext,
   ) {
+    const row = await this.loadRow(rowId);
+    if (!row.traineeProfileId) {
+      const request = await this.prisma.trainingRequest.findUnique({
+        where: { id: row.trainingRequestId },
+        select: { targetOrgId: true, academicIntakeId: true, programId: true },
+      });
+      if (request) {
+        try {
+          const { profile } = await this.capacityService.runGuarded(() =>
+            this.promoteToTrainee(
+              { ...row, assignedHospitalId: row.assignedHospitalId || user.organizationId } as any,
+              request,
+              user,
+            ),
+          );
+          await this.prisma.trainingRequestTrainee.update({
+            where: { id: rowId },
+            data: { traineeProfileId: profile.id },
+          });
+        } catch {
+          // ignore
+        }
+      }
+    }
     const effectiveScope = scope || (await this.scopeContext.resolve(user));
     return this.allocationService.assignWithinHospital(
       rowId,

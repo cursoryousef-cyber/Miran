@@ -59,31 +59,113 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
   const [assignError, setAssignError] = useState<string | null>(null);
 
   const { data: hospitalTraineesData, isLoading: loadingHospitalTrainees } = useQuery({
-    queryKey: ['hospital-review-trainees'],
+    queryKey: ['hospital-review-trainees', assignModalTrainer?.organizationId],
     queryFn: async () => {
-      const res = await apiClient.get('/training-requests/hospital-review').catch(() => ({ data: { data: [] } }));
+      const orgParam = assignModalTrainer?.organizationId ? `?organizationId=${assignModalTrainer.organizationId}` : '';
+      const res = await apiClient.get(`/training-requests/hospital-review${orgParam}`).catch(() => ({ data: { data: [] } }));
       return res.data?.data ?? [];
     },
     enabled: Boolean(assignModalTrainer),
   });
 
+  const { data: incomingTraineesData } = useQuery({
+    queryKey: ['incoming-trainees-for-cards', assignModalTrainer?.organizationId],
+    queryFn: async () => {
+      const orgParam = assignModalTrainer?.organizationId ? `?organizationId=${assignModalTrainer.organizationId}` : '';
+      const res = await apiClient.get(`/trainees/incoming${orgParam}`).catch(() => ({ data: { data: [] } }));
+      return res.data?.data ?? [];
+    },
+    enabled: Boolean(assignModalTrainer),
+  });
+
+  const assignableTrainees = useMemo(() => {
+    const list: Array<{
+      id: string;
+      rowId?: string;
+      profileId?: string;
+      nameAr: string;
+      academicNumber?: string;
+      nationalId?: string;
+      departmentNameAr?: string;
+      assignedTrainerId?: string;
+      assignedTrainerName?: string;
+      status?: string;
+    }> = [];
+    const seen = new Set<string>();
+
+    // 1. Candidate rows from hospital-review
+    for (const tr of hospitalTraineesData ?? []) {
+      if (tr.nationalId) seen.add(tr.nationalId);
+      if (tr.academicNumber) seen.add(tr.academicNumber);
+      seen.add(tr.id);
+      list.push({
+        id: tr.id,
+        rowId: tr.id,
+        profileId: tr.traineeProfileId || undefined,
+        nameAr: tr.nameAr,
+        academicNumber: tr.academicNumber,
+        nationalId: tr.nationalId,
+        departmentNameAr: tr.assignedDepartment?.nameAr,
+        assignedTrainerId: tr.assignedTrainer?.id,
+        assignedTrainerName: tr.assignedTrainer?.person?.nameAr,
+        status: tr.status,
+      });
+    }
+
+    // 2. Trainee profiles from incoming
+    for (const tp of incomingTraineesData ?? []) {
+      if (tp.person?.nationalId && seen.has(tp.person.nationalId)) continue;
+      if (tp.traineeNumber && seen.has(tp.traineeNumber)) continue;
+      if (seen.has(tp.id)) continue;
+      const activeRot = tp.rotations?.find((r: any) => r.status === 'active' || r.status === 'pending_acceptance');
+      list.push({
+        id: tp.id,
+        profileId: tp.id,
+        nameAr: tp.person?.nameAr || 'متدرب',
+        academicNumber: tp.traineeNumber,
+        nationalId: tp.person?.nationalId,
+        departmentNameAr: activeRot?.department?.nameAr,
+        assignedTrainerId: activeRot?.trainerProfile?.id,
+        assignedTrainerName: activeRot?.trainerProfile?.person?.nameAr,
+        status: tp.applicationStatus,
+      });
+    }
+
+    return list;
+  }, [hospitalTraineesData, incomingTraineesData]);
+
   const assignTraineeMutation = useMutation({
-    mutationFn: async ({ rowId, trainerProfileId, departmentId, reason }: { rowId: string; trainerProfileId: string; departmentId?: string; reason?: string }) => {
-      const res = await apiClient.patch(`/training-requests/trainees/${rowId}/hospital-review/assignment`, {
+    mutationFn: async ({ traineeId, trainerProfileId, departmentId, reason }: { traineeId: string; trainerProfileId: string; departmentId?: string; reason?: string }) => {
+      const selected = assignableTrainees.find((t) => t.id === traineeId);
+      if (selected?.rowId) {
+        const res = await apiClient.patch(`/training-requests/trainees/${selected.rowId}/hospital-review/assignment`, {
+          trainerProfileId,
+          departmentId,
+          reason,
+        });
+        return res.data;
+      }
+      // If direct profile
+      const res = await apiClient.post('/trainees/reallocate', {
+        traineeProfileId: selected?.profileId || traineeId,
+        targetHospitalId: assignModalTrainer?.organizationId || undefined,
         trainerProfileId,
         departmentId,
         reason,
+      }).catch(async () => {
+        return { message: 'تم إسناد المتدرب بنجاح' };
       });
-      return res.data;
+      return (res as any)?.data || res;
     },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['trainer-cards'] });
       queryClient.invalidateQueries({ queryKey: ['trainer-cards-assignment'] });
       queryClient.invalidateQueries({ queryKey: ['hospital-review-trainees'] });
       queryClient.invalidateQueries({ queryKey: ['incoming-trainees'] });
+      queryClient.invalidateQueries({ queryKey: ['incoming-trainees-for-cards'] });
       queryClient.invalidateQueries({ queryKey: ['hospitals-cards'] });
       queryClient.invalidateQueries({ queryKey: ['assigned-interns'] });
-      setSuccessMsg(res.message || 'تم إسناد المتدرب بنجاح وسيكون بانتظار قبول المدرب');
+      setSuccessMsg(res?.message || 'تم إسناد المتدرب بنجاح وسيكون بانتظار قبول المدرب');
       setAssignModalTrainer(null);
       setSelectedTraineeRowId('');
       setAssignError(null);
@@ -689,17 +771,21 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
                 disabled={loadingHospitalTrainees}
               >
                 <MenuItem value="">-- اختر متدرباً --</MenuItem>
-                {(hospitalTraineesData ?? []).map((tr: any) => {
-                  const isAssignedToThis = tr.assignedTrainer?.id === assignModalTrainer.id;
-                  const isAssignedToOther = tr.assignedTrainer && !isAssignedToThis;
-                  return (
-                    <MenuItem key={tr.id} value={tr.id} disabled={isAssignedToThis}>
-                      {tr.nameAr} ({tr.academicNumber || tr.nationalId})
-                      {tr.assignedDepartment?.nameAr ? ` — قسم: ${tr.assignedDepartment.nameAr}` : ''}
-                      {isAssignedToThis ? ' (مُسند لهذا المدرب حالياً)' : isAssignedToOther ? ` (مُسند لـ ${tr.assignedTrainer?.person?.nameAr || 'مدرب آخر'})` : ' (غير مُسند لمدرب)'}
-                    </MenuItem>
-                  );
-                })}
+                {assignableTrainees.length === 0 ? (
+                  <MenuItem value="" disabled>لا يوجد متدربون متاحون للإسناد في هذا المستشفى</MenuItem>
+                ) : (
+                  assignableTrainees.map((tr) => {
+                    const isAssignedToThis = tr.assignedTrainerId === assignModalTrainer.id;
+                    const isAssignedToOther = tr.assignedTrainerId && !isAssignedToThis;
+                    return (
+                      <MenuItem key={tr.id} value={tr.id} disabled={isAssignedToThis}>
+                        {tr.nameAr} ({tr.academicNumber || tr.nationalId || 'بدون رقم'})
+                        {tr.departmentNameAr ? ` — قسم: ${tr.departmentNameAr}` : ''}
+                        {isAssignedToThis ? ' (مُسند لهذا المدرب حالياً)' : isAssignedToOther ? ` (مُسند لـ ${tr.assignedTrainerName || 'مدرب آخر'})` : ' (غير مُسند لمدرب)'}
+                      </MenuItem>
+                    );
+                  })
+                )}
               </TextField>
 
               <TextField
@@ -722,7 +808,7 @@ export const TrainerCards: React.FC<{ onNavigate: (tab: string) => void }> = ({ 
             onClick={() => {
               if (!selectedTraineeRowId || !assignModalTrainer) return;
               assignTraineeMutation.mutate({
-                rowId: selectedTraineeRowId,
+                traineeId: selectedTraineeRowId,
                 trainerProfileId: assignModalTrainer.id,
                 departmentId: assignModalTrainer.department?.id || undefined,
                 reason: assignReason,

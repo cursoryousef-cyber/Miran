@@ -544,17 +544,65 @@ export class TraineesController {
   // ─── قائمة المتدربين الواردين للتجمع الصحي ────────────────────────────────
   @Get('incoming')
   @RequireRoles(
-    'cluster_administrator', 'cluster_manager',
+    'cluster_administrator',
     'cluster_manager',
     'training_director',
     'platform_owner',
     'hospital_training_admin',
+    'hospital_administrator',
+    'org_manager',
   )
-  @ApiOperation({ summary: 'قائمة متدربي الامتياز الواردين للتجمع الصحي' })
+  @ApiOperation({ summary: 'قائمة متدربي الامتياز الواردين للتجمع الصحي والمستشفيات' })
   async getIncomingTrainees(@CurrentUser() user: IAuthenticatedUser) {
     const scope = await this.scopeContext.resolve(user);
+    const filter = this.scopeContext.orgFilter(scope);
+
+    // If scoped to hospital(s) or cluster, auto-link any unlinked candidate rows that are accepted/allocated
+    if (scope.visibleOrgIds !== null) {
+      const pendingRows = await this.prisma.trainingRequestTrainee.findMany({
+        where: {
+          assignedHospitalId: { in: scope.visibleOrgIds },
+          status: { in: ['allocated', 'hospital_review', 'hospital_accepted', 'active'] },
+          traineeProfileId: null,
+        },
+      });
+      for (const row of pendingRows) {
+        try {
+          const person = await this.prisma.person.findUnique({
+            where: { nationalId: row.nationalId },
+            include: { traineeProfile: true },
+          });
+          if (person?.traineeProfile) {
+            await this.prisma.trainingRequestTrainee.update({
+              where: { id: row.id },
+              data: { traineeProfileId: person.traineeProfile.id, personId: person.id },
+            });
+          }
+        } catch {
+          // ignore error
+        }
+      }
+    }
+
+    const whereClause: any =
+      scope.visibleOrgIds !== null
+        ? {
+            OR: [
+              filter,
+              {
+                trainingRequestRows: {
+                  some: {
+                    assignedHospitalId: { in: scope.visibleOrgIds },
+                    status: { notIn: ['rejected', 'merged', 'split'] },
+                  },
+                },
+              },
+            ],
+          }
+        : filter;
+
     const trainees = await this.prisma.traineeProfile.findMany({
-      where: this.scopeContext.orgFilter(scope),
+      where: whereClause,
       include: {
         person: true,
         organization: true,

@@ -19,8 +19,8 @@ export class ProgramsController {
   @RequireRoles(
     'platform_owner', 'system_admin', 'org_manager',
     'cluster_administrator', 'cluster_manager', 'training_director',
-    'hospital_training_admin', 'trainer',
-    'university_administrator', 'academic_supervisor', 'trainee',
+    'hospital_administrator', 'hospital_training_admin', 'trainer',
+    'university_administrator', 'academic_affairs', 'academic_supervisor', 'trainee',
   )
   @ApiOperation({ summary: 'كتالوج البرامج التدريبية الوطني' })
   async findAll(
@@ -37,8 +37,8 @@ export class ProgramsController {
   @RequireRoles(
     'platform_owner', 'system_admin', 'org_manager',
     'cluster_administrator', 'cluster_manager', 'training_director',
-    'hospital_training_admin', 'trainer',
-    'university_administrator', 'academic_supervisor', 'trainee',
+    'hospital_administrator', 'hospital_training_admin', 'trainer',
+    'university_administrator', 'academic_affairs', 'academic_supervisor', 'trainee',
   )
   @ApiOperation({ summary: 'تفاصيل برنامج تدريبي' })
   async findOne(@Param('id') id: string) {

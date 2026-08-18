@@ -6,6 +6,7 @@ export interface ValidationError {
   code: string;
   messageAr: string;
   field?: string;
+  severity?: 'error' | 'warning';
 }
 
 export interface RowValidationResult {
@@ -113,6 +114,7 @@ export class ValidationEngineService {
           errors.push({
             code: 'missing_document',
             field: required,
+            severity: 'warning',
             messageAr: `المستند الإلزامي مفقود: ${this.documentLabel(required)}`,
           });
         }
@@ -125,6 +127,7 @@ export class ValidationEngineService {
           errors.push({
             code: 'expired_document',
             field: doc.documentType,
+            severity: 'warning',
             messageAr: `${this.documentLabel(doc.documentType)} منتهية الصلاحية بتاريخ ${doc.expiryDate.toISOString().slice(0, 10)}`,
           });
         }
@@ -132,10 +135,12 @@ export class ValidationEngineService {
 
       // ── الجوال والبريد ──
       if (!row.mobile) {
-        errors.push({ code: 'missing_mobile', field: 'mobile', messageAr: 'رقم الجوال مفقود' });
+        errors.push({ code: 'missing_mobile', field: 'mobile', severity: 'error', messageAr: 'رقم الجوال مفقود' });
       }
       if (!row.email) {
-        errors.push({ code: 'missing_email', field: 'email', messageAr: 'البريد الإلكتروني مفقود' });
+        errors.push({ code: 'missing_email', field: 'email', severity: 'error', messageAr: 'البريد الإلكتروني مفقود' });
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim())) {
+        errors.push({ code: 'invalid_email', field: 'email', severity: 'error', messageAr: 'صيغة البريد الإلكتروني غير صالحة' });
       }
 
       // ── التخصص ──
