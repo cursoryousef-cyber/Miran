@@ -8,7 +8,7 @@ import {
 import {
   Calendar as CalendarIcon, Clock, Plus, RefreshCw, AlertTriangle, CheckCircle,
   Copy, Layers, ChevronRight, ChevronLeft, Filter, Search, UserCheck, ShieldAlert,
-  Send, FileText, Settings,
+  Send, FileText, Settings, Edit3, Trash2, Eye,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -39,7 +39,8 @@ interface Schedule {
   endDate: string;
   status: string;
   totalHours: number;
-  department?: { nameAr: string };
+  departmentId?: string;
+  department?: { id?: string; nameAr: string };
   participants?: Array<{ traineeProfileId: string; traineeProfile?: { person?: { nameAr: string } } }>;
   sessions?: Session[];
   revisions?: Array<{ revision: number; changeReason?: string; publishedAt: string }>;
@@ -52,6 +53,8 @@ export const ScheduleBuilder: React.FC = () => {
   const [activeView, setActiveView] = useState<'week' | 'day' | 'timeline'>('week');
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [activeConflicts, setActiveConflicts] = useState<any[]>([]);
@@ -91,20 +94,6 @@ export const ScheduleBuilder: React.FC = () => {
     },
   });
 
-  // Departments to build a schedule against.
-  //
-  // This derived the list from `/rotations`, i.e. only departments that already
-  // happen to carry a rotation, and without de-duplicating: against the current
-  // hospital that yields five entries which are all the *same* department, so
-  // the picker repeated «قسم الباطنية العام» five times and the other thirteen
-  // departments — Emergency, ICU, Surgery, Paediatrics — could not be scheduled
-  // at all. It also fetched `/operations/analytics` and discarded the result,
-  // paying for a seven-query aggregate on every mount for nothing.
-  //
-  // `/rotations/departments` is the hospital's own department catalogue: it
-  // filters on the caller's `organizationId` server-side and the hospital
-  // training administration already holds the capability it requires. No role,
-  // permission or endpoint was changed.
   const { data: departments } = useQuery({
     queryKey: ['schedule-builder-departments'],
     queryFn: async () => {
@@ -113,16 +102,6 @@ export const ScheduleBuilder: React.FC = () => {
     },
   });
 
-  // This screen belongs to the hospital training administration (the `/hospital`
-  // route admits no trainer at all), so it must read the hospital-scoped trainee
-  // list. It was calling `/operations/trainer/assigned-interns`, which answers a
-  // different question — "the trainees assigned to *me as a trainer*" — and is
-  // role-gated to `trainer`. The hospital training administration holds no
-  // TrainerProfile and no rotation, so that route answered 403 and the trainee
-  // picker came up empty for exactly the role that builds the schedules. The
-  // hospital-scoped equivalent is `/trainees/incoming`, which resolves the
-  // caller's organisation scope on the server. The role list below is the one
-  // that endpoint already grants — no role was added to either side.
   const canReadHospitalTrainees = !!user?.roles?.some((r: string) =>
     ['hospital_training_admin', 'hospital_administrator', 'org_manager', 'platform_owner', 'cluster_administrator', 'cluster_manager', 'training_director'].includes(r),
   );
@@ -166,6 +145,7 @@ export const ScheduleBuilder: React.FC = () => {
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['schedules-list'] });
       setWizardOpen(false);
+      setEditingScheduleId(null);
       const newId = res.data?.data?.id;
       if (newId) setSelectedScheduleId(newId);
     },
@@ -177,6 +157,38 @@ export const ScheduleBuilder: React.FC = () => {
       } else {
         alert(err.response?.data?.message || 'فشل إنشاء الجدول التدريبي');
       }
+    },
+  });
+
+  const updateScheduleMutation = useMutation({
+    mutationFn: ({ id, dto }: { id: string; dto: any }) => apiClient.patch(`/schedules/${id}`, dto),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['schedules-list'] });
+      queryClient.invalidateQueries({ queryKey: ['schedule-detail', editingScheduleId] });
+      setWizardOpen(false);
+      setEditingScheduleId(null);
+      alert('تم تحديث بيانات الجدول التدريبي بنجاح!');
+    },
+    onError: (err: any) => {
+      const conflicts = err.response?.data?.conflicts;
+      if (conflicts && conflicts.length > 0) {
+        setActiveConflicts(conflicts);
+        setConflictModalOpen(true);
+      } else {
+        alert(err.response?.data?.message || 'فشل تحديث الجدول التدريبي لوجود تعارض');
+      }
+    },
+  });
+
+  const deleteScheduleMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/schedules/${id}`),
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ['schedules-list'] });
+      setSelectedScheduleId((prev) => (prev === deletedId ? null : prev));
+      alert('تم حذف مسودة الجدول التدريبي بنجاح');
+    },
+    onError: (err: any) => {
+      alert(err.response?.data?.message || 'فشل حذف الجدول التدريبي');
     },
   });
 
@@ -216,6 +228,31 @@ export const ScheduleBuilder: React.FC = () => {
       }
     },
   });
+
+  // Handler to open Schedule in Edit Mode
+  const handleOpenEditSchedule = (sched: Schedule) => {
+    setEditingScheduleId(sched.id);
+    setWTitleAr(sched.titleAr || '');
+    setWDepartmentId(sched.departmentId || sched.department?.id || '');
+    setWStartDate(sched.startDate ? new Date(sched.startDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+    setWEndDate(sched.endDate ? new Date(sched.endDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+    const participantIds = sched.participants?.map((p) => p.traineeProfileId) || [];
+    setWSelectedTrainees(participantIds);
+    setWizardStep(0);
+    setWizardConflicts([]);
+    setWizardOpen(true);
+  };
+
+  // Handler to Delete Schedule
+  const handleDeleteSchedule = (sched: Schedule) => {
+    if (sched.status === 'published') {
+      return alert('لا يمكن حذف جدول منشور ومعتمد مرتبط بالتشغيل الفعلي. يمكنك أرشفة الجدول أو تعديل جلساته.');
+    }
+    const confirmed = window.confirm(`هل أنت متأكد من رغبتك في حذف مسودة الجدول «${sched.titleAr}» نهائياً؟`);
+    if (confirmed) {
+      deleteScheduleMutation.mutate(sched.id);
+    }
+  };
 
   // Available Time Slots definition
   const TIME_SLOTS = [
@@ -361,14 +398,27 @@ export const ScheduleBuilder: React.FC = () => {
       return alert('لم يتم توليد أي جلسات تدريبية وفق التواريخ والأيام المحددة.');
     }
 
-    createScheduleMutation.mutate({
-      titleAr: wTitleAr,
-      startDate: wStartDate,
-      endDate: wEndDate,
-      departmentId: wDepartmentId,
-      traineeProfileIds: wSelectedTrainees,
-      sessions,
-    });
+    if (editingScheduleId) {
+      updateScheduleMutation.mutate({
+        id: editingScheduleId,
+        dto: {
+          titleAr: wTitleAr,
+          startDate: wStartDate,
+          endDate: wEndDate,
+          departmentId: wDepartmentId,
+          sessions,
+        },
+      });
+    } else {
+      createScheduleMutation.mutate({
+        titleAr: wTitleAr,
+        startDate: wStartDate,
+        endDate: wEndDate,
+        departmentId: wDepartmentId,
+        traineeProfileIds: wSelectedTrainees,
+        sessions,
+      });
+    }
   };
 
   const canPublish = user?.roles?.some((r) =>
@@ -415,20 +465,59 @@ export const ScheduleBuilder: React.FC = () => {
       <Card sx={{ mb: 3, p: 2, borderRadius: 2 }}>
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} md={4}>
-            <FormControl fullWidth size="small">
-              <InputLabel>الجدول التدريبي الحالي</InputLabel>
-              <Select
-                value={selectedScheduleId || ''}
-                label="الجدول التدريبي الحالي"
-                onChange={(e) => setSelectedScheduleId(e.target.value)}
-              >
-                {schedulesData?.map((s: Schedule) => (
-                  <MenuItem key={s.id} value={s.id}>
-                    {s.titleAr} ({s.status === 'published' ? 'منشور' : 'مسودة'}) — {s.totalHours} ساعة
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>الجدول التدريبي الحالي</InputLabel>
+                <Select
+                  value={selectedScheduleId || ''}
+                  label="الجدول التدريبي الحالي"
+                  onChange={(e) => setSelectedScheduleId(e.target.value)}
+                >
+                  {schedulesData?.map((s: Schedule) => (
+                    <MenuItem key={s.id} value={s.id}>
+                      {s.titleAr} ({s.status === 'published' ? 'منشور' : 'مسودة'}) — {s.totalHours} ساعة
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              {/* Action Buttons for Selected Schedule */}
+              {activeScheduleData && (
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="primary"
+                    title="تعديل الجدول التدريبي"
+                    onClick={() => handleOpenEditSchedule(activeScheduleData)}
+                    sx={{ minWidth: 36, px: 1 }}
+                  >
+                    <Edit3 size={16} />
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="info"
+                    title="عرض تفاصيل ومعلومات الجدول"
+                    onClick={() => setDetailsModalOpen(true)}
+                    sx={{ minWidth: 36, px: 1 }}
+                  >
+                    <Eye size={16} />
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    title={activeScheduleData.status === 'published' ? 'لا يمكن حذف جدول منشور' : 'حذف مسودة الجدول'}
+                    disabled={activeScheduleData.status === 'published' || deleteScheduleMutation.isPending}
+                    onClick={() => handleDeleteSchedule(activeScheduleData)}
+                    sx={{ minWidth: 36, px: 1 }}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </Box>
+              )}
+            </Box>
           </Grid>
 
           <Grid item xs={12} md={4}>
@@ -1048,6 +1137,77 @@ export const ScheduleBuilder: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConflictModalOpen(false)}>حسناً، تعديل الأوقات</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Schedule Info / Details Modal */}
+      <Dialog open={detailsModalOpen} onClose={() => setDetailsModalOpen(false)} maxWidth="sm" fullWidth dir="rtl">
+        <DialogTitle sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Eye size={20} color="#2563eb" /> تفاصيل ومعلومات الجدول التدريبي
+        </DialogTitle>
+        <DialogContent dividers>
+          {activeScheduleData && (
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1.5, color: '#1e293b' }}>
+                {activeScheduleData.titleAr}
+              </Typography>
+              <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary">القسم التدريبي</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{activeScheduleData.department?.nameAr || '—'}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary">الحالة</Typography>
+                  <Box sx={{ mt: 0.5 }}>
+                    <Chip
+                      size="small"
+                      label={activeScheduleData.status === 'published' ? 'منشور ومعتمد' : 'مسودة قيد المراجعة'}
+                      color={activeScheduleData.status === 'published' ? 'success' : 'warning'}
+                    />
+                  </Box>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary">الفترة الزمنية</Typography>
+                  <Typography variant="body2">
+                    {new Date(activeScheduleData.startDate).toLocaleDateString('ar-SA')} إلى {new Date(activeScheduleData.endDate).toLocaleDateString('ar-SA')}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary">إجمالي الساعات</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#2563eb' }}>
+                    {activeScheduleData.totalHours} ساعة تدريبية ({activeScheduleData.sessions?.length || 0} جلسة)
+                  </Typography>
+                </Grid>
+              </Grid>
+
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                المتدربون المشاركون ({activeScheduleData.participants?.length || 0}):
+              </Typography>
+              <Box sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5, p: 1, maxHeight: 160, overflowY: 'auto' }}>
+                {activeScheduleData.participants?.map((p) => (
+                  <Box key={p.traineeProfileId} sx={{ py: 0.5, borderBottom: '1px solid #f1f5f9' }}>
+                    <Typography variant="body2">👤 {p.traineeProfile?.person?.nameAr || 'متدرب'}</Typography>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailsModalOpen(false)}>إغلاق</Button>
+          {activeScheduleData && (
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<Edit3 size={16} />}
+              onClick={() => {
+                setDetailsModalOpen(false);
+                handleOpenEditSchedule(activeScheduleData);
+              }}
+            >
+              تعديل الجدول
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Box>
