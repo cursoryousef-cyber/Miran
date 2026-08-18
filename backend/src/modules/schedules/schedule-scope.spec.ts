@@ -93,4 +93,57 @@ describe('SchedulesService resource scoping', () => {
     const service = makeService({});
     await expect(assertResources(service, {})).resolves.toBeUndefined();
   });
+
+  it('excludes self schedule sessions when checking conflicts during update', async () => {
+    const conflictEngine = {
+      validateSessions: jest.fn().mockResolvedValue({ hasConflict: false, conflicts: [] }),
+    };
+    const prisma = {
+      trainingSchedule: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'sched-1',
+          organizationId: HOSPITAL_A,
+          departmentId: 'dept-A',
+          participants: [{ traineeProfileId: 'trainee-A' }],
+        }),
+        update: jest.fn().mockResolvedValue({ id: 'sched-1' }),
+      },
+      scheduleSession: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+        create: jest.fn().mockResolvedValue({ id: 'sess-new' }),
+      },
+      traineeProfile: { count: jest.fn().mockResolvedValue(1) },
+      trainerProfile: { count: jest.fn().mockResolvedValue(1) },
+      department: { count: jest.fn().mockResolvedValue(1) },
+      $transaction: jest.fn().mockImplementation(async (cb) => cb(prisma)),
+    } as any;
+
+    const service = new SchedulesService(prisma, conflictEngine as any);
+    service.findOne = jest.fn().mockResolvedValue({ id: 'sched-1', titleAr: 'جدول معدل' });
+
+    const user = { accountId: 'acc-1', organizationId: HOSPITAL_A, roles: ['hospital_training_admin'] } as any;
+    const dto = {
+      titleAr: 'جدول معدل',
+      sessions: [
+        {
+          date: '2026-09-08',
+          startTime: '10:00',
+          endTime: '12:00',
+          departmentId: 'dept-A',
+          trainerProfileId: 'trainer-A',
+          traineeProfileId: 'trainee-A',
+        },
+      ],
+    };
+
+    await service.update('sched-1', user, dto);
+
+    // Verify validateSessions was called with excludeScheduleId = 'sched-1'
+    expect(conflictEngine.validateSessions).toHaveBeenCalledWith(
+      HOSPITAL_A,
+      expect.any(Array),
+      undefined,
+      'sched-1',
+    );
+  });
 });

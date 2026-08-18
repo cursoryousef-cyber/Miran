@@ -369,7 +369,10 @@ export const ScheduleBuilder: React.FC = () => {
           ...s,
           traineeProfileIds: s.traineeProfileId ? [s.traineeProfileId] : wSelectedTrainees,
         }));
-        const res = await apiClient.post('/schedules/check-conflicts', { sessions: proposedSessions });
+        const res = await apiClient.post('/schedules/check-conflicts', {
+          sessions: proposedSessions,
+          scheduleId: editingScheduleId || undefined,
+        });
         const data = res.data?.data;
         if (data?.hasConflict) {
           setWizardConflicts(data.conflicts || []);

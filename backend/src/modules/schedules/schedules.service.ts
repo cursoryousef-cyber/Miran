@@ -363,6 +363,15 @@ export class SchedulesService {
       });
 
       if (dto.sessions) {
+        // When updating a schedule's sessions from Wizard, delete existing non-id sessions
+        const sessionIdsToKeep = dto.sessions.map((s) => s.id).filter(Boolean) as string[];
+        await tx.scheduleSession.deleteMany({
+          where: {
+            scheduleId: id,
+            ...(sessionIdsToKeep.length > 0 ? { id: { notIn: sessionIdsToKeep } } : {}),
+          },
+        });
+
         // Upsert sessions
         for (const s of dto.sessions) {
           const [h1, m1] = s.startTime.split(':').map(Number);
