@@ -183,9 +183,10 @@ export class ConflictEngineService {
 
         // 3. Trainer Overlap Check (Against existing DB sessions + other proposed sessions in batch)
         if (pSession.trainerProfileId) {
+          const pDateStr = new Date(pSession.date).toISOString().slice(0, 10);
           const trainerDbOverlaps = existingSessions.filter((es) => {
             const esDateStr = new Date(es.date).toISOString().slice(0, 10);
-            if (esDateStr !== sessionDate) return false;
+            if (esDateStr !== pDateStr) return false;
             if (es.trainerProfileId !== pSession.trainerProfileId) return false;
             return isTimeOverlapping(pSession.startTime, pSession.endTime, es.startTime, es.endTime);
           });
@@ -193,9 +194,10 @@ export class ConflictEngineService {
           // Also check other proposed sessions in the same batch for trainer overlap
           const trainerBatchOverlaps = sessions.filter((other, oIdx) => {
             if (other === pSession) return false;
-            if (other.date !== sessionDate) return false;
+            const oDateStr = new Date(other.date).toISOString().slice(0, 10);
+            if (oDateStr !== pDateStr) return false;
             if (other.trainerProfileId !== pSession.trainerProfileId) return false;
-            // Only report once (e.g. earlier index)
+            // Only report once per distinct pair
             if (sessions.indexOf(pSession) > oIdx) return false;
             return isTimeOverlapping(pSession.startTime, pSession.endTime, other.startTime, other.endTime);
           });
@@ -204,11 +206,11 @@ export class ConflictEngineService {
             result.hasConflict = true;
             result.conflicts.push({
               type: 'trainer_overlap',
-              messageAr: `المدرب ${pTrainer?.person?.nameAr || ''} لديه جلسة متداخلة بتاريخ ${sessionDate} بين ${pSession.startTime} - ${pSession.endTime}`,
+              messageAr: `المدرب ${pTrainer?.person?.nameAr || ''} لديه جلسة متداخلة بتاريخ ${pDateStr} بين ${pSession.startTime} - ${pSession.endTime}`,
               details: {
                 trainerId: pSession.trainerProfileId,
                 trainerName: pTrainer?.person?.nameAr,
-                date: sessionDate,
+                date: pDateStr,
                 time: `${pSession.startTime} - ${pSession.endTime}`,
               },
             });
@@ -218,9 +220,10 @@ export class ConflictEngineService {
         // 4. Trainee Overlap Check (Against existing DB sessions + other proposed sessions in batch)
         for (const traineeId of pSession.traineeProfileIds || []) {
           const traineeObj = traineeMap.get(traineeId);
+          const pDateStr = new Date(pSession.date).toISOString().slice(0, 10);
           const traineeDbOverlaps = existingSessions.filter((es) => {
             const esDateStr = new Date(es.date).toISOString().slice(0, 10);
-            if (esDateStr !== sessionDate) return false;
+            if (esDateStr !== pDateStr) return false;
             const isTraineeInSession = es.traineeProfileId
               ? es.traineeProfileId === traineeId
               : es.schedule?.participants?.some((p) => p.traineeProfileId === traineeId);
@@ -230,7 +233,8 @@ export class ConflictEngineService {
 
           const traineeBatchOverlaps = sessions.filter((other, oIdx) => {
             if (other === pSession) return false;
-            if (other.date !== sessionDate) return false;
+            const oDateStr = new Date(other.date).toISOString().slice(0, 10);
+            if (oDateStr !== pDateStr) return false;
             const hasTrainee = (other.traineeProfileIds || []).includes(traineeId);
             if (!hasTrainee) return false;
             if (sessions.indexOf(pSession) > oIdx) return false;
@@ -241,11 +245,11 @@ export class ConflictEngineService {
             result.hasConflict = true;
             result.conflicts.push({
               type: 'trainee_overlap',
-              messageAr: `المتدرب ${traineeObj?.person?.nameAr || ''} لديه جلسة متداخلة بتاريخ ${sessionDate} (${pSession.startTime} - ${pSession.endTime})`,
+              messageAr: `المتدرب ${traineeObj?.person?.nameAr || ''} لديه جلسة متداخلة بتاريخ ${pDateStr} (${pSession.startTime} - ${pSession.endTime})`,
               details: {
                 traineeId,
                 traineeName: traineeObj?.person?.nameAr,
-                date: sessionDate,
+                date: pDateStr,
                 time: `${pSession.startTime} - ${pSession.endTime}`,
               },
             });
