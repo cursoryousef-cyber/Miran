@@ -24,6 +24,7 @@ async function bootstrap() {
     : [];
   const defaultAllowedOrigins = [
     'https://miraan.netlify.app',
+    'https://miran-brh.pages.dev',
   ];
   const devOrigins = process.env.NODE_ENV === 'production'
     ? []
