@@ -284,7 +284,7 @@ describe('Trainee Administrative Password Change Suite (14 Tests)', () => {
   // 11. Admin-set password clears any pending activation token so the account
   // is immediately usable without an activation link (no dangling token that
   // could still be redeemed later).
-  it('11. activationToken and activationTokenExpiresAt are cleared for a previously unactivated account', async () => {
+  it('11. activationToken is cleared for a previously unactivated account', async () => {
     await controller.changeTraineePassword(
       PROFILE_ID,
       { password: 'NewSecurePassword!2026' },
@@ -293,7 +293,6 @@ describe('Trainee Administrative Password Change Suite (14 Tests)', () => {
 
     const accountAfter = store.userAccounts.get(ACCOUNT_ID);
     expect(accountAfter.activationToken).toBeNull();
-    expect(accountAfter.activationTokenExpiresAt).toBeNull();
   });
 
   // 12. activatedAt is set so the trainee can log in with the new password

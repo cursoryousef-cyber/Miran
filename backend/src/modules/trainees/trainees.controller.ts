@@ -921,7 +921,6 @@ export class TraineesController {
         passwordHash,
         updatedById: user?.accountId,
         activationToken: null,
-        activationTokenExpiresAt: null,
         isEmailVerified: true,
         activatedAt: account.activatedAt ?? new Date(),
       },
